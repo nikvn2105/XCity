@@ -329,7 +329,7 @@ namespace XCity
             AddWindowBlock(b, new Vector3(0, 0.04f, -0.10f), 3.05f, 2.75f, 1.08f, 1, ConcreteLight, glass);
             float width = tower ? 1.89f : 2.58f;
             AddWindowBlock(b, new Vector3(0, 1.12f, -0.18f), width, 2.21f, h - 1.44f,
-                tower ? 7 : 3, glass, roof);
+                tower ? 7 : 3, glass, roof, BuildingSurface.Panel);
             if (tower)
             {
                 b.AddBox(new Vector3(0.56f, h - 0.12f, -0.45f), new Vector3(0.45f, 0.36f, 1.07f), roof, ConcreteLight);
@@ -360,16 +360,16 @@ namespace XCity
             AddWindowBlock(b, new Vector3(0, h * 0.62f + 0.04f, -0.36f), 2.86f, 2.03f, h * 0.26f,
                 1, brick, ivory);
             b.AddGableRoof(new Vector3(0, h * 0.88f + 0.04f, -0.36f), 0.89f, 1.47f, h * 0.095f,
-                0.035f, glass, glass);
+                0.035f, glass, glass, BuildingSurface.Glazing);
             b.AddBox(new Vector3(0, 1.06f, 1.42f), new Vector3(2.02f, 0.15f, 0.48f), glass, ivory);
         }
 
         private static void AddWindowBlock(MeshBuilder b, Vector3 foot, float width, float depth, float height,
-            int floors, Color32 wall, Color32 top)
+            int floors, Color32 wall, Color32 top, BuildingSurface facade = BuildingSurface.Masonry)
         {
             var size = new Vector3(width, height, depth);
             var center = foot + Vector3.up * (height * 0.5f);
-            b.AddBox(center, size, wall, top, wallSurface: BuildingSurface.Masonry, topSurface: BuildingSurface.Roof);
+            b.AddBox(center, size, wall, top, wallSurface: facade, topSurface: BuildingSurface.Roof);
 
             b.AddBox(new Vector3(foot.x, foot.y + height - 0.025f, foot.z),
                 new Vector3(width + 0.085f, 0.05f, depth + 0.085f), Darken(top, 0.78f), top);
@@ -491,7 +491,8 @@ namespace XCity
 
                 Vector3 bodyCenter = new Vector3(0f, baseY + bodyH * 0.5f, 0f);
                 Vector3 bodySize = new Vector3(w, bodyH, d);
-                b.AddBox(bodyCenter, bodySize, wall, roof);
+                b.AddBox(bodyCenter, bodySize, wall, roof,
+                    wallSurface: BuildingSurface.Masonry, topSurface: BuildingSurface.Roof);
 
                 // Parapet border (4 thin boxes)
                 float topY = baseY + bodyH;
@@ -527,8 +528,7 @@ namespace XCity
 
                     if (f > 0)
                     {
-                        b.AddBox(new Vector3(0f, baseY + f * floorH + 0.03f, d * 0.5f + 0.175f),
-                            new Vector3(2.2f, 0.06f, 0.35f), ConcreteLight, ConcreteLight);
+                        AddBalcony(b, new Vector3(0f, baseY + f * floorH + 0.03f, d * 0.5f + 0.15f), 2.03f);
                     }
                 }
 
@@ -546,20 +546,26 @@ namespace XCity
 
                 Vector3 bodyCenter = new Vector3(0f, baseY + h * 0.5f, 0f);
                 Vector3 bodySize = new Vector3(w, h, d);
-                b.AddBox(bodyCenter, bodySize, wall, roof);
+                b.AddBox(bodyCenter, bodySize, wall, roof,
+                    wallSurface: BuildingSurface.Masonry, topSurface: BuildingSurface.Roof);
 
-                // Vertical accent stripe on front
-                b.AddFacadeRect(bodyCenter, bodySize, 0, -0.22f, 0.22f, baseY + 0.05f, baseY + h - 0.05f, roof);
+                b.AddBox(new Vector3(-1.38f, baseY + h * 0.5f, d * 0.5f + 0.035f),
+                    new Vector3(0.10f, h - 0.08f, 0.095f), Darken(wall, 0.82f), roof);
 
-                // Continuous window bands per floor on all 4 sides
+                // Separate window bays leave structural piers between the apartments.
                 for (int f = 0; f < floors; f++)
                 {
                     float fy0 = baseY + f * floorH + floorH * 0.27f;
                     float fy1 = fy0 + floorH * 0.45f;
                     for (int side = 0; side < 4; side++)
                     {
-                        float halfBand = (side < 2 ? w : d) * 0.425f;
-                        b.AddFacadeRect(bodyCenter, bodySize, side, -halfBand, halfBand, fy0, fy1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
+                        float bay = (side < 2 ? w : d) / 3f;
+                        for (int column = -1; column <= 1; column++)
+                        {
+                            float u = bay * column;
+                            b.AddFacadeRect(bodyCenter, bodySize, side, u - bay * 0.35f, u + bay * 0.35f,
+                                fy0, fy1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
+                        }
                     }
                 }
 

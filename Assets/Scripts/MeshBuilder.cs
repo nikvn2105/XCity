@@ -9,7 +9,8 @@ namespace XCity
         Plain,
         Masonry,
         Roof,
-        Glazing
+        Glazing,
+        Panel
     }
 
     internal sealed class MeshBuilder
@@ -236,7 +237,8 @@ namespace XCity
             }
         }
 
-        public void AddGableRoof(Vector3 baseCenter, float width, float depth, float height, float overhang, Color32 roof, Color32 gable)
+        public void AddGableRoof(Vector3 baseCenter, float width, float depth, float height, float overhang, Color32 roof, Color32 gable,
+            BuildingSurface roofSurface = BuildingSurface.Roof)
         {
             float hx = width * 0.5f;
             float hz = depth * 0.5f;
@@ -253,14 +255,14 @@ namespace XCity
                 new Vector3(x1, yBase, z1),
                 new Vector3(x1, yTop, baseCenter.z),
                 new Vector3(x0, yTop, baseCenter.z),
-                new Vector3(0f, 1f, 1f), roof, BuildingSurface.Roof);
+                new Vector3(0f, 1f, 1f), roof, roofSurface);
 
             AddQuad(
                 new Vector3(x1, yBase, z0),
                 new Vector3(x0, yBase, z0),
                 new Vector3(x0, yTop, baseCenter.z),
                 new Vector3(x1, yTop, baseCenter.z),
-                new Vector3(0f, 1f, -1f), roof, BuildingSurface.Roof);
+                new Vector3(0f, 1f, -1f), roof, roofSurface);
 
             // Two gable triangles flush with the wall ends
             float gx0 = baseCenter.x - hx;

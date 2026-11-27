@@ -57,14 +57,15 @@ Shader "XCity/VertexColor"
             float3 position = surface.worldPos;
             float3 normal = normalize(surface.worldNormal);
             float wallU = abs(normal.x) > abs(normal.z) ? position.z : position.x;
-            float row = position.y * 5.4;
-            float course = wallU * 3.0 + fmod(floor(row), 2.0) * 0.5;
+            float row = position.y * 7.8;
+            float course = wallU * 4.4 + fmod(floor(row), 2.0) * 0.5;
             float2 roofUV = position.xz * 4.6;
             float slopeZ = step(abs(normal.x), abs(normal.z));
             float roofRow = lerp(roofUV.x, roofUV.y, slopeZ);
             float roofColumn = lerp(roofUV.y, roofUV.x, slopeZ);
             float rowFootprint = fwidth(row);
-            float columnFootprint = fwidth(wallU) * 3.0;
+            float columnFootprint = fwidth(wallU) * 4.4;
+            float panelFootprint = fwidth(wallU) * 2.0;
             float roofFootprint = max(fwidth(roofUV.x), fwidth(roofUV.y));
 
             if (surface.surfaceType < 0.5) return albedo;
@@ -73,7 +74,7 @@ Shader "XCity/VertexColor"
                 float mortar = max(Joint(row, rowFootprint, 0.032), Joint(course, columnFootprint, 0.023));
                 float variation = frac(floor(course) * 0.381 + floor(row) * 0.617) - 0.5;
                 float detail = 1.0 - smoothstep(0.18, 0.55, max(rowFootprint, columnFootprint));
-                return albedo * (1.0 + variation * 0.11 * detail - mortar * 0.13);
+                return albedo * (1.0 + variation * 0.11 * detail - mortar * 0.085);
             }
             if (surface.surfaceType < 2.5)
             {
@@ -88,7 +89,11 @@ Shader "XCity/VertexColor"
             float facing = 1.0 - saturate(dot(normal, view));
             float horizon = saturate(reflect(-view, normal).y * 1.45 + 0.48);
             fixed3 reflectedSky = lerp(fixed3(0.22, 0.29, 0.32), fixed3(0.58, 0.70, 0.77), horizon);
-            return lerp(albedo, reflectedSky, 0.14 + 0.49 * facing * facing);
+            if (surface.surfaceType < 3.5)
+                return lerp(albedo, reflectedSky, 0.19 + 0.49 * facing * facing);
+
+            float seamPanel = Joint(wallU * 2.0, panelFootprint, 0.025);
+            return lerp(albedo, reflectedSky, 0.17 + 0.32 * facing * facing) * (1.0 - seamPanel * 0.16);
         }
         #endif
 
