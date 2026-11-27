@@ -11,6 +11,8 @@ namespace XCity
         private static readonly int[] FrameRates = { 30, 60, 120 };
         private const string GraphicsKey = "xcity.graphics";
         private const string FrameRateKey = "xcity.fps";
+        private const string FpsCounterKey = "xcity.fpscounter";
+        private const float FpsSampleSeconds = 0.5f;
         private const int DefaultGraphics = 2;
         private const int DefaultFrameRate = 30;
 
@@ -19,6 +21,12 @@ namespace XCity
         private GameObject _settingsPanel;
         private readonly Image[] _graphicsButtons = new Image[GraphicsLabels.Length];
         private readonly Image[] _frameRateButtons = new Image[FrameRates.Length];
+
+        private Button _fpsCounterButton;
+        private Text _fpsText;
+        private float _fpsWindow;
+        private int _fpsFrames;
+        private float _fpsWorst;
 
         private bool SettingsOpen => _settingsPanel != null && _settingsPanel.activeSelf;
 
@@ -118,6 +126,9 @@ namespace XCity
                 _frameRateButtons[i] = button.image;
             }
 
+            _fpsCounterButton = CreateHudButton(_settingsPanel.transform, font, "", "FpsCounter");
+            _fpsCounterButton.onClick.AddListener(() => SetFpsCounter(_fpsText == null || !_fpsText.gameObject.activeSelf));
+
             Button close = CreateHudButton(_settingsPanel.transform, font, "Đóng", "CloseSettings");
             close.onClick.AddListener(ToggleSettings);
 
@@ -145,6 +156,50 @@ namespace XCity
             }
         }
 
+        // Called after SetupHUD: the counter needs the safe-area root.
+        private void RestoreFpsCounter()
+        {
+            if (_previewOutput == null && PlayerPrefs.GetInt(FpsCounterKey, 0) == 1) SetFpsCounter(true);
+        }
+
+        private void SetFpsCounter(bool visible)
+        {
+            if (_fpsText == null)
+            {
+                var go = new GameObject("FpsCounter", typeof(RectTransform));
+                go.transform.SetParent(_safeAreaRoot, false);
+                var rect = (RectTransform)go.transform;
+                rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0f, 0f);
+                rect.anchoredPosition = new Vector2(12f, 108f);
+                rect.sizeDelta = new Vector2(420f, 28f);
+                _fpsText = go.AddComponent<Text>();
+                _fpsText.font = Resources.Load<Font>("NotoSans-Regular");
+                _fpsText.fontSize = 18;
+                _fpsText.color = new Color(1f, 0.95f, 0.55f);
+                _fpsText.raycastTarget = false;
+            }
+            _fpsText.gameObject.SetActive(visible);
+            _fpsWindow = _fpsFrames = 0;
+            _fpsWorst = 0f;
+            PlayerPrefs.SetInt(FpsCounterKey, visible ? 1 : 0);
+            PlayerPrefs.Save();
+            RefreshSettingsButtons();
+        }
+
+        // Average FPS hides hitches, so the slowest frame of each half second is shown too.
+        private void UpdateFpsCounter()
+        {
+            if (_fpsText == null || !_fpsText.gameObject.activeSelf) return;
+            float dt = Time.unscaledDeltaTime;
+            _fpsWindow += dt;
+            _fpsFrames++;
+            _fpsWorst = Mathf.Max(_fpsWorst, dt);
+            if (_fpsWindow < FpsSampleSeconds) return;
+            _fpsText.text = $"FPS {_fpsFrames / _fpsWindow:0} · {_fpsWindow * 1000f / _fpsFrames:0.0} ms · chậm nhất {_fpsWorst * 1000f:0} ms";
+            _fpsWindow = _fpsFrames = 0;
+            _fpsWorst = 0f;
+        }
+
         private void RefreshSettingsButtons()
         {
             var active = new Color(0.19f, 0.52f, 0.96f);
@@ -153,6 +208,12 @@ namespace XCity
                 if (_graphicsButtons[i] != null) _graphicsButtons[i].color = i == _graphicsLevel ? active : idle;
             for (int i = 0; i < _frameRateButtons.Length; i++)
                 if (_frameRateButtons[i] != null) _frameRateButtons[i].color = FrameRates[i] == _frameRate ? active : idle;
+            if (_fpsCounterButton != null)
+            {
+                bool on = _fpsText != null && _fpsText.gameObject.activeSelf;
+                _fpsCounterButton.GetComponentInChildren<Text>().text = on ? "Hiện FPS: Bật" : "Hiện FPS: Tắt";
+                _fpsCounterButton.image.color = on ? active : idle;
+            }
         }
     }
 }

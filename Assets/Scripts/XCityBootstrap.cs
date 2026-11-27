@@ -112,6 +112,7 @@ namespace XCity
             LoadDisplaySettings();
             SetupCamera();
             SetupHUD();
+            RestoreFpsCounter();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
 
@@ -460,6 +461,7 @@ namespace XCity
             UpdateSafeArea();
             RunSimulationTick();
             HandleInput();
+            UpdateFpsCounter();
             if (_cityDirty && Time.unscaledTime >= _nextAutosave)
                 SaveCity(background: true);
         }
