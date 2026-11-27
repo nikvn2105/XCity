@@ -137,7 +137,7 @@ namespace XCity
             float worldSpan = GridSize * CellSize;
             AddLandscapeBase("City island", worldSpan, worldSpan, 0f, 2.5f, _groundMat);
             AddLandscapeBase("Shore", worldSpan, worldSpan + 1.7f, -0.58f, 1.8f, _shoreMat);
-            AddLandscapeBase("Water", worldSpan, 480f, -1.05f, 0.2f, _waterMat);
+            AddLandscapeBase("Water", worldSpan, 800f, -1.05f, 0.2f, _waterMat);
             Shader vc = Resources.Load<Shader>("XCityVertexColor");
             if (vc == null)
             {
