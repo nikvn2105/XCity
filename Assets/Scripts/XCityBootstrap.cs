@@ -304,8 +304,18 @@ namespace XCity
             RefreshHUD();
         }
 
+        private readonly List<(BuildingModel Model, Button Button, Text Label)> _catalogButtons =
+            new List<(BuildingModel, Button, Text)>();
+        private int _catalogUnlockTier = -1;
+        private string _unlockBanner;
+        private float _unlockBannerUntil;
+
         private void SetupBuildCatalog(Font font)
         {
+            _catalogButtons.Clear();
+            _unlockBanner = null;
+            _unlockBannerUntil = 0f;
+
             _catalog = new GameObject("BuildCatalog", typeof(RectTransform));
             var root = (RectTransform)_catalog.transform;
             root.SetParent(_safeAreaRoot, false);
@@ -328,6 +338,9 @@ namespace XCity
                 BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation, BuildingModel.Harbor);
             AddCatalogCategory(root, tabs, font, "Tiện ích", BuildTool.CivicService,
                 BuildingModel.WaterPump, BuildingModel.SewagePlant);
+
+            _catalogUnlockTier = CurrentUnlockTier(_city.PeakPopulation);
+            RefreshCatalogUnlocks();
             _catalog.SetActive(false);
         }
 
@@ -353,8 +366,10 @@ namespace XCity
                 var item = BuildingCatalog.Get(model);
                 string price = item.Seats > 0 ? $"${item.Cost:N0} · {item.Seats:N0} chỗ" : $"${item.Cost:N0}/ô";
                 Button button = CreateHudButton(options, font, $"{item.Name}\n{price}", model.ToString());
+                _catalogButtons.Add((model, button, button.GetComponentInChildren<Text>()));
                 button.onClick.AddListener(() =>
                 {
+                    if (BuildingCatalog.UnlockPopulation(model) > _city.PeakPopulation) return;
                     _activeBuildingModel = model;
                     SelectTool(tool);
                 });
@@ -363,6 +378,42 @@ namespace XCity
             options.gameObject.SetActive(false);
             tab.onClick.AddListener(() => ShowCatalogCategory(options.gameObject, tab.image));
             if (_catalogOptions == null) ShowCatalogCategory(options.gameObject, tab.image);
+        }
+
+        private static int CurrentUnlockTier(int peakPopulation) =>
+            peakPopulation >= 5000 ? 5000 : peakPopulation >= 2000 ? 2000 : peakPopulation >= 500 ? 500 : 0;
+
+        private static string FormatMilestone(int population) =>
+            population >= 1000 ? $"{population / 1000}.{population % 1000:D3}" : population.ToString();
+
+        private void RefreshCatalogUnlocks()
+        {
+            for (int i = 0; i < _catalogButtons.Count; i++)
+            {
+                var entry = _catalogButtons[i];
+                int required = BuildingCatalog.UnlockPopulation(entry.Model);
+                bool unlocked = _city.PeakPopulation >= required;
+                var item = BuildingCatalog.Get(entry.Model);
+
+                entry.Button.interactable = unlocked;
+                entry.Button.image.color = unlocked
+                    ? new Color(0.20f, 0.24f, 0.30f, 1f)
+                    : new Color(0.13f, 0.15f, 0.19f, 0.65f);
+
+                if (entry.Label != null)
+                {
+                    entry.Label.color = unlocked ? Color.white : new Color(0.62f, 0.66f, 0.72f, 0.75f);
+                    if (unlocked)
+                    {
+                        string price = item.Seats > 0 ? $"${item.Cost:N0} · {item.Seats:N0} chỗ" : $"${item.Cost:N0}/ô";
+                        entry.Label.text = $"{item.Name}\n{price}";
+                    }
+                    else
+                    {
+                        entry.Label.text = $"{item.Name}\nMở ở {FormatMilestone(required)} dân";
+                    }
+                }
+            }
         }
 
         private void ShowCatalogCategory(GameObject options, Image tab)
@@ -436,6 +487,13 @@ namespace XCity
         {
             CancelGesture();
             if (tool != BuildTool.Pan) ClearFollow();
+            if (_activeBuildingModel != BuildingModel.Default &&
+                BuildingCatalog.UnlockPopulation(_activeBuildingModel) > _city.PeakPopulation)
+            {
+                _activeBuildingModel = BuildingModel.Default;
+                if (tool == BuildTool.School || tool == BuildTool.CivicService)
+                    tool = BuildTool.Road;
+            }
             _activeTool = tool;
             _catalog.SetActive(false);
             bool catalogTool = _activeBuildingModel != BuildingModel.Default;
@@ -1186,6 +1244,29 @@ namespace XCity
 
         private void RefreshHUD()
         {
+            int unlockTier = CurrentUnlockTier(_city.PeakPopulation);
+            if (unlockTier != _catalogUnlockTier)
+            {
+                if (_catalogUnlockTier >= 0 && unlockTier > _catalogUnlockTier)
+                {
+                    var unlockedNames = new List<string>();
+                    for (int i = 0; i < _catalogButtons.Count; i++)
+                    {
+                        BuildingModel model = _catalogButtons[i].Model;
+                        int required = BuildingCatalog.UnlockPopulation(model);
+                        if (required > _catalogUnlockTier && required <= unlockTier)
+                            unlockedNames.Add(BuildingCatalog.Get(model).Name);
+                    }
+                    if (unlockedNames.Count > 0)
+                    {
+                        _unlockBanner = "Đã mở khóa: " + string.Join(", ", unlockedNames);
+                        _unlockBannerUntil = Time.unscaledTime + 6f;
+                    }
+                }
+                _catalogUnlockTier = unlockTier;
+                RefreshCatalogUnlocks();
+            }
+
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;
             if (_hudStatusText != null)
@@ -1224,6 +1305,13 @@ namespace XCity
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 string uxPrefix = GetUXStatusPrefix();
                 if (uxPrefix != null) hint = $"{uxPrefix}  |  {hint}";
+                if (_unlockBanner != null)
+                {
+                    if (Time.unscaledTime < _unlockBannerUntil)
+                        hint = $"{_unlockBanner}  |  {hint}";
+                    else
+                        _unlockBanner = null;
+                }
                 if (_simSpeed <= 0f) hint = $"Đang tạm dừng  |  {hint}";
                 if (_city.TicksInDebt > 0 && !_city.IsBankrupt)
                     hint = $"Cảnh báo phá sản: còn {CitySimulation.BankruptcyTicks - _city.TicksInDebt} lượt · Vay hoặc cắt giảm chi phí  |  {hint}";

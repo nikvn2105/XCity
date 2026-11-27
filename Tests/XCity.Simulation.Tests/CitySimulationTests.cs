@@ -173,7 +173,7 @@ namespace XCity.Tests
         [Fact]
         public void Restore_RoundTripsCity()
         {
-            var city = new CitySimulation();
+            var city = UnlockTests.UnlockedCity();
             var (x, z) = FindLandPlot();
             Assert.True(city.TrySetCell(x, z, CellType.Road));
             Assert.True(city.TrySetCell(x + 1, z, CellType.Commercial, BuildingModel.Office));

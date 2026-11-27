@@ -50,9 +50,9 @@ namespace XCity.Tests
         }
 
         // A road along z at column x, with a power plant at its south end on the east side.
-        private static CitySimulation PoweredStreet(int x, int z, int length, uint seed = 3)
+        private static CitySimulation PoweredStreet(int x, int z, int length, uint seed = 3, bool unlocked = false)
         {
-            var city = new CitySimulation(seed);
+            var city = unlocked ? UnlockTests.UnlockedCity(seed) : new CitySimulation(seed);
             Assert.True(city.TryApplyBuild(Enumerable.Range(z, length).Select(dz => (x, dz)), CellType.Road));
             Assert.True(city.TrySetCell(x + 1, z, CellType.PowerPlant));
             return city;
@@ -113,7 +113,7 @@ namespace XCity.Tests
         public void Services_CoverCellsWithinRadiusOnlyWhenOperating()
         {
             var (x, z) = FindLand(3, 4);
-            var city = new CitySimulation();
+            var city = UnlockTests.UnlockedCity();
             Assert.True(city.TrySetCell(x + 1, z + 1, CellType.CivicService, BuildingModel.PoliceStation));
             Assert.Equal(ServiceCoverage.None, city.GetCoverage(x + 1, z + 1));
 
@@ -148,7 +148,7 @@ namespace XCity.Tests
 
         private static CitySimulation BuildMixedStreet(int x, int z, bool withServices)
         {
-            var city = PoweredStreet(x, z, 12);
+            var city = PoweredStreet(x, z, 12, unlocked: true);
             for (int dz = 1; dz < 6; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
             for (int dz = 1; dz < 12; dz++) Assert.True(city.TrySetCell(x - 1, z + dz, CellType.Industrial));
             Assert.True(city.TrySetCell(x + 1, z + 6, CellType.Commercial));
@@ -182,7 +182,7 @@ namespace XCity.Tests
         public void BalancedStarterTown_Grows()
         {
             var (x, z) = FindLand(5, 30);
-            var city = PoweredStreet(x, z, 30);
+            var city = PoweredStreet(x, z, 30, unlocked: true);
             Assert.True(city.TryApplyBuild(Enumerable.Range(z, 30).Select(dz => (x + 3, dz)), CellType.Road));
             for (int dz = 1; dz < 30; dz++)
             {

@@ -87,6 +87,16 @@ namespace XCity
             _ => Get(model).Seats / 15
         };
 
+        public static int UnlockPopulation(BuildingModel model) => model switch
+        {
+            BuildingModel.Apartment or BuildingModel.Office or BuildingModel.Factory or
+                BuildingModel.Preschool or BuildingModel.PrimarySchool or BuildingModel.PoliceStation => 500,
+            BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or
+                BuildingModel.Harbor => 2000,
+            BuildingModel.University or BuildingModel.OfficeTower or BuildingModel.ShoppingMall => 5000,
+            _ => 0
+        };
+
         public static int Residents(CityCell cell)
         {
             int residentsPerLevel = cell.Model switch
@@ -132,6 +142,7 @@ namespace XCity
         public int lastNetIncome;
         public int loanBalance;
         public int ticksInDebt;
+        public int peakPopulation;
         public CityCell[] cells;
         public int[] cellIndices;
     }
@@ -151,7 +162,7 @@ namespace XCity
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 8;
+        internal const int CurrentSchemaVersion = 9;
         public const int UtilityCapacity = 40;
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -194,6 +205,7 @@ namespace XCity
 
         public int Money { get; private set; } = 50000;
         public int Population { get; private set; }
+        public int PeakPopulation { get; private set; }
         public long TickCount { get; private set; }
         public int LastTaxIncome { get; private set; }
         public int LastNetIncome { get; private set; }
@@ -239,6 +251,7 @@ namespace XCity
         public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type, BuildingModel model = BuildingModel.Default)
         {
             if (IsBankrupt) return false;
+            if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation) return false;
             int moneyBefore = Money;
             var changed = new List<(int X, int Z, CityCell Cell)>();
             foreach (var point in points)
@@ -293,6 +306,8 @@ namespace XCity
             if (BuildingCatalog.NeedsShore(model) && !CanPlaceHarbor(x, z)) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
+                return false;
+            if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation)
                 return false;
             ref CityCell cell = ref _cells[x, z];
             if (cell.Type == type && cell.Model == model) return false;
@@ -406,6 +421,7 @@ namespace XCity
             }
 
             Population = population;
+            PeakPopulation = Math.Max(PeakPopulation, Population);
             UpdateDemand(jobs, commercialJobs, happiness);
             // This tick's commute staffs and loads the networks for the next one (roads cannot change mid-tick).
             PublishTraffic(networkWorkers, networkJobs);
@@ -430,6 +446,7 @@ namespace XCity
                 lastNetIncome = LastNetIncome,
                 loanBalance = LoanBalance,
                 ticksInDebt = TicksInDebt,
+                peakPopulation = PeakPopulation,
                 cells = new CityCell[_occupied.Count],
                 cellIndices = new int[_occupied.Count]
             };
@@ -448,7 +465,7 @@ namespace XCity
             if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > CurrentSchemaVersion) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
                 snapshot.cells == null || snapshot.loanBalance < 0 || snapshot.loanBalance > MaxLoanBalance ||
-                snapshot.ticksInDebt < 0 || snapshot.ticksInDebt > BankruptcyTicks)
+                snapshot.ticksInDebt < 0 || snapshot.ticksInDebt > BankruptcyTicks || snapshot.peakPopulation < 0)
                 return false;
 
             bool legacy = snapshot.schemaVersion < 6;
@@ -502,6 +519,7 @@ namespace XCity
                 restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);
                 restored.DroppedCellsOnLoad++;
             }
+            restored.PeakPopulation = Math.Max(snapshot.peakPopulation, restored.Population);
             restored.RecalculateEconomy();
             city = restored;
             return true;
