@@ -301,6 +301,7 @@ namespace XCity
                 _cityDirty |= _city.TryTakeLoan();
                 RefreshHUD();
             });
+            SetupTutorial(topBar.transform, statusRect, font);
 
             var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), new Color(0.08f, 0.10f, 0.14f, 0.88f));
             var layout = bottomBar.AddComponent<HorizontalLayoutGroup>();
@@ -546,6 +547,7 @@ namespace XCity
                 _shoreWarningUntil = 0f;
                 RefreshHUD();
             }
+            UpdateTutorial();
             if (_cityDirty && Time.unscaledTime >= _nextAutosave)
                 SaveCity(background: true);
         }
@@ -1353,6 +1355,8 @@ namespace XCity
                     else
                         _unlockBanner = null;
                 }
+                string tutorialPrefix = GetTutorialStatusPrefix();
+                if (tutorialPrefix != null) hint = $"{tutorialPrefix}  |  {hint}";
                 if (_simSpeed <= 0f) hint = $"Đang tạm dừng  |  {hint}";
                 if (_city.TicksInDebt > 0 && !_city.IsBankrupt)
                     hint = $"Cảnh báo phá sản: còn {CitySimulation.BankruptcyTicks - _city.TicksInDebt} lượt · Vay hoặc cắt giảm chi phí  |  {hint}";
