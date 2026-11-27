@@ -542,6 +542,7 @@ namespace XCity
             UpdateSafeArea();
             RunSimulationTick();
             HandleInput();
+            UpdateCameraInertia();
             UpdateFpsCounter();
             if (_shoreWarningUntil > 0f && Time.unscaledTime >= _shoreWarningUntil)
             {
@@ -617,16 +618,9 @@ namespace XCity
                 }
 
                 if (first.fingerId == _pinchFirstId && second.fingerId == _pinchSecondId)
-                {
-                    Vector2 current = second.position - first.position;
-                    Vector2 previous = current - second.deltaPosition + first.deltaPosition;
-                    if (current.sqrMagnitude > 1f && previous.sqrMagnitude > 1f)
-                    {
-                        _camDistance = Mathf.Clamp(_camDistance * previous.magnitude / current.magnitude, MinCamDistance, MaxCamDistance);
-                        _camYaw -= Vector2.SignedAngle(previous, current);
-                        UpdateCameraTransform();
-                    }
-                }
+                    ContinueTwoFingerGesture(first, second);
+                else
+                    BeginTwoFingerGesture(first, second);
 
                 _pinchFirstId = first.fingerId;
                 _pinchSecondId = second.fingerId;
@@ -654,6 +648,7 @@ namespace XCity
         private void BeginGesture(Vector2 position)
         {
             if (IsPointerOverUI(position)) return;
+            StopCameraInertia(); // a new touch catches the gliding camera
             if (_catalog.activeSelf)
             {
                 _catalog.SetActive(false);
@@ -685,13 +680,8 @@ namespace XCity
                 _panMoved = true;
                 ClearFollow();
                 Vector2 delta = position - _lastPointerPos;
-                Vector3 right = Vector3.ProjectOnPlane(_cam.transform.right, Vector3.up).normalized;
-                Vector3 forward = Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up).normalized;
-                float panSpeed = _camDistance * 1.6f / Screen.height;
-                _camTarget -= (right * delta.x + forward * delta.y) * panSpeed;
-                float maxBound = GridSize * CellSize;
-                _camTarget.x = Mathf.Clamp(_camTarget.x, 0f, maxBound);
-                _camTarget.z = Mathf.Clamp(_camTarget.z, 0f, maxBound);
+                PanCamera(delta);
+                TrackPanVelocity(delta);
                 UpdateCameraTransform();
             }
             else if (!IsSinglePlacement && TryGetCell(position, out var cell))
