@@ -1,0 +1,41 @@
+name: Cleanup Old Workflow Runs
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_count:
+        description: "Số lượt chạy mới nhất cần giữ lại cho mỗi workflow"
+        required: false
+        default: "2"
+  schedule:
+    - cron: "0 3 * * 0"
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    name: Keep Latest 2 Runs Per Workflow
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP_COUNT: ${{ inputs.keep_count || '2' }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          CURRENT_RUN_ID="${{ github.run_id }}"
+
+          RUN_IDS=$(gh api --paginate --slurp "repos/${REPO}/actions/runs?per_page=100" \
+            --jq "[.[].workflow_runs[] | select(.status == \"completed\")] | group_by(.workflow_id)[] | sort_by(.created_at) | reverse | .[${KEEP_COUNT}:] | .[].id")
+
+          DELETED=0
+          for RUN_ID in $RUN_IDS; do
+            if [ -n "$RUN_ID" ] && [ "$RUN_ID" != "$CURRENT_RUN_ID" ]; then
+              echo "Deleting workflow run ID: $RUN_ID"
+              gh api -X DELETE "repos/${REPO}/actions/runs/${RUN_ID}" || true
+              DELETED=$((DELETED + 1))
+            fi
+          done
+          echo "Done. Total deleted runs: ${DELETED}"
