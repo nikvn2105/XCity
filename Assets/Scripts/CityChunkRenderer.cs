@@ -27,6 +27,11 @@ namespace XCity
         private static readonly Color32 LanePaint = new Color32(236, 189, 98, 255);
         private static readonly Color32 GrassLight = new Color32(111, 144, 92, 255);
         private static readonly Color32 GrassDark = new Color32(79, 115, 77, 255);
+        private static readonly Color32 MeadowWarm = new Color32(130, 152, 88, 255);
+        private static readonly Color32 BeachSand = new Color32(200, 184, 142, 255);
+        private static readonly Color32 BeachWetSand = new Color32(168, 152, 114, 255);
+        private static readonly Color32 BankEarth = new Color32(124, 134, 110, 255);
+        private static readonly Color32 FoamWhite = new Color32(226, 236, 240, 255);
 
         private static readonly Color32 HappinessRed = new Color32(214, 58, 52, 255);
         private static readonly Color32 HappinessYellow = new Color32(236, 198, 56, 255);
@@ -57,6 +62,7 @@ namespace XCity
         private readonly Material _material;
         private readonly Transform _root;
         private readonly float _cellSize;
+        private readonly Texture2D _shoreTexture;
 
         private bool _infoView;
         private long _lastInfoTick = -1;
@@ -69,6 +75,8 @@ namespace XCity
             _material = material;
             _root = new GameObject("Streets and Landscape").transform;
             _root.SetParent(parent, false);
+            _shoreTexture = CreateShoreTexture();
+            Shader.SetGlobalTexture("_XCityShoreTex", _shoreTexture);
             _city.CellChanged += MarkDirty;
         }
 
@@ -251,7 +259,7 @@ namespace XCity
                         continue;
                     }
                     if (!WorldTerrain.IsLand(x, z)) continue;
-                    AddCoast(x, z);
+                    AddCoast(x, z, cell.Type);
                     if (cell.Type == CellType.Road)
                     {
                         if (full) AddStreet(center, x, z, emitScenery);
@@ -555,26 +563,72 @@ namespace XCity
         private static bool IsNavigationIndex(int index, int count) =>
             index >= 0 && index < count && Math.Abs(index + 0.5f - count * 0.5f) <= 1.5f;
 
-        private void AddCoast(int x, int z)
+        private void AddCoast(int x, int z, CellType cellType)
         {
-            if (WorldTerrain.LandHeight(x, z) > 0.13f) return;
-            float edge = _cellSize * 0.5f;
-            const float waterline = -1.08f;
-            var sand = new Color32(164, 153, 119, 255);
-            var shore = new Color32(122, 134, 106, 255);
-            if (!WorldTerrain.IsLand(x + 1, z)) Cliff(edge, -edge, edge, edge, Vector3.right);
-            if (!WorldTerrain.IsLand(x - 1, z)) Cliff(-edge, edge, -edge, -edge, Vector3.left);
-            if (!WorldTerrain.IsLand(x, z + 1)) Cliff(edge, edge, -edge, edge, Vector3.forward);
-            if (!WorldTerrain.IsLand(x, z - 1)) Cliff(-edge, -edge, edge, -edge, Vector3.back);
+            float landH = WorldTerrain.LandHeight(x, z);
+            if (landH > 0.35f) return;
 
-            void Cliff(float x0, float z0, float x1, float z1, Vector3 normal)
+            bool waterE = !WorldTerrain.IsLand(x + 1, z);
+            bool waterW = !WorldTerrain.IsLand(x - 1, z);
+            bool waterN = !WorldTerrain.IsLand(x, z + 1);
+            bool waterS = !WorldTerrain.IsLand(x, z - 1);
+            bool waterNE = !WorldTerrain.IsLand(x + 1, z + 1);
+            bool waterNW = !WorldTerrain.IsLand(x - 1, z + 1);
+            bool waterSE = !WorldTerrain.IsLand(x + 1, z - 1);
+            bool waterSW = !WorldTerrain.IsLand(x - 1, z - 1);
+            if (!(waterE || waterW || waterN || waterS || waterNE || waterNW || waterSE || waterSW))
+                return;
+
+            float edge = _cellSize * 0.5f;
+            const float waterline = -1.14f;
+            const float bankTop = 0.009f;
+            const float foamY = -1.024f;
+            bool lowBeach = landH < 0.14f;
+            Color32 bankColor = lowBeach ? BeachWetSand : BankEarth;
+
+            if (waterE) CoastEdge(edge, -edge, edge, edge, Vector3.right);
+            if (waterW) CoastEdge(-edge, edge, -edge, -edge, Vector3.left);
+            if (waterN) CoastEdge(edge, edge, -edge, edge, Vector3.forward);
+            if (waterS) CoastEdge(-edge, -edge, edge, -edge, Vector3.back);
+
+            if (!_infoView && landH < 0.22f)
             {
-                _surface.AddQuad(new Vector3(x0, waterline, z0), new Vector3(x1, waterline, z1),
-                    new Vector3(x1, 0.007f, z1), new Vector3(x0, 0.007f, z0), normal, shore);
-                Vector3 outside = normal * (_cellSize * 0.18f);
-                var a = new Vector3(x0, -0.97f, z0);
-                var b = new Vector3(x1, -0.97f, z1);
-                _surface.AddQuad(a, b, b + outside, a + outside, Vector3.up, sand);
+                float sandWidth = cellType == CellType.Empty ? _cellSize * 0.36f : 0.28f;
+                float shade = (BuildingMeshFactory.Hash(x, z, 601) & 15u) / 15f;
+                Color32 sandCol = Color32.Lerp(BeachWetSand, BeachSand, 0.72f + shade * 0.28f);
+                const float sandY = 0.022f;
+
+                if (waterE) Rect(_surface, edge - sandWidth, -edge, edge, edge, sandY, sandCol);
+                if (waterW) Rect(_surface, -edge, -edge, -edge + sandWidth, edge, sandY, sandCol);
+                if (waterN) Rect(_surface, -edge, edge - sandWidth, edge, edge, sandY, sandCol);
+                if (waterS) Rect(_surface, -edge, -edge, edge, -edge + sandWidth, sandY, sandCol);
+
+                if (cellType == CellType.Empty)
+                {
+                    if (waterNE && !waterN && !waterE) Rect(_surface, edge - sandWidth, edge - sandWidth, edge, edge, sandY, sandCol);
+                    if (waterNW && !waterN && !waterW) Rect(_surface, -edge, edge - sandWidth, -edge + sandWidth, edge, sandY, sandCol);
+                    if (waterSE && !waterS && !waterE) Rect(_surface, edge - sandWidth, -edge, edge, -edge + sandWidth, sandY, sandCol);
+                    if (waterSW && !waterS && !waterW) Rect(_surface, -edge, -edge, -edge + sandWidth, -edge + sandWidth, sandY, sandCol);
+                }
+            }
+
+            void CoastEdge(float x0, float z0, float x1, float z1, Vector3 normal)
+            {
+                Vector3 bankOut = normal * 0.38f;
+                Vector3 foamInner = normal * 0.16f;
+                Vector3 foamOuter = normal * 0.40f;
+                Vector3 slopeNormal = (normal + Vector3.up * 0.65f).normalized;
+
+                var topA = new Vector3(x0, bankTop, z0);
+                var topB = new Vector3(x1, bankTop, z1);
+                var botA = new Vector3(x0, waterline, z0) + bankOut;
+                var botB = new Vector3(x1, waterline, z1) + bankOut;
+                _surface.AddQuad(botA, botB, topB, topA, slopeNormal, bankColor);
+
+                var f0 = new Vector3(x0, foamY, z0) + foamInner;
+                var f1 = new Vector3(x1, foamY, z1) + foamInner;
+                _surface.AddQuad(f0, f1, new Vector3(x1, foamY, z1) + foamOuter, new Vector3(x0, foamY, z0) + foamOuter,
+                    Vector3.up, FoamWhite);
             }
         }
 
@@ -689,7 +743,7 @@ namespace XCity
             float half = _cellSize * 0.5f;
             Color32 ground = _infoView
                 ? GetInfoGroundColor(cell, x, z)
-                : Color32.Lerp(GrassDark, GrassLight, WorldTerrain.Vegetation(x, z));
+                : GetNaturalGroundColor(x, z);
             Rect(_surface, -half, -half, half, half, 0.007f, ground);
 
             if (type != CellType.Empty)
@@ -790,8 +844,102 @@ namespace XCity
         {
             if (_infoView) return GetInfoLotColor(cell, x, z);
             if (cell.Type != CellType.Empty) return GetStandardPlotColor(cell.Type);
-            float quantizedVeg = Mathf.Round(WorldTerrain.Vegetation(x, z) * 6f) / 6f;
-            return Color32.Lerp(GrassDark, GrassLight, quantizedVeg);
+            if (!WorldTerrain.IsLand(x + 1, z) || !WorldTerrain.IsLand(x - 1, z) ||
+                !WorldTerrain.IsLand(x, z + 1) || !WorldTerrain.IsLand(x, z - 1))
+                return Color32.Lerp(GrassLight, BeachSand, 0.72f);
+
+            float veg = Mathf.Round(WorldTerrain.Vegetation(x, z) * 6f) / 6f;
+            float meadow = Mathf.Round(Mathf.Clamp01(WorldTerrain.LandHeight(x, z) * 1.4f) * 3f) / 3f;
+            Color32 baseGrass = Color32.Lerp(GrassDark, GrassLight, veg);
+            return Color32.Lerp(baseGrass, MeadowWarm, meadow * 0.25f);
+        }
+
+        private static Color32 GetNaturalGroundColor(int x, int z)
+        {
+            float veg = WorldTerrain.Vegetation(x, z);
+            float h = WorldTerrain.LandHeight(x, z);
+            Color32 col = Color32.Lerp(GrassDark, GrassLight, veg);
+            float meadow = Mathf.Clamp01((veg - 0.35f) * 1.6f) * Mathf.Clamp01(h * 1.6f);
+            col = Color32.Lerp(col, MeadowWarm, meadow * 0.30f);
+            if (h < 0.09f)
+                col = Color32.Lerp(col, BeachSand, (0.09f - h) * 3.2f);
+
+            uint hash = BuildingMeshFactory.Hash(x, z, 313);
+            int jitter = (int)(hash % 11u) - 5;
+            return new Color32(
+                (byte)Mathf.Clamp(col.r + jitter, 0, 255),
+                (byte)Mathf.Clamp(col.g + jitter, 0, 255),
+                (byte)Mathf.Clamp(col.b + jitter / 2, 0, 255),
+                255);
+        }
+
+        private static Texture2D CreateShoreTexture()
+        {
+            const int size = CitySimulation.GridSize;
+            const float maxDist = 11f;
+            const float diag = 1.4142135f;
+            var dist = new float[size * size];
+
+            for (int z = 0; z < size; z++)
+            {
+                int row = z * size;
+                for (int x = 0; x < size; x++)
+                    dist[row + x] = WorldTerrain.IsLand(x, z) ? 0f : maxDist + 1f;
+            }
+
+            for (int z = 0; z < size; z++)
+            {
+                int row = z * size;
+                for (int x = 0; x < size; x++)
+                {
+                    int idx = row + x;
+                    float d = dist[idx];
+                    if (d <= 0f) continue;
+                    if (x > 0) d = Mathf.Min(d, dist[idx - 1] + 1f);
+                    if (z > 0)
+                    {
+                        int prev = (z - 1) * size + x;
+                        d = Mathf.Min(d, dist[prev] + 1f);
+                        if (x > 0) d = Mathf.Min(d, dist[prev - 1] + diag);
+                        if (x < size - 1) d = Mathf.Min(d, dist[prev + 1] + diag);
+                    }
+                    dist[idx] = d;
+                }
+            }
+
+            for (int z = size - 1; z >= 0; z--)
+            {
+                int row = z * size;
+                for (int x = size - 1; x >= 0; x--)
+                {
+                    int idx = row + x;
+                    float d = dist[idx];
+                    if (d <= 0f) continue;
+                    if (x < size - 1) d = Mathf.Min(d, dist[idx + 1] + 1f);
+                    if (z < size - 1)
+                    {
+                        int next = (z + 1) * size + x;
+                        d = Mathf.Min(d, dist[next] + 1f);
+                        if (x < size - 1) d = Mathf.Min(d, dist[next + 1] + diag);
+                        if (x > 0) d = Mathf.Min(d, dist[next - 1] + diag);
+                    }
+                    dist[idx] = d;
+                }
+            }
+
+            var pixels = new byte[size * size];
+            for (int i = 0; i < pixels.Length; i++)
+                pixels[i] = (byte)Mathf.RoundToInt(Mathf.Clamp01(1f - dist[i] / maxDist) * 255f);
+
+            var tex = new Texture2D(size, size, TextureFormat.R8, mipChain: false, linear: true)
+            {
+                name = "ShoreDistance",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Bilinear
+            };
+            tex.LoadRawTextureData(pixels);
+            tex.Apply(false, true);
+            return tex;
         }
 
         private static Color32 GetStandardPlotColor(CellType type) => type switch
@@ -906,6 +1054,7 @@ namespace XCity
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
             foreach (Mesh mesh in _farMeshes)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
+            if (_shoreTexture != null) UnityEngine.Object.Destroy(_shoreTexture);
             UnityEngine.Object.Destroy(_root.gameObject);
         }
     }

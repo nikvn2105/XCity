@@ -118,9 +118,10 @@ namespace XCity
 
         private void CreateMaterials()
         {
-            Shader shader = Resources.Load<Shader>("XCityWorld");
-            _waterMat = MakeMat(shader, new Color(0.37f, 0.58f, 0.64f));
-            _roadMat = MakeMat(shader, new Color(0.18f, 0.20f, 0.23f));
+            Shader worldShader = Resources.Load<Shader>("XCityWorld");
+            Shader waterShader = Resources.Load<Shader>("XCityWater");
+            _waterMat = MakeMat(waterShader != null ? waterShader : worldShader, new Color(0.14f, 0.34f, 0.48f));
+            _roadMat = MakeMat(worldShader, new Color(0.18f, 0.20f, 0.23f));
         }
 
         private static Material MakeMat(Shader shader, Color color)
@@ -194,7 +195,16 @@ namespace XCity
             var camObj = new GameObject("MainCamera");
             camObj.tag = "MainCamera";
             _cam = camObj.AddComponent<Camera>();
-            _cam.clearFlags = CameraClearFlags.SolidColor;
+            Shader skyShader = Resources.Load<Shader>("XCitySky");
+            if (skyShader != null)
+            {
+                RenderSettings.skybox = new Material(skyShader) { hideFlags = HideFlags.DontSave };
+                _cam.clearFlags = CameraClearFlags.Skybox;
+            }
+            else
+            {
+                _cam.clearFlags = CameraClearFlags.SolidColor;
+            }
             _cam.backgroundColor = RenderSettings.fogColor;
             _cam.nearClipPlane = 0.5f;
             _cam.farClipPlane = 320f;
