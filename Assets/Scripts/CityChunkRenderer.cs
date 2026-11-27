@@ -129,6 +129,11 @@ namespace XCity
                     var center = new Vector3((x - startX + 0.5f) * _cellSize, 0, (z - startZ + 0.5f) * _cellSize);
                     _surface.SetFrame(center, 0);
                     _props.SetFrame(center, 0);
+                    if (cell.IsBridge)
+                    {
+                        AddBridge(center, cell.BridgeAxis, x, z, full);
+                        continue;
+                    }
                     if (!WorldTerrain.IsLand(x, z)) continue;
                     AddCoast(x, z);
                     if (cell.Type == CellType.Road)
@@ -162,6 +167,41 @@ namespace XCity
                 renderer.shadowCastingMode = shadows;
             }
             builder.ApplyTo(mesh);
+        }
+
+        private void AddBridge(Vector3 center, RoadConnections axis, int x, int z, bool full)
+        {
+            int turn = axis == CitySimulation.BridgeAlongX ? 1 : 0;
+            _surface.SetFrame(center, turn);
+            _props.SetFrame(center, turn);
+            float half = _cellSize * 0.5f;
+            float lane = half * 0.67f;
+            float width = _cellSize * 0.87f;
+            var concrete = new Color32(147, 153, 150, 255);
+            var steel = new Color32(77, 94, 97, 255);
+
+            _surface.AddBox(new Vector3(0f, -0.095f, 0f), new Vector3(width, 0.24f, _cellSize), concrete, Paving);
+            Rect(_surface, -lane, -half, lane, half, RoadY, Asphalt);
+            if (!full) return;
+            Rect(_surface, -0.041f, -0.30f, 0.041f, 0.30f, PaintY, LanePaint);
+
+            int along = turn == 1 ? x : z;
+            if (along % 2 == 0)
+            {
+                _props.AddBox(new Vector3(0f, -0.64f, 0f), new Vector3(0.74f, 1.25f, 0.61f),
+                    concrete, concrete);
+                _props.AddBox(new Vector3(0f, -0.28f, 0f), new Vector3(width * 0.83f, 0.20f, 0.52f),
+                    concrete, concrete);
+            }
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float edge = side * (width * 0.5f - 0.08f);
+                _props.AddBox(new Vector3(edge, 0.31f, 0f), new Vector3(0.06f, 0.055f, _cellSize),
+                    steel, steel);
+                for (int post = -1; post <= 1; post += 2)
+                    _props.AddBox(new Vector3(edge, 0.168f, post * half * 0.65f),
+                        new Vector3(0.063f, 0.286f, 0.06f), steel, steel);
+            }
         }
 
         private void AddCoast(int x, int z)

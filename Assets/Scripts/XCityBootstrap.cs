@@ -15,7 +15,8 @@ namespace XCity
         Bulldoze,
         PowerPlant,
         School,
-        CivicService
+        CivicService,
+        Bridge
     }
 
     public partial class XCityBootstrap : MonoBehaviour
@@ -81,6 +82,9 @@ namespace XCity
         private readonly List<Transform> _roadMarkers = new List<Transform>();
         private Material _roadPreviewMat;
         private int _roadStrokeCost;
+        private Vector2Int? _bridgeStart;
+        private Vector2Int _bridgeEnd;
+        private BridgeQuote _bridgeQuote;
         private Vector2Int _lastStrokeSample;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
@@ -263,6 +267,7 @@ namespace XCity
             AddToolButton(bottomBar.transform, font, "Xem", BuildTool.Pan);
             SetupWorldMap(bottomBar.transform, font);
             AddToolButton(bottomBar.transform, font, "Đường", BuildTool.Road);
+            AddToolButton(bottomBar.transform, font, "Cầu", BuildTool.Bridge);
             _catalogButton = CreateHudButton(bottomBar.transform, font, "Xây", "OpenCatalog");
             _catalogButton.onClick.AddListener(ToggleCatalog);
             SetupBuildCatalog(font);
@@ -294,7 +299,7 @@ namespace XCity
             AddCatalogCategory(root, tabs, font, "Thương mại", BuildTool.Commercial,
                 BuildingModel.Market, BuildingModel.HighStreet, BuildingModel.ShoppingMall);
             AddCatalogCategory(root, tabs, font, "Dịch vụ", BuildTool.CivicService,
-                BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation);
+                BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation, BuildingModel.Harbor);
             _catalog.SetActive(false);
         }
 
@@ -539,7 +544,15 @@ namespace XCity
             _gestureStart = position;
             _panMoved = false;
             _lastPointerPos = position;
-            if (_activeTool != BuildTool.Pan && !IsSinglePlacement && TryGetCell(position, out var cell))
+            if (_activeTool == BuildTool.Bridge && TryGetCell(position, out var bank))
+            {
+                if (CitySimulation.IsBuildable(bank.x, bank.y))
+                {
+                    _bridgeStart = bank;
+                    UpdateBridgePreview(bank);
+                }
+            }
+            else if (_activeTool != BuildTool.Pan && !IsSinglePlacement && TryGetCell(position, out var cell))
                 AddStrokeSample(cell);
         }
 
@@ -563,7 +576,8 @@ namespace XCity
             }
             else if (!IsSinglePlacement && TryGetCell(position, out var cell))
             {
-                AddStrokeSample(cell);
+                if (_activeTool == BuildTool.Bridge) UpdateBridgePreview(cell);
+                else AddStrokeSample(cell);
             }
             _lastPointerPos = position;
         }
@@ -586,7 +600,16 @@ namespace XCity
             if (_isDragging && _activeTool != BuildTool.Pan &&
                 !IsPointerOverUI(position) && TryGetCell(position, out var cell))
             {
-                if (IsSinglePlacement)
+                if (_activeTool == BuildTool.Bridge)
+                {
+                    UpdateBridgePreview(cell);
+                    if (_bridgeStart.HasValue && _bridgeQuote == BridgeQuote.Ready)
+                    {
+                        Vector2Int start = _bridgeStart.Value;
+                        _cityDirty |= _city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y);
+                    }
+                }
+                else if (IsSinglePlacement)
                 {
                     if (!IsPanMovement(position))
                     {
@@ -610,10 +633,10 @@ namespace XCity
         {
             _isDragging = false;
             _activeFingerId = -1;
+            _bridgeStart = null;
             if (_stroke.Count == 0) return;
-            if (_activeTool == BuildTool.Road)
-                for (int i = 0; i < _stroke.Count; i++)
-                    _roadMarkers[i].gameObject.SetActive(false);
+            if (_activeTool == BuildTool.Road || _activeTool == BuildTool.Bridge)
+                HideStreetPreview();
             _stroke.Clear();
             _strokeCells.Clear();
             _roadStrokeCost = 0;
@@ -669,7 +692,10 @@ namespace XCity
             if (!ground.Raycast(ray, out float distance)) return false;
             Vector3 hit = ray.GetPoint(distance);
             cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
-            return CitySimulation.IsBuildable(cell.x, cell.y);
+            if (cell.x < 0 || cell.y < 0 || cell.x >= GridSize || cell.y >= GridSize) return false;
+            return _activeTool == BuildTool.Bridge || CitySimulation.IsBuildable(cell.x, cell.y) ||
+                (_activeTool == BuildTool.Bulldoze || _activeTool == BuildTool.Pan) &&
+                _city.GetCell(cell.x, cell.y).IsBridge;
         }
 
         private void AddStrokeSample(Vector2Int destination)
@@ -704,13 +730,48 @@ namespace XCity
 
         private void AddStrokeCell(Vector2Int cell)
         {
-            if (!CitySimulation.IsBuildable(cell.x, cell.y)) return;
+            if (!CitySimulation.IsBuildable(cell.x, cell.y) &&
+                (_activeTool != BuildTool.Bulldoze || !_city.GetCell(cell.x, cell.y).IsBridge)) return;
             if (!_strokeCells.Add(cell)) return;
 
             int index = _stroke.Count;
             _stroke.Add(cell);
             if (_activeTool != BuildTool.Road) return;
             if (_city.GetCell(cell.x, cell.y).Type != CellType.Road) _roadStrokeCost += CitySimulation.RoadCost;
+            ShowStreetPreview(index, cell);
+        }
+
+        private void UpdateBridgePreview(Vector2Int pointer)
+        {
+            if (!_bridgeStart.HasValue) return;
+            Vector2Int start = _bridgeStart.Value;
+            Vector2Int delta = pointer - start;
+            bool alongX = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y);
+            _bridgeEnd = alongX ? new Vector2Int(pointer.x, start.y) : new Vector2Int(start.x, pointer.y);
+            HideStreetPreview();
+            _stroke.Clear();
+            _bridgeQuote = _city.QuoteBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y, out _roadStrokeCost);
+            int span = alongX ? delta.x : delta.y;
+            int direction = System.Math.Sign(span);
+            int previews = Mathf.Min(Mathf.Abs(span) + 1, CitySimulation.MaxBridgeWaterTiles + 2);
+            var step = alongX ? new Vector2Int(direction, 0) : new Vector2Int(0, direction);
+            for (int i = 0; i < previews; i++)
+            {
+                Vector2Int tile = start + step * i;
+                _stroke.Add(tile);
+                ShowStreetPreview(i, tile);
+            }
+            RefreshHUD();
+        }
+
+        private void HideStreetPreview()
+        {
+            for (int i = 0; i < _stroke.Count; i++)
+                _roadMarkers[i].gameObject.SetActive(false);
+        }
+
+        private void ShowStreetPreview(int index, Vector2Int cell)
+        {
             if (index == _roadMarkers.Count)
             {
                 var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -883,7 +944,7 @@ namespace XCity
 
             string label = cell.Model != BuildingModel.Default ? BuildingCatalog.Get(cell.Model).Name : type switch
             {
-                CellType.Road => "Đường",
+                CellType.Road => cell.IsBridge ? "Cầu đường bộ" : "Đường",
                 CellType.Residential => "Nhà ở",
                 CellType.Commercial => "Thương mại",
                 CellType.Industrial => "Công nghiệp",
@@ -916,6 +977,20 @@ namespace XCity
         private int _lastHudTax;
         private int _lastHudNet;
 
+        private string GetBridgeHint()
+        {
+            if (!_bridgeStart.HasValue) return "Kéo thẳng từ bờ này sang bờ kia để xây cầu";
+            _roadPreviewMat.color = _bridgeQuote == BridgeQuote.Ready ? Color.green : Color.red;
+            return _bridgeQuote switch
+            {
+                BridgeQuote.Ready => $"Chi phí cầu: ${_roadStrokeCost:N0} · Thả để xây",
+                BridgeQuote.InsufficientFunds => $"Thiếu ngân sách · Cầu: ${_roadStrokeCost:N0}",
+                BridgeQuote.TooLong => $"Cầu tối đa {CitySimulation.MaxBridgeWaterTiles} ô nước",
+                BridgeQuote.SpanObstructed => "Cần một nhịp nước trống giữa hai đầu cầu",
+                _ => "Kéo tiếp đến đất ở bờ đối diện"
+            };
+        }
+
         private void RefreshHUD()
         {
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
@@ -928,6 +1003,7 @@ namespace XCity
                 {
                     BuildTool.Pan => GetInspectionHint(),
                     BuildTool.Road => "Kéo để vẽ đường · Thả để đặt",
+                    BuildTool.Bridge => GetBridgeHint(),
                     BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
                     BuildTool.School or BuildTool.CivicService => "Chạm để đặt công trình",
@@ -946,6 +1022,8 @@ namespace XCity
                     _roadPreviewMat.color = affordable ? Color.green : Color.red;
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
+                if (_activeBuildingModel == BuildingModel.Harbor && _city.Money >= BuildingCatalog.Get(BuildingModel.Harbor).Cost)
+                    hint = "Chạm vào ô đất sát mặt nước để đặt cảng";
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population &&

@@ -189,6 +189,9 @@ namespace XCity
 
         internal static int PickQuarterTurns(CitySimulation city, int x, int z)
         {
+            if (city.GetCell(x, z).Model == BuildingModel.Harbor &&
+                CitySimulation.TryHarborFacing(x, z, out int towardWater, out _, out _))
+                return towardWater;
             if (IsRoad(city, x, z + 1)) return 0; // +Z
             if (IsRoad(city, x + 1, z)) return 1; // +X
             if (IsRoad(city, x, z - 1)) return 2; // -Z

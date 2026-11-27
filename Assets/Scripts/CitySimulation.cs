@@ -35,7 +35,8 @@ namespace XCity
         HighStreet,
         PoliceStation,
         Hospital,
-        FireStation
+        FireStation,
+        Harbor
     }
 
     internal static class BuildingCatalog
@@ -61,6 +62,7 @@ namespace XCity
                 BuildingModel.PoliceStation => (CellType.CivicService, "Sở cảnh sát", 900, 3.6f, 0),
                 BuildingModel.Hospital => (CellType.CivicService, "Bệnh viện", 1800, 5.0f, 0),
                 BuildingModel.FireStation => (CellType.CivicService, "Trạm cứu hỏa", 1150, 3.4f, 0),
+                BuildingModel.Harbor => (CellType.CivicService, "Cảng tàu thuyền", 1450, 2.4f, 0),
                 _ => default
             };
 
@@ -71,6 +73,7 @@ namespace XCity
             BuildingModel.PoliceStation => 18,
             BuildingModel.Hospital => 35,
             BuildingModel.FireStation => 24,
+            BuildingModel.Harbor => 22,
             _ => Get(model).Seats / 15
         };
 
@@ -104,6 +107,8 @@ namespace XCity
         public BuildingModel Model;
         public int Level;
         public float Height;
+        public RoadConnections BridgeAxis;
+        internal bool IsBridge => BridgeAxis != RoadConnections.None;
     }
 
     [Serializable]
@@ -119,7 +124,7 @@ namespace XCity
         public int[] cellIndices;
     }
 
-    public sealed class CitySimulation
+    public sealed partial class CitySimulation
     {
         internal const int LegacySize = 32;
         public const int GridSize = 512;
@@ -134,7 +139,7 @@ namespace XCity
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 6;
+        internal const int CurrentSchemaVersion = 7;
         private readonly HashSet<int> _powered = new HashSet<int>();
         private bool _powerDirty = true;
         private int _unpoweredZones;
@@ -178,7 +183,8 @@ namespace XCity
             int index = CellIndex(x, z);
             if (type == CellType.Empty) _occupied.Remove(index);
             else _occupied.Add(index);
-            Roads.SetRoad(x, z, type == CellType.Road);
+            RoadConnections axis = _cells[x, z].BridgeAxis;
+            Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis);
         }
 
         public CityCell GetCell(int x, int z) => _cells[x, z];
@@ -237,7 +243,11 @@ namespace XCity
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
             List<(int X, int Z, CityCell Cell)> changed)
         {
-            if (!IsBuildable(x, z) || type < CellType.Empty || type > CellType.CivicService) return false;
+            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.CivicService) return false;
+            if (_cells[x, z].IsBridge)
+                return type == CellType.Empty && RemoveBridge(x, z, changed);
+            if (!IsBuildable(x, z)) return false;
+            if (model == BuildingModel.Harbor && !CanPlaceHarbor(x, z)) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;
@@ -388,22 +398,34 @@ namespace XCity
                 if (cell.Type == CellType.Empty) continue;
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (!IsBuildable(x, z)) return false;
+                if (cell.IsBridge == IsBuildable(x, z)) return false;
                 restored._cells[x, z] = cell;
                 restored.TrackCell(x, z, cell.Type);
                 if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
             }
 
+            foreach (int index in restored._occupied)
+            {
+                int x = index / GridSize;
+                int z = index % GridSize;
+                if (restored._cells[x, z].Model == BuildingModel.Harbor && !restored.CanPlaceHarbor(x, z))
+                    return false;
+            }
             city = restored;
             return true;
         }
 
         private static bool IsValidSavedCell(CityCell cell, int version)
         {
+            if (cell.IsBridge)
+                return version >= 7 && cell.Type == CellType.Road && cell.Model == BuildingModel.Default &&
+                    cell.Height == 0f && cell.Level == 0 &&
+                    (cell.BridgeAxis == BridgeAlongX || cell.BridgeAxis == BridgeAlongZ);
+
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = cell.Model >= BuildingModel.HighStreet ? 5 : 4;
+                int modelVersion = cell.Model == BuildingModel.Harbor ? 7 : cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
                 if (BuildingCatalog.IsPublicService(cell.Type))
                     return cell.Level == 1 && cell.Height == option.Height;
@@ -474,11 +496,11 @@ namespace XCity
 
             int AdjacentComponent(int index)
             {
-                if (index >= GridSize && components.TryGetValue(index - GridSize, out int west)) return west;
-                if (index < GridSize * (GridSize - 1) && components.TryGetValue(index + GridSize, out int east)) return east;
-                int z = index % GridSize;
-                if (z > 0 && components.TryGetValue(index - 1, out int south)) return south;
-                return z < GridSize - 1 && components.TryGetValue(index + 1, out int north) ? north : 0;
+                RoadConnections access = Roads.GetAccess(index / GridSize, index % GridSize);
+                if ((access & RoadConnections.West) != 0) return components[index - GridSize];
+                if ((access & RoadConnections.East) != 0) return components[index + GridSize];
+                if ((access & RoadConnections.South) != 0) return components[index - 1];
+                return (access & RoadConnections.North) != 0 ? components[index + 1] : 0;
             }
         }
 

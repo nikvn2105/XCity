@@ -135,10 +135,23 @@ namespace XCity
             };
 
             if (CitySimulation.TryRestore(snapshot, out var city))
+            {
+                AddWaterfront(city);
                 return city;
+            }
 
             Debug.LogError("XCityPreviewCity snapshot failed TryRestore validation.");
             return new CitySimulation();
+        }
+
+        private static void AddWaterfront(CitySimulation city)
+        {
+            var links = new[] { (450, 363), (451, 363), (452, 363), (452, 375), (452, 376), (452, 377) };
+            if (!city.TryApplyBuild(links, CellType.Road) ||
+                !city.TryBuildBridge(452, 364, 452, 374) ||
+                !city.TrySetCell(450, 364, CellType.CivicService, BuildingModel.Harbor) ||
+                !city.TrySetCell(453, 363, CellType.PowerPlant))
+                Debug.LogError("XCity preview waterfront failed placement.");
         }
 
         private static CityCell PreviewBuilding(BuildingModel model)

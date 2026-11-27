@@ -136,6 +136,9 @@ namespace XCity
                 _ => (new Color32(159, 154, 141, 255), new Color32(84, 90, 93, 255), 3.02f)
             };
 
+            if (cell.Model == BuildingModel.Harbor)
+                builder.AddBox(new Vector3(0f, -0.36f, 3.02f), new Vector3(1.0f, 0.18f, 3.44f), walls, roof);
+
             float height = cell.Height;
             float depth = width * 0.82f;
             bool house = cell.Type == CellType.Residential && cell.Model != BuildingModel.Apartment && cell.Level == 1;
@@ -206,6 +209,9 @@ namespace XCity
                     break;
                 case BuildingModel.HighStreet:
                     BuildHighStreet(b, height);
+                    break;
+                case BuildingModel.Harbor:
+                    BuildHarbor(b);
                     break;
                 case BuildingModel.PoliceStation:
                 case BuildingModel.Hospital:
@@ -570,6 +576,54 @@ namespace XCity
             b.AddBox(foot + Vector3.up * 0.11f, new Vector3(width, 0.22f, width), edge, edge);
             b.AddCylinder(foot + Vector3.up * 0.22f, width * 0.39f, width * 0.26f, 0.32f,
                 6, leaf, true, LotGrass);
+        }
+
+        private static void BuildHarbor(MeshBuilder b)
+        {
+            var siding = new Color32(164, 173, 163, 255);
+            var teal = new Color32(54, 105, 108, 255);
+            var dock = new Color32(129, 117, 93, 255);
+            var concrete = new Color32(171, 173, 158, 255);
+            AddWindowBlock(b, new Vector3(-0.52f, 0.04f, -0.65f), 1.84f, 1.41f, 1.35f, 1,
+                siding, teal, BuildingSurface.Panel);
+            b.AddGableRoof(new Vector3(-0.52f, 1.39f, -0.65f), 1.84f, 1.41f, 0.42f, 0.088f,
+                teal, siding);
+            b.AddBox(new Vector3(0.77f, 0.23f, -0.50f), new Vector3(0.61f, 0.39f, 0.66f), dock, dock);
+            b.AddBox(new Vector3(1.02f, 0.15f, 0.34f), new Vector3(1.04f, 0.21f, 0.45f), concrete, dock);
+            b.AddBox(new Vector3(0.0f, 0.12f, 0.82f), new Vector3(2.72f, 0.18f, 1.69f), concrete, concrete);
+
+            b.AddBox(new Vector3(0f, -0.34f, 3.18f), new Vector3(0.93f, 0.13f, 3.33f), dock, dock);
+            b.AddBox(new Vector3(0f, -0.18f, 1.58f), new Vector3(0.94f, 0.26f, 0.46f), dock, dock);
+            b.AddBox(new Vector3(0f, -0.35f, 4.80f), new Vector3(1.83f, 0.12f, 0.38f), dock, dock);
+            for (int i = 0; i < 4; i++)
+            {
+                float z = 2.07f + i * 0.83f;
+                for (int side = -1; side <= 1; side += 2)
+                    b.AddBox(new Vector3(side * 0.34f, -0.67f, z), new Vector3(0.11f, 1.02f, 0.12f), teal, dock);
+            }
+
+            AddMooredBoat(b, -0.91f, 3.58f, new Color32(183, 187, 169, 255), teal);
+            AddMooredBoat(b, 0.91f, 2.95f, new Color32(143, 76, 61, 255), siding);
+        }
+
+        private static void AddMooredBoat(MeshBuilder b, float x, float z, Color32 hull, Color32 cabin)
+        {
+            const float water = -1.12f;
+            const float deck = -0.83f;
+            var stern = new Vector3(x, (water + deck) * 0.5f, z - 0.27f);
+            var wood = new Color32(166, 145, 109, 255);
+            b.AddBox(stern, new Vector3(0.64f, deck - water, 1.04f), hull, wood);
+            var left = new Vector3(x - 0.32f, deck, z + 0.25f);
+            var right = new Vector3(x + 0.32f, deck, z + 0.25f);
+            var bow = new Vector3(x, deck + 0.04f, z + 0.94f);
+            var down = Vector3.up * (deck - water);
+            b.AddTriangle(left, right, bow, Vector3.up, wood);
+            b.AddQuad(left, bow, bow - down, left - down, Vector3.left, hull);
+            b.AddQuad(bow, right, right - down, bow - down, Vector3.right, hull);
+            b.AddBox(new Vector3(x, deck + 0.15f, z - 0.30f), new Vector3(0.41f, 0.30f, 0.47f),
+                WindowGlass, cabin, wallSurface: BuildingSurface.Glazing);
+            b.AddBox(new Vector3(x, deck + 0.45f, z - 0.42f), new Vector3(0.035f, 0.33f, 0.035f),
+                cabin, cabin);
         }
 
         private static void BuildCivicService(MeshBuilder b, BuildingModel model, float h)
