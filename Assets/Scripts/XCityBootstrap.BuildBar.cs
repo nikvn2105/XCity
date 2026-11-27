@@ -336,7 +336,7 @@ namespace XCity
                             names.Add(option.Name);
                 if (names.Count > 0)
                 {
-                    ShowToast(UiText.Unlocked(string.Join(", ", names)), UiTheme.Active);
+                    ShowToast(UiText.Unlocked(string.Join(", ", names)), UiTheme.Active, UiIcon.LockOpen);
                 }
             }
             _buildUnlockTier = tier;

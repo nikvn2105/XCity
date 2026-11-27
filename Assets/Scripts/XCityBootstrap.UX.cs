@@ -43,38 +43,23 @@ namespace XCity
             _emergencies.OnFireStarted += () =>
             {
                 _audio?.PlayAlert();
-                ShowToast(UiText.FireStarted, UiTheme.Danger, _emergencies.FireWorldPos);
+                ShowToast(UiText.FireStarted, UiTheme.Danger, UiIcon.Fire, _emergencies.FireWorldPos);
                 RefreshHUD();
             };
         }
 
-        private void SetupUXToolbar(Font font)
+        private void SetupUXToolbar(Transform buttons)
         {
-            var bar = CreatePanel(
-                _safeAreaRoot,
-                "UtilityBar",
-                new Vector2(0f, 1f),
-                new Vector2(1f, 1f),
-                new Vector2(12f, -110f),
-                new Vector2(-12f, -68f),
-                UiTheme.Panel);
-
-            var layout = bar.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 8;
-            layout.padding = new RectOffset(8, 8, 5, 5);
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = true;
-
-            _lightButton = CreateCompactButton(bar.transform, font, "Tự động", "Btn_Light");
+            _lightButton = CreateIconButton(buttons, UiIcon.LightAuto, "Btn_Light");
             _lightButton.onClick.AddListener(CycleLightingMode);
 
-            _followButton = CreateCompactButton(bar.transform, font, "Theo dõi", "Btn_Follow");
+            _followButton = CreateIconButton(buttons, UiIcon.Eye, "Btn_Follow");
             _followButton.onClick.AddListener(CycleFollowTarget);
 
-            _audioButton = CreateCompactButton(bar.transform, font, "Âm thanh: Bật", "Btn_Audio");
+            _audioButton = CreateIconButton(buttons, UiIcon.VolumeOn, "Btn_Audio");
             _audioButton.onClick.AddListener(ToggleAudioMute);
 
-            Button settingsButton = CreateCompactButton(bar.transform, font, "Cài đặt", "Btn_Settings");
+            Button settingsButton = CreateIconButton(buttons, UiIcon.Settings, "Btn_Settings");
             settingsButton.onClick.AddListener(ToggleSettings);
 
             RefreshUXButtons();
@@ -133,16 +118,17 @@ namespace XCity
         {
             if (_lightButton != null && _dayNight != null)
             {
-                _lightButton.GetComponentInChildren<Text>().text = _dayNight.GetModeLabel();
-                _lightButton.image.color = _dayNight.Mode == LightingMode.Night
-                    ? new Color(0.22f, 0.30f, 0.58f, 1f)
-                    : UiTheme.Button;
+                _lightButton.GetComponentInChildren<Text>().text = _dayNight.Mode switch
+                {
+                    LightingMode.Day => UiIcon.Day,
+                    LightingMode.Sunset => UiIcon.Sunset,
+                    LightingMode.Night => UiIcon.Night,
+                    _ => UiIcon.LightAuto
+                };
             }
 
             if (_followButton != null)
             {
-                _followButton.GetComponentInChildren<Text>().text =
-                    _followKind != FollowKind.None ? "Đang theo dõi" : "Theo dõi";
                 _followButton.image.color = _followKind != FollowKind.None
                     ? UiTheme.Active
                     : UiTheme.Button;
@@ -150,7 +136,7 @@ namespace XCity
 
             if (_audioButton != null && _audio != null)
             {
-                _audioButton.GetComponentInChildren<Text>().text = _audio.Muted ? "Âm thanh: Tắt" : "Âm thanh: Bật";
+                _audioButton.GetComponentInChildren<Text>().text = _audio.Muted ? UiIcon.VolumeOff : UiIcon.VolumeOn;
             }
         }
 
@@ -291,9 +277,6 @@ namespace XCity
         {
             _overlays?.Update();
             _emergencies?.Update(simDt);
-
-            if (_dayNight != null && _dayNight.Mode == LightingMode.AutoCycle && _lightButton != null)
-                _lightButton.GetComponentInChildren<Text>().text = _dayNight.GetModeLabel();
 
             _rciRefreshTimer += Time.unscaledDeltaTime;
             if (_rciRefreshTimer >= 1.2f)

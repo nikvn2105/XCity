@@ -126,7 +126,7 @@ namespace XCity
             SetupCamera();
             SetupHUD();
             if (_city.DroppedCellsOnLoad > 0)
-                ShowToast(string.Format(UiText.DroppedOnLoad, _city.DroppedCellsOnLoad), UiTheme.Warning);
+                ShowToast(string.Format(UiText.DroppedOnLoad, _city.DroppedCellsOnLoad), UiTheme.Warning, UiIcon.Info);
             RestoreFpsCounter();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
@@ -273,11 +273,17 @@ namespace XCity
 
             Font font = UiTheme.Font;
 
-            var topBar = CreatePanel(_safeAreaRoot, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), UiTheme.Panel);
-            SetupTopBarStats(topBar.transform, font);
-            // Top centre, under the utility row. While a fire burns, tapping it flies the camera there.
-            var hintPill = CreatePanel(_safeAreaRoot, "HintPill", new Vector2(0.3f, 1), new Vector2(0.7f, 1),
-                new Vector2(0, -152), new Vector2(0, -118), UiTheme.Panel);
+            var topBar = new GameObject("TopBar", typeof(RectTransform)).GetComponent<RectTransform>();
+            topBar.SetParent(_safeAreaRoot, false);
+            topBar.anchorMin = new Vector2(0, 1);
+            topBar.anchorMax = Vector2.one;
+            topBar.offsetMin = new Vector2(16, -12 - TopBarHeight);
+            topBar.offsetMax = new Vector2(-16, -12);
+            SetupTopBar(topBar, font);
+            // A small pill under the top bar. While a fire burns, tapping it flies the camera there.
+            var hintPill = CreatePanel(_safeAreaRoot, "HintPill", new Vector2(0.32f, 1), new Vector2(0.68f, 1),
+                new Vector2(0, -110), new Vector2(0, -78), UiTheme.Panel);
+            UiTheme.Round(hintPill.GetComponent<Image>(), 16f);
             hintPill.AddComponent<Button>().onClick.AddListener(FocusActiveFire);
             var statusObj = new GameObject("StatusText");
             statusObj.transform.SetParent(hintPill.transform, false);
@@ -288,40 +294,20 @@ namespace XCity
             statusRect.offsetMax = new Vector2(-14, 0);
             _hudStatusText = statusObj.AddComponent<Text>();
             _hudStatusText.font = font;
-            _hudStatusText.fontSize = UiTheme.SmallSize;
-            _hudStatusText.color = UiTheme.Text;
+            _hudStatusText.fontSize = UiTheme.TinySize + 1;
+            _hudStatusText.color = UiTheme.TextSoft;
             _hudStatusText.alignment = TextAnchor.MiddleCenter;
             _hudStatusText.raycastTarget = false;
             _hudStatusText.resizeTextForBestFit = true;
             _hudStatusText.resizeTextMinSize = UiTheme.TinySize;
-            _hudStatusText.resizeTextMaxSize = UiTheme.SmallSize;
+            _hudStatusText.resizeTextMaxSize = UiTheme.TinySize + 1;
             SetupStrokeCost(statusRect, font);
 
-            _undoButton = CreateHudButton(topBar.transform, font, "Hoàn tác", "UndoBuild");
-            var undoRect = (RectTransform)_undoButton.transform;
-            undoRect.anchorMin = new Vector2(1, 0);
-            undoRect.anchorMax = Vector2.one;
-            undoRect.offsetMin = new Vector2(-172, 8);
-            undoRect.offsetMax = new Vector2(-12, -8);
-            _undoButton.onClick.AddListener(UndoBuild);
-
-            _loanButton = CreateHudButton(topBar.transform, font, $"Vay ${CitySimulation.LoanAmount:N0}", "TakeLoan");
-            var loanRect = (RectTransform)_loanButton.transform;
-            loanRect.anchorMin = new Vector2(1, 0);
-            loanRect.anchorMax = Vector2.one;
-            loanRect.offsetMin = new Vector2(-344, 8);
-            loanRect.offsetMax = new Vector2(-180, -8);
-            _loanButton.onClick.AddListener(() =>
-            {
-                CancelGesture();
-                _cityDirty |= _city.TryTakeLoan();
-                RefreshHUD();
-            });
             SetupTutorial(topBar.transform, statusRect, font);
 
             SetupBuildBar();
             SetupWorldMap();
-            SetupUXToolbar(font);
+            SetupUXToolbar(_topButtons);
             SetupInfoView();
 
             SelectTool(BuildTool.Road);
@@ -349,6 +335,7 @@ namespace XCity
             btnObj.transform.SetParent(parent, false);
             var img = btnObj.AddComponent<Image>();
             img.color = UiTheme.Button;
+            UiTheme.Round(img, 12f, outline: false);
             var btn = btnObj.AddComponent<Button>();
             btn.targetGraphic = img;
 

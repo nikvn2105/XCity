@@ -39,8 +39,9 @@ namespace XCity
             var skipRect = (RectTransform)_skipTutorialButton.transform;
             skipRect.anchorMin = new Vector2(1f, 0f);
             skipRect.anchorMax = Vector2.one;
-            skipRect.offsetMin = new Vector2(-448f, 12f);
-            skipRect.offsetMax = new Vector2(-352f, -12f);
+            skipRect.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            skipRect.offsetMin = new Vector2(-500f, 6f);
+            skipRect.offsetMax = new Vector2(-400f, -6f);
             _skipTutorialButton.onClick.AddListener(SkipTutorial);
 
         }
