@@ -20,6 +20,9 @@ namespace XCity
                         continue;
                     }
 
+                    // Leave a neighborhood green and a lakeside buffer in the graphics preview.
+                    if ((x >= 7 && x <= 10 && z >= 7 && z <= 10) || (x >= 26 && z >= 25)) continue;
+
                     uint h = BuildingMeshFactory.Hash(x, z, 777);
                     float u = (h & 0xFFFFu) / 65535f;
 

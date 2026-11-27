@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace XCity
 {
@@ -10,70 +11,79 @@ namespace XCity
         internal const float BuildingBase = 0.1f;
         private const int ChunkSize = 8;
         private const int ChunkCount = CitySimulation.GridSize / ChunkSize;
+        private const float RoadY = 0.048f;
+        private const float CurbY = 0.106f;
+        private const float PaintY = RoadY + 0.004f;
+        private static readonly RoadConnections[] Directions =
+        {
+            RoadConnections.North, RoadConnections.East, RoadConnections.South, RoadConnections.West
+        };
+        private static readonly Color32 Asphalt = new Color32(62, 73, 84, 255);
+        private static readonly Color32 Paving = new Color32(192, 185, 167, 255);
+        private static readonly Color32 Curb = new Color32(135, 135, 127, 255);
+        private static readonly Color32 Paint = new Color32(240, 231, 200, 255);
+        private static readonly Color32 LanePaint = new Color32(236, 189, 98, 255);
+        private static readonly Color32 GrassLight = new Color32(125, 160, 94, 255);
+        private static readonly Color32 GrassDark = new Color32(89, 132, 83, 255);
+        private static readonly Color32 Bark = new Color32(103, 79, 58, 255);
+        private static readonly Color32 Broadleaf = new Color32(76, 139, 102, 255);
+        private static readonly Color32 Pine = new Color32(52, 112, 100, 255);
+
         private readonly HashSet<Vector2Int> _dirty = new HashSet<Vector2Int>();
-        private readonly Mesh[,,] _meshes;
-        private readonly List<CombineInstance> _instances = new List<CombineInstance>(ChunkSize * ChunkSize);
+        private readonly Mesh[,] _surfaces = new Mesh[ChunkCount, ChunkCount];
+        private readonly Mesh[,] _scenery = new Mesh[ChunkCount, ChunkCount];
+        private readonly CellType[,] _renderedTypes = new CellType[CitySimulation.GridSize, CitySimulation.GridSize];
+        private readonly MeshBuilder _surface = new MeshBuilder();
+        private readonly MeshBuilder _props = new MeshBuilder();
         private readonly CitySimulation _city;
-        private readonly Mesh _cube;
-        private readonly Material[] _materials;
+        private readonly Material _material;
         private readonly Transform _root;
         private readonly float _cellSize;
 
-        public CityChunkRenderer(CitySimulation city, float cellSize, Material[] materials, Transform parent)
+        public CityChunkRenderer(CitySimulation city, float cellSize, Material material, Transform parent)
         {
             _city = city;
-            _cube = CreateCubeMesh();
             _cellSize = cellSize;
-            _materials = materials;
-            _meshes = new Mesh[ChunkCount, ChunkCount, materials.Length];
-            _root = new GameObject("CityChunks").transform;
+            _material = material;
+            _root = new GameObject("Streets and Landscape").transform;
             _root.SetParent(parent, false);
             _city.CellChanged += MarkDirty;
-            for (int x = 0; x < CitySimulation.GridSize; x++)
-                for (int z = 0; z < CitySimulation.GridSize; z++)
-                    if (_city.GetCell(x, z).Type != CellType.Empty) MarkDirty(x, z);
+            for (int x = 0; x < ChunkCount; x++)
+                for (int z = 0; z < ChunkCount; z++)
+                    _dirty.Add(new Vector2Int(x, z));
         }
 
-        private static Mesh CreateCubeMesh()
+        private void MarkDirty(int x, int z)
         {
-            var normals = new[] { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
-            var vertices = new List<Vector3>(24);
-            var vertexNormals = new List<Vector3>(24);
-            var triangles = new List<int>(36);
-            foreach (Vector3 normal in normals)
-            {
-                Vector3 tangent = Vector3.Cross(Mathf.Abs(normal.y) > 0.5f ? Vector3.forward : Vector3.up, normal);
-                Vector3 bitangent = Vector3.Cross(normal, tangent);
-                Vector3 center = normal * 0.5f;
-                int index = vertices.Count;
-                vertices.Add(center - tangent * 0.5f - bitangent * 0.5f);
-                vertices.Add(center + tangent * 0.5f - bitangent * 0.5f);
-                vertices.Add(center + tangent * 0.5f + bitangent * 0.5f);
-                vertices.Add(center - tangent * 0.5f + bitangent * 0.5f);
-                for (int vertex = 0; vertex < 4; vertex++) vertexNormals.Add(normal);
-                triangles.AddRange(new[] { index, index + 1, index + 2, index, index + 2, index + 3 });
-            }
-
-            var mesh = new Mesh { name = "CityUnitCube" };
-            mesh.SetVertices(vertices);
-            mesh.SetNormals(vertexNormals);
-            mesh.SetTriangles(triangles, 0);
-            return mesh;
+            CellType before = _renderedTypes[x, z];
+            CellType after = _city.GetCell(x, z).Type;
+            if (before == after) return;
+            MarkChunk(x, z);
+            if (before != CellType.Road && after != CellType.Road) return;
+            // A connection changes the facing arm of the road across the chunk boundary too.
+            MarkChunk(x - 1, z);
+            MarkChunk(x + 1, z);
+            MarkChunk(x, z - 1);
+            MarkChunk(x, z + 1);
         }
 
-        private void MarkDirty(int x, int z) => _dirty.Add(new Vector2Int(x / ChunkSize, z / ChunkSize));
+        private void MarkChunk(int x, int z)
+        {
+            if (x >= 0 && z >= 0 && x < CitySimulation.GridSize && z < CitySimulation.GridSize)
+                _dirty.Add(new Vector2Int(x / ChunkSize, z / ChunkSize));
+        }
 
         public void RebuildDirtyChunks()
         {
             foreach (Vector2Int chunk in _dirty)
-                for (int material = 0; material < _materials.Length; material++)
-                    RebuildChunk(chunk, material);
+                RebuildChunk(chunk);
             _dirty.Clear();
         }
 
-        private void RebuildChunk(Vector2Int chunk, int material)
+        private void RebuildChunk(Vector2Int chunk)
         {
-            _instances.Clear();
+            _surface.Clear();
+            _props.Clear();
             int startX = chunk.x * ChunkSize;
             int startZ = chunk.y * ChunkSize;
             for (int x = startX; x < startX + ChunkSize; x++)
@@ -81,48 +91,198 @@ namespace XCity
                 for (int z = startZ; z < startZ + ChunkSize; z++)
                 {
                     CityCell cell = _city.GetCell(x, z);
-                    if (cell.Type == CellType.Empty) continue;
-                    bool tile = cell.Type != CellType.PowerPlant && material == (int)cell.Type - 1;
-                    if (!tile) continue;
-
-                    const float height = 0.1f;
-                    float width = _cellSize * 0.96f;
-                    var position = new Vector3((x - startX + 0.5f) * _cellSize,
-                        height * 0.5f, (z - startZ + 0.5f) * _cellSize);
-                    _instances.Add(new CombineInstance
-                    {
-                        mesh = _cube,
-                        transform = Matrix4x4.TRS(position, Quaternion.identity, new Vector3(width, height, width))
-                    });
+                    _renderedTypes[x, z] = cell.Type;
+                    var center = new Vector3((x - startX + 0.5f) * _cellSize, 0, (z - startZ + 0.5f) * _cellSize);
+                    _surface.SetFrame(center, 0);
+                    _props.SetFrame(center, 0);
+                    if (cell.Type == CellType.Road)
+                        AddStreet(center, x, z);
+                    else
+                        AddLot(cell.Type, x, z);
                 }
             }
 
-            Mesh mesh = _meshes[chunk.x, chunk.y, material];
-            if (mesh != null) mesh.Clear();
-            if (_instances.Count == 0) return;
+            var origin = new Vector3(startX * _cellSize, 0, startZ * _cellSize);
+            ApplyLayer(_surface, ref _surfaces[chunk.x, chunk.y], $"Ground_{chunk.x}_{chunk.y}", origin, ShadowCastingMode.Off);
+            ApplyLayer(_props, ref _scenery[chunk.x, chunk.y], $"Scenery_{chunk.x}_{chunk.y}", origin, ShadowCastingMode.On);
+        }
 
+        private void ApplyLayer(MeshBuilder builder, ref Mesh mesh, string name, Vector3 origin, ShadowCastingMode shadows)
+        {
             if (mesh == null)
             {
-                mesh = new Mesh { name = "CityChunkMesh" };
-                _meshes[chunk.x, chunk.y, material] = mesh;
-                var layer = new GameObject($"Chunk_{chunk.x}_{chunk.y}_{material}");
+                if (builder.VertexCount == 0) return;
+                mesh = new Mesh { name = name };
+                mesh.MarkDynamic();
+                var layer = new GameObject(name);
                 layer.transform.SetParent(_root, false);
-                layer.transform.localPosition = new Vector3(startX * _cellSize, 0f, startZ * _cellSize);
+                layer.transform.localPosition = origin;
                 layer.AddComponent<MeshFilter>().sharedMesh = mesh;
-                MeshRenderer renderer = layer.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = _materials[material];
-                if (material < 4) renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                var renderer = layer.AddComponent<MeshRenderer>();
+                renderer.sharedMaterial = _material;
+                renderer.shadowCastingMode = shadows;
+            }
+            builder.ApplyTo(mesh);
+        }
+
+        private void AddStreet(Vector3 center, int x, int z)
+        {
+            RoadConnections links = _city.Roads.GetConnections(x, z);
+            float half = _cellSize * 0.5f;
+            float lane = half * 0.67f;
+            float shoulder = (half + lane) * 0.5f;
+            int degree = 0;
+            foreach (RoadConnections direction in Directions)
+                if ((links & direction) != 0) degree++;
+
+            Rect(_surface, -lane, -lane, lane, lane, RoadY, Asphalt);
+            for (int turn = 0; turn < Directions.Length; turn++)
+            {
+                _surface.SetFrame(center, turn);
+                Rect(_surface, lane, lane, half, half, CurbY, Paving);
+
+                bool connected = (links & Directions[turn]) != 0;
+                bool rightConnected = (links & Directions[(turn + 1) % 4]) != 0;
+                if (connected)
+                {
+                    Rect(_surface, -lane, lane, lane, half, RoadY, Asphalt);
+                    AddCurb(lane, lane, lane, half, Vector3.left);
+                    AddCurb(-lane, half, -lane, lane, Vector3.right);
+
+                    if (degree >= 3)
+                        AddCrosswalk(lane, half);
+                    else
+                        Rect(_surface, -0.044f, shoulder - 0.17f, 0.044f, shoulder + 0.17f, PaintY, LanePaint);
+                }
+                else
+                {
+                    Rect(_surface, -lane, lane, lane, half, CurbY, Paving);
+                    AddCurb(-lane, lane, lane, lane, Vector3.back);
+                }
+
+                // At the inner corner of a bend the two curb faces meet without covering the road.
+                if (degree == 2 && connected && rightConnected)
+                    Rect(_surface, lane + 0.12f, lane + 0.12f, half - 0.12f, half - 0.12f,
+                        CurbY + 0.003f, Curb);
             }
 
-            mesh.CombineMeshes(_instances.ToArray());
+            uint seed = BuildingMeshFactory.Hash(x, z, 412);
+            if (degree > 1 && seed % 5u == 0)
+            {
+                _props.SetFrame(center, (int)((seed >> 8) & 3u));
+                AddStreetlight(shoulder);
+            }
+            else if (degree >= 2 && seed % 7u == 3u)
+            {
+                _props.SetFrame(center, (int)((seed >> 8) & 3u));
+                var planter = new Vector3(shoulder, CurbY + 0.07f, shoulder);
+                _props.AddBox(planter, new Vector3(0.45f, 0.14f, 0.45f), Curb, Paving);
+                _props.AddCylinder(planter + Vector3.up * 0.07f, 0.19f, 0.14f, 0.28f,
+                    6, Broadleaf, true, GrassLight);
+            }
+        }
+
+        private void AddCrosswalk(float lane, float half)
+        {
+            float near = Mathf.Lerp(lane, half, 0.32f);
+            float far = Mathf.Lerp(lane, half, 0.77f);
+            float stripe = lane * 0.17f;
+            for (int i = -2; i <= 2; i++)
+            {
+                float x = i * lane * 0.34f;
+                Rect(_surface, x - stripe * 0.5f, near, x + stripe * 0.5f, far, PaintY, Paint);
+            }
+        }
+
+        private void AddCurb(float x0, float z0, float x1, float z1, Vector3 outward)
+        {
+            _surface.AddQuad(new Vector3(x0, RoadY, z0), new Vector3(x1, RoadY, z1),
+                new Vector3(x1, CurbY, z1), new Vector3(x0, CurbY, z0), outward, Curb);
+        }
+
+        private void AddStreetlight(float offset)
+        {
+            var metal = new Color32(52, 72, 79, 255);
+            _props.AddBox(new Vector3(offset, 0.17f, offset), new Vector3(0.19f, 0.14f, 0.19f), Curb, Paving);
+            _props.AddBox(new Vector3(offset, 1.10f, offset), new Vector3(0.08f, 1.84f, 0.08f), metal, metal);
+            _props.AddBox(new Vector3(offset - 0.18f, 2.04f, offset), new Vector3(0.43f, 0.09f, 0.08f), metal, metal);
+            _props.AddBox(new Vector3(offset - 0.39f, 2.02f, offset), new Vector3(0.24f, 0.10f, 0.16f), Paint, metal);
+        }
+
+        private void AddLot(CellType type, int x, int z)
+        {
+            float half = _cellSize * 0.5f;
+            float grass = Mathf.PerlinNoise(x * 0.15f + 12f, z * 0.15f + 22f);
+            Rect(_surface, -half, -half, half, half, 0.007f, Color32.Lerp(GrassDark, GrassLight, grass));
+
+            if (type != CellType.Empty)
+            {
+                float plotWidth = _cellSize * 0.95f;
+                Color32 plot = type switch
+                {
+                    CellType.Residential => new Color32(105, 153, 106, 255),
+                    CellType.Commercial => new Color32(126, 151, 161, 255),
+                    CellType.Industrial => new Color32(163, 146, 113, 255),
+                    _ => new Color32(146, 145, 144, 255)
+                };
+                _surface.AddBox(new Vector3(0, BuildingBase * 0.5f, 0),
+                    new Vector3(plotWidth, BuildingBase, plotWidth), Curb, plot);
+                return;
+            }
+
+            uint seed = BuildingMeshFactory.Hash(x, z, 921);
+            float grove = Mathf.PerlinNoise(x * 0.18f + 42f, z * 0.18f + 52f);
+            float threshold = _city.Roads.HasRoadAccess(x, z) ? 0.65f : 0.50f;
+            if (grove > threshold && seed % 5u < 3u)
+            {
+                float dx = ((seed >> 8 & 255u) / 255f - 0.5f) * half * 0.85f;
+                float dz = ((seed >> 16 & 255u) / 255f - 0.5f) * half * 0.85f;
+                float size = 0.74f + (seed >> 24 & 255u) / 255f * 0.42f;
+                AddTree(dx, dz, size, (seed & 4u) != 0);
+                if (grove > 0.64f && seed % 3u == 0)
+                    AddTree(dx * -0.55f, dz * -0.55f + (dz > 0 ? -0.67f : 0.67f), size * 0.62f, true);
+            }
+            else if (seed % 19u == 0)
+            {
+                var rock = new Color32(138, 149, 132, 255);
+                _props.AddCylinder(new Vector3(0.37f, 0.01f, -0.44f), 0.34f, 0.22f, 0.22f, 5, rock, true, Paving);
+            }
+        }
+
+        private void AddTree(float x, float z, float scale, bool evergreen)
+        {
+            var baseCenter = new Vector3(x, 0.008f, z);
+            _props.AddCylinder(baseCenter, 0.11f * scale, 0.08f * scale, 0.93f * scale, 5, Bark, false, Bark);
+            if (evergreen)
+            {
+                _props.AddCylinder(baseCenter + Vector3.up * (0.64f * scale), 0.63f * scale, 0.07f * scale,
+                    1.05f * scale, 6, Pine, true, Pine);
+                Color32 tip = Color32.Lerp(Pine, GrassLight, 0.24f);
+                _props.AddCylinder(baseCenter + Vector3.up * (1.12f * scale), 0.49f * scale, 0.045f * scale,
+                    0.99f * scale, 6, tip, true, tip);
+                return;
+            }
+
+            Color32 lit = Color32.Lerp(Broadleaf, GrassLight, 0.50f);
+            _props.AddCylinder(baseCenter + Vector3.up * (0.73f * scale), 0.33f * scale, 0.77f * scale,
+                0.44f * scale, 7, Broadleaf, false, lit);
+            _props.AddCylinder(baseCenter + Vector3.up * (1.17f * scale), 0.77f * scale, 0.36f * scale,
+                0.72f * scale, 7, lit, true, GrassLight);
+        }
+
+        private static void Rect(MeshBuilder mesh, float x0, float z0, float x1, float z1, float y, Color32 color)
+        {
+            mesh.AddQuad(new Vector3(x0, y, z0), new Vector3(x0, y, z1),
+                new Vector3(x1, y, z1), new Vector3(x1, y, z0), Vector3.up, color);
         }
 
         public void Dispose()
         {
             _city.CellChanged -= MarkDirty;
-            foreach (Mesh mesh in _meshes)
+            foreach (Mesh mesh in _surfaces)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
-            UnityEngine.Object.Destroy(_cube);
+            foreach (Mesh mesh in _scenery)
+                if (mesh != null) UnityEngine.Object.Destroy(mesh);
             UnityEngine.Object.Destroy(_root.gameObject);
         }
     }

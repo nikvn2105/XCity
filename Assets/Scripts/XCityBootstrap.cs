@@ -43,9 +43,8 @@ namespace XCity
 
         private Material _groundMat;
         private Material _roadMat;
-        private Material _resMat;
-        private Material _comMat;
-        private Material _indMat;
+        private Material _shoreMat;
+        private Material _waterMat;
         private Material _vertexColorMat;
 
         private Vector2 _gestureStart;
@@ -98,11 +97,10 @@ namespace XCity
         private void CreateMaterials()
         {
             Shader shader = Resources.Load<Shader>("XCityWorld");
-            _groundMat = MakeMat(shader, new Color(0.36f, 0.58f, 0.32f));
+            _groundMat = MakeMat(shader, new Color(0.31f, 0.45f, 0.32f));
+            _shoreMat = MakeMat(shader, new Color(0.52f, 0.58f, 0.43f));
+            _waterMat = MakeMat(shader, new Color(0.37f, 0.58f, 0.64f));
             _roadMat = MakeMat(shader, new Color(0.18f, 0.20f, 0.23f));
-            _resMat = MakeMat(shader, new Color(0.24f, 0.72f, 0.36f));
-            _comMat = MakeMat(shader, new Color(0.20f, 0.52f, 0.88f));
-            _indMat = MakeMat(shader, new Color(0.88f, 0.68f, 0.20f));
         }
 
         private static Material MakeMat(Shader shader, Color color)
@@ -117,19 +115,27 @@ namespace XCity
             var lightObj = new GameObject("SunLight");
             var light = lightObj.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.15f;
+            light.intensity = 1.08f;
             light.color = new Color(1f, 0.96f, 0.88f);
             light.shadows = LightShadows.Soft;
-            lightObj.transform.rotation = Quaternion.Euler(50f, -35f, 0f);
+            light.shadowStrength = 0.72f;
+            lightObj.transform.SetParent(transform);
+            lightObj.transform.rotation = Quaternion.Euler(56f, -34f, 0f);
+
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.65f, 0.73f, 0.81f);
+            RenderSettings.ambientEquatorColor = new Color(0.48f, 0.55f, 0.50f);
+            RenderSettings.ambientGroundColor = new Color(0.31f, 0.34f, 0.32f);
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogColor = new Color(0.69f, 0.82f, 0.86f);
+            RenderSettings.fogStartDistance = 120f;
+            RenderSettings.fogEndDistance = 265f;
 
             float worldSpan = GridSize * CellSize;
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            ground.name = "Ground";
-            ground.transform.position = new Vector3(worldSpan * 0.5f, -0.5f, worldSpan * 0.5f);
-            ground.transform.localScale = new Vector3(worldSpan, 1f, worldSpan);
-            ground.GetComponent<Renderer>().sharedMaterial = _groundMat;
-            var materials = new[] { _roadMat, _resMat, _comMat, _indMat };
-            _cityRenderer = new CityChunkRenderer(_city, CellSize, materials, transform);
+            AddLandscapeBase("City island", worldSpan, worldSpan, 0f, 2.5f, _groundMat);
+            AddLandscapeBase("Shore", worldSpan, worldSpan + 1.7f, -0.58f, 1.8f, _shoreMat);
+            AddLandscapeBase("Water", worldSpan, 480f, -1.05f, 0.2f, _waterMat);
             Shader vc = Resources.Load<Shader>("XCityVertexColor");
             if (vc == null)
             {
@@ -137,7 +143,23 @@ namespace XCity
                 vc = Resources.Load<Shader>("XCityWorld");
             }
             _vertexColorMat = new Material(vc);
+            _cityRenderer = new CityChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _vertexColorMat, transform);
+        }
+
+        private void AddLandscapeBase(string name, float worldSpan, float size, float top, float depth, Material material)
+        {
+            var block = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            block.name = name;
+            block.transform.SetParent(transform, false);
+            block.transform.localPosition = new Vector3(worldSpan * 0.5f, top - depth * 0.5f, worldSpan * 0.5f);
+            block.transform.localScale = new Vector3(size, depth, size);
+            var collider = block.GetComponent<Collider>();
+            collider.enabled = false;
+            Destroy(collider);
+            var renderer = block.GetComponent<Renderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
         private void SetupCamera()
@@ -146,7 +168,7 @@ namespace XCity
             camObj.tag = "MainCamera";
             _cam = camObj.AddComponent<Camera>();
             _cam.clearFlags = CameraClearFlags.SolidColor;
-            _cam.backgroundColor = new Color(0.60f, 0.78f, 0.94f);
+            _cam.backgroundColor = RenderSettings.fogColor;
             _cam.nearClipPlane = 0.5f;
             _cam.farClipPlane = 500f;
             camObj.AddComponent<AudioListener>();
@@ -640,6 +662,12 @@ namespace XCity
         {
             _cityRenderer?.Dispose();
             _buildingRenderer?.Dispose();
+            Destroy(_vertexColorMat);
+            Destroy(_groundMat);
+            Destroy(_shoreMat);
+            Destroy(_waterMat);
+            Destroy(_roadMat);
+            Destroy(_roadPreviewMat);
             if (_vertexColorMat != null) Destroy(_vertexColorMat);
             if (_inspectionMaterial != null) Destroy(_inspectionMaterial);
         }
