@@ -73,9 +73,9 @@ namespace XCity
         private static readonly Color32 SkidSteel = new Color32(62, 68, 76, 255);
         private static readonly Color32 Chrome = new Color32(196, 204, 214, 255);
         private static readonly Color32 StrobeDim = new Color32(42, 34, 42, 255);
-        private static readonly Color32 StrobeRed = new Color32(255, 48, 48, 255);
-        private static readonly Color32 StrobeBlue = new Color32(45, 138, 255, 255);
-        private static readonly Color32 StrobeWhite = new Color32(246, 250, 255, 255);
+        private static readonly Color32 StrobeRed = new Color32(255, 48, 48, 0);
+        private static readonly Color32 StrobeBlue = new Color32(45, 138, 255, 0);
+        private static readonly Color32 StrobeWhite = new Color32(246, 250, 255, 0);
 
         private static HeliTemplate[] _templates;
 

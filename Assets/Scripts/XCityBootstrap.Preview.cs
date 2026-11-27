@@ -26,6 +26,7 @@ namespace XCity
             Directory.CreateDirectory(_previewOutput);
 
             Shader.SetGlobalFloat("_XCityTime", 12.5f);
+            _dayNight?.SetMode(LightingMode.Day);
             _construction?.SeedPreviewSites();
             var previewCenter = Vector3.one * ((CitySimulation.LegacyOffset + 16) * CellSize);
             _camTarget = new Vector3(previewCenter.x, 0f, previewCenter.z);
@@ -52,7 +53,8 @@ namespace XCity
                 ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f),
                 ("waterfront", new Vector3(842f, 0.2f, 511f), 54f, 49f, 210f),
                 ("bridge-clearance", new Vector3(850f, 0.45f, 518f), 29f, 14f, 90f),
-                ("coast", new Vector3(-708f, 0f, -566f), 139f, 57f, 225f)
+                ("coast", new Vector3(-708f, 0f, -566f), 139f, 57f, 225f),
+                ("night", new Vector3(78f, 1.2f, 44f), 28f, 34f, 200f)
             };
 
             const int width = 1280;
@@ -69,6 +71,7 @@ namespace XCity
                 for (int i = 0; i < shots.Length; i++)
                 {
                     var shot = shots[i];
+                    _dayNight?.SetMode(shot.Name == "night" ? LightingMode.Night : LightingMode.Day);
                     float offset = CitySimulation.LegacyOffset * CellSize;
                     _camTarget = shot.Target + new Vector3(offset, 0f, offset);
                     _camDistance = shot.Distance;

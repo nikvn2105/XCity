@@ -38,6 +38,8 @@ namespace XCity
         private HelicopterSystem _helicopters;
         private WatercraftSystem _watercraft;
         private CitizenSystem _citizens;
+        private DayNightSystem _dayNight;
+        private Light _sunLight;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
         private Vector3 _camTarget;
@@ -128,12 +130,12 @@ namespace XCity
         private void SetupEnvironment()
         {
             var lightObj = new GameObject("SunLight");
-            var light = lightObj.AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.intensity = 0.96f;
-            light.color = new Color(1f, 0.96f, 0.88f);
-            light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.64f;
+            _sunLight = lightObj.AddComponent<Light>();
+            _sunLight.type = LightType.Directional;
+            _sunLight.intensity = 0.96f;
+            _sunLight.color = new Color(1f, 0.96f, 0.88f);
+            _sunLight.shadows = LightShadows.Soft;
+            _sunLight.shadowStrength = 0.64f;
             lightObj.transform.SetParent(transform);
             lightObj.transform.rotation = Quaternion.Euler(56f, -34f, 0f);
 
@@ -202,6 +204,7 @@ namespace XCity
                 _camTarget = new Vector3((index / GridSize + 0.5f) * CellSize, 0f, (index % GridSize + 0.5f) * CellSize);
                 break;
             }
+            _dayNight = new DayNightSystem(_sunLight, _cam, _waterMat);
             UpdateCameraTransform();
         }
 
@@ -917,6 +920,7 @@ namespace XCity
             bool visible = _chunkScheduler.ShowEffects;
             _construction.Update(Time.deltaTime, visible, LocalView);
             _buildingRenderer.RebuildDirtyChunks(1);
+            _dayNight?.Update(Time.deltaTime);
 
             if (!visible) return;
             Shader.SetGlobalFloat("_XCityTime", Time.time);

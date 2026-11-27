@@ -56,12 +56,12 @@ namespace XCity
         private static readonly Color32 ChromeSilver = new Color32(204, 210, 218, 255);
         private static readonly Color32 SteelGrey = new Color32(82, 90, 100, 255);
         private static readonly Color32 GlassDark = new Color32(40, 52, 68, 255);
-        private static readonly Color32 HeadlightWarm = new Color32(255, 240, 180, 255);
-        private static readonly Color32 TaillightRed = new Color32(215, 45, 45, 255);
-        private static readonly Color32 StrobeBlue = new Color32(45, 130, 255, 255);
-        private static readonly Color32 StrobeRed = new Color32(255, 45, 45, 255);
-        private static readonly Color32 StrobeWhite = new Color32(245, 248, 255, 255);
-        private static readonly Color32 StrobeAmber = new Color32(255, 178, 36, 255);
+        private static readonly Color32 HeadlightWarm = new Color32(255, 240, 180, 0);
+        private static readonly Color32 TaillightRed = new Color32(215, 45, 45, 0);
+        private static readonly Color32 StrobeBlue = new Color32(45, 130, 255, 0);
+        private static readonly Color32 StrobeRed = new Color32(255, 45, 45, 0);
+        private static readonly Color32 StrobeWhite = new Color32(245, 248, 255, 0);
+        private static readonly Color32 StrobeAmber = new Color32(255, 178, 36, 0);
 
         private static readonly Color32[] SedanColors =
         {
@@ -251,7 +251,7 @@ namespace XCity
             if (isTaxi)
             {
                 b.AddBox(new Vector3(0f, 0.81f, -0.02f), new Vector3(0.28f, 0.08f, 0.14f),
-                    new Color32(250, 245, 220, 255), new Color32(250, 245, 220, 255));
+                    new Color32(250, 232, 140, 0), new Color32(250, 232, 140, 0));
             }
 
             AddHeadAndTailLights(b, bodyCenter, bodySize, 0.22f, 0.34f);
