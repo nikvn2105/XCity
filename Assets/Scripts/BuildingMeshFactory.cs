@@ -41,13 +41,6 @@ namespace XCity
             new Color32(120, 140, 160, 255)
         };
 
-        private static readonly Color32[] IndustrialWallPalette =
-        {
-            new Color32(170, 160, 145, 255),
-            new Color32(140, 140, 135, 255),
-            new Color32(120, 130, 140, 255)
-        };
-
         private static readonly Color32 WindowGlass = new Color32(70, 95, 125, 255);
         private static readonly Color32 LitWindowGlass = new Color32(162, 160, 139, 255);
         private static readonly Color32 DoorWood = new Color32(90, 60, 40, 255);
@@ -92,6 +85,12 @@ namespace XCity
 
         public static void Build(MeshBuilder b, int x, int z, CityCell cell, int quarterTurns, Vector3 cellCenterLocal)
         {
+            if (cell.Type == CellType.Industrial || cell.Type == CellType.PowerPlant)
+            {
+                IndustrialMeshFactory.Build(b, x, z, cell, quarterTurns, cellCenterLocal);
+                return;
+            }
+
             b.SetFrame(cellCenterLocal + Vector3.up * CityChunkRenderer.BuildingBase, quarterTurns);
 
             var paletteRng = new CellRng(Hash(x, z, (int)cell.Type));
@@ -120,12 +119,6 @@ namespace XCity
                     break;
                 case CellType.Commercial:
                     BuildCommercial(b, h, ref paletteRng, ref shapeRng);
-                    break;
-                case CellType.Industrial:
-                    BuildIndustrial(b, h, ref paletteRng, ref shapeRng);
-                    break;
-                case CellType.PowerPlant:
-                    BuildPowerPlant(b);
                     break;
             }
         }
@@ -174,13 +167,6 @@ namespace XCity
                 case BuildingModel.HighSchool:
                 case BuildingModel.University:
                     BuildSchool(b, cell.Model, height);
-                    break;
-                case BuildingModel.Workshop:
-                case BuildingModel.Warehouse:
-                    BuildIndustrialShed(b, cell.Model == BuildingModel.Warehouse, height);
-                    break;
-                case BuildingModel.Factory:
-                    BuildIndustrial(b, height, ref palette, ref shape);
                     break;
                 case BuildingModel.Office:
                 case BuildingModel.OfficeTower:
@@ -297,29 +283,6 @@ namespace XCity
             b.AddBox(new Vector3(x, 0.069f, 0.96f), new Vector3(1.68f, 0.016f, 1.06f), surface, surface);
             b.AddBox(new Vector3(x, 0.081f, 0.96f), new Vector3(0.033f, 0.012f, 0.97f),
                 ConcreteLight, ConcreteLight);
-        }
-
-        private static void BuildIndustrialShed(MeshBuilder b, bool warehouse, float h)
-        {
-            var wall = new Color32(154, 151, 140, 255);
-            var roof = warehouse ? new Color32(75, 112, 125, 255) : new Color32(140, 88, 70, 255);
-            float body = h * (warehouse ? 0.80f : 0.66f);
-            var size = new Vector3(3.10f, body, 2.14f);
-            var center = new Vector3(0, body * 0.5f + 0.04f, -0.40f);
-            b.AddBox(center, size, wall, roof);
-            if (warehouse)
-            {
-                b.AddBox(new Vector3(0, body + 0.07f, -0.40f), new Vector3(3.30f, 0.10f, 2.28f), roof, roof);
-                for (int bay = -1; bay <= 1; bay++)
-                    b.AddFacadeRect(center, size, 0, bay * 0.86f - 0.30f, bay * 0.86f + 0.30f,
-                        0.06f, body * 0.62f, roof);
-            }
-            else
-            {
-                b.AddGableRoof(new Vector3(0, body + 0.04f, -0.40f), 3.10f, 2.14f, h * 0.22f, 0.07f, roof, wall);
-                b.AddFacadeRect(center, size, 0, -0.62f, 0.62f, 0.06f, body * 0.75f, WindowGlass);
-                b.AddBox(new Vector3(-1.16f, 0.29f, 1.03f), new Vector3(0.52f, 0.50f, 0.61f), roof, wall);
-            }
         }
 
         private static void BuildOffice(MeshBuilder b, bool tower, float h)
@@ -643,95 +606,6 @@ namespace XCity
                 for (int side = 0; side < 4; side++)
                     b.AddFacadeRect(center, size, side, -half, half, y, y + 0.08f, MullionColor);
             }
-        }
-
-        private static void BuildIndustrial(MeshBuilder b, float h, ref CellRng paletteRng, ref CellRng shapeRng)
-        {
-            const float baseY = 0.04f;
-            const float w = 3.0f;
-            const float d = 2.2f;
-            Color32 wall = IndustrialWallPalette[paletteRng.Range(0, IndustrialWallPalette.Length)];
-            Color32 roofColor = new Color32(90, 95, 100, 255);
-
-            float wallH = h * 0.6f;
-            float roofH = h * 0.4f;
-            Vector3 hallCenter = new Vector3(0f, baseY + wallH * 0.5f, -0.25f);
-            Vector3 hallSize = new Vector3(w, wallH, d);
-            b.AddBox(hallCenter, hallSize, wall, roofColor);
-
-            // Sawtooth of 3 teeth along X (or flat)
-            if (shapeRng.Next() < 0.75f)
-            {
-                float topY = baseY + wallH;
-                float toothW = w / 3f;
-                float z0 = hallCenter.z - d * 0.5f;
-                float z1 = hallCenter.z + d * 0.5f;
-                Color32 toothGlass = new Color32(130, 165, 190, 255);
-
-                for (int i = 0; i < 3; i++)
-                {
-                    float x0 = -w * 0.5f + i * toothW;
-                    float x1 = x0 + toothW;
-                    // Vertical glazed face on +X
-                    b.AddQuad(
-                        new Vector3(x1, topY, z1),
-                        new Vector3(x1, topY, z0),
-                        new Vector3(x1, topY + roofH, z0),
-                        new Vector3(x1, topY + roofH, z1),
-                        Vector3.right, toothGlass);
-                    // Sloped roof down toward -X
-                    b.AddQuad(
-                        new Vector3(x0, topY, z1),
-                        new Vector3(x1, topY + roofH, z1),
-                        new Vector3(x1, topY + roofH, z0),
-                        new Vector3(x0, topY, z0),
-                        new Vector3(-roofH, toothW, 0f), roofColor);
-                    // End triangles on +Z and -Z
-                    b.AddTriangle(new Vector3(x0, topY, z1), new Vector3(x1, topY, z1), new Vector3(x1, topY + roofH, z1), Vector3.forward, wall);
-                    b.AddTriangle(new Vector3(x1, topY, z0), new Vector3(x0, topY, z0), new Vector3(x1, topY + roofH, z0), Vector3.back, wall);
-                }
-            }
-
-            // Large roller door on front
-            float doorH = Mathf.Min(0.9f, wallH - 0.1f);
-            b.AddFacadeRect(hallCenter, hallSize, 0, -0.45f, 0.45f, baseY, baseY + doorH, new Color32(100, 100, 105, 255));
-
-            // Chimney at back corner with red top band
-            float totalChimneyH = h * 1.4f;
-            float bandH = 0.25f;
-            float shaftH = Mathf.Max(0.5f, totalChimneyH - bandH);
-            Vector3 chimPos = new Vector3(-1.15f, baseY, -1.55f);
-            b.AddCylinder(chimPos, 0.18f, 0.18f, shaftH, 8, new Color32(135, 130, 128, 255), false, default);
-            b.AddCylinder(new Vector3(chimPos.x, baseY + shaftH, chimPos.z), 0.18f, 0.18f, bandH, 8,
-                new Color32(190, 50, 40, 255), true, new Color32(55, 55, 55, 255));
-
-            // 50% side tank cylinder
-            if (shapeRng.Next() < 0.5f)
-            {
-                b.AddCylinder(new Vector3(1.1f, baseY, 1.25f), 0.45f, 0.45f, 1.0f, 10,
-                    new Color32(210, 210, 205, 255), true, new Color32(185, 185, 180, 255));
-            }
-        }
-
-        private static void BuildPowerPlant(MeshBuilder b)
-        {
-            const float baseY = 0.04f;
-            Color32 towerConcrete = ConcreteLight;
-            Color32 darkCap = new Color32(60, 60, 60, 255);
-
-            // Cooling tower at back-left in 3 stacked sections (kept inside +-1.85)
-            Vector3 towerPos = new Vector3(-0.58f, baseY, -0.58f);
-            b.AddCylinder(towerPos, 1.22f, 0.96f, 1.15f, 12, towerConcrete, false, default);
-            b.AddCylinder(new Vector3(towerPos.x, baseY + 1.15f, towerPos.z), 0.96f, 0.86f, 1.05f, 12, towerConcrete, false, default);
-            b.AddCylinder(new Vector3(towerPos.x, baseY + 2.20f, towerPos.z), 0.86f, 0.96f, 1.00f, 12, towerConcrete, true, darkCap);
-
-            // Turbine hall at front-right with purple roof identity
-            b.AddBox(new Vector3(0.75f, baseY + 0.5f, 0.85f), new Vector3(1.6f, 1.0f, 1.2f),
-                new Color32(170, 160, 190, 255), new Color32(150, 100, 200, 255));
-
-            // Tall stack
-            b.AddCylinder(new Vector3(1.25f, baseY, -0.45f), 0.15f, 0.15f, 4.0f, 8,
-                new Color32(150, 150, 155, 255), true, darkCap);
         }
 
         private static void AddYardTree(MeshBuilder b, float halfW, float halfD, ref CellRng rng)
