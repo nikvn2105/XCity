@@ -36,7 +36,9 @@ namespace XCity
         PoliceStation,
         Hospital,
         FireStation,
-        Harbor
+        Harbor,
+        WaterPump,
+        SewagePlant
     }
 
     internal static class BuildingCatalog
@@ -63,6 +65,8 @@ namespace XCity
                 BuildingModel.Hospital => (CellType.CivicService, "Bệnh viện", 1800, 5.0f, 0),
                 BuildingModel.FireStation => (CellType.CivicService, "Trạm cứu hỏa", 1150, 3.4f, 0),
                 BuildingModel.Harbor => (CellType.CivicService, "Cảng tàu thuyền", 1450, 2.4f, 0),
+                BuildingModel.WaterPump => (CellType.CivicService, "Trạm bơm nước", 900, 2.6f, 0),
+                BuildingModel.SewagePlant => (CellType.CivicService, "Xử lý nước thải", 1000, 2.2f, 0),
                 _ => default
             };
 
@@ -74,6 +78,8 @@ namespace XCity
             BuildingModel.Hospital => 35,
             BuildingModel.FireStation => 24,
             BuildingModel.Harbor => 22,
+            BuildingModel.WaterPump => 20,
+            BuildingModel.SewagePlant => 25,
             _ => Get(model).Seats / 15
         };
 
@@ -120,6 +126,7 @@ namespace XCity
         public long randomState;
         public int lastTaxIncome;
         public int lastNetIncome;
+        public int loanBalance;
         public CityCell[] cells;
         public int[] cellIndices;
     }
@@ -139,9 +146,12 @@ namespace XCity
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 7;
+        internal const int CurrentSchemaVersion = 8;
+        public const int UtilityCapacity = 40;
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
+        private readonly bool[] _watered = new bool[GridSize * GridSize];
+        private readonly bool[] _sewered = new bool[GridSize * GridSize];
         private readonly int[] _roadComponent = new int[GridSize * GridSize];
         private readonly Queue<int> _pendingRoads = new Queue<int>();
         private bool _powerDirty = true;
@@ -379,7 +389,9 @@ namespace XCity
             Population = population;
             UpdateDemand(jobs, commercialJobs, happiness);
             LastTaxIncome = taxIncome;
-            LastNetIncome = taxIncome + netIncome;
+            int repayment = Math.Min(LoanBalance, LoanRepayment);
+            LoanBalance -= repayment;
+            LastNetIncome = taxIncome + netIncome - repayment;
             Money += LastNetIncome;
             TickCount++;
         }
@@ -394,6 +406,7 @@ namespace XCity
                 randomState = _randomState,
                 lastTaxIncome = LastTaxIncome,
                 lastNetIncome = LastNetIncome,
+                loanBalance = LoanBalance,
                 cells = new CityCell[_occupied.Count],
                 cellIndices = new int[_occupied.Count]
             };
@@ -411,7 +424,7 @@ namespace XCity
             city = null;
             if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > CurrentSchemaVersion) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
-                snapshot.cells == null)
+                snapshot.cells == null || snapshot.loanBalance < 0 || snapshot.loanBalance > MaxLoanBalance)
                 return false;
 
             bool legacy = snapshot.schemaVersion < 6;
@@ -424,6 +437,7 @@ namespace XCity
                 Money = snapshot.money,
                 LastTaxIncome = snapshot.schemaVersion >= 3 ? snapshot.lastTaxIncome : 0,
                 LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
+                LoanBalance = snapshot.loanBalance,
                 TickCount = snapshot.tick
             };
             int previous = -1;
@@ -478,7 +492,8 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = cell.Model == BuildingModel.Harbor ? 7 : cell.Model >= BuildingModel.HighStreet ? 5 : 4;
+                int modelVersion = cell.Model >= BuildingModel.WaterPump ? 8 : cell.Model == BuildingModel.Harbor ? 7 :
+                    cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
                 if (BuildingCatalog.IsPublicService(cell.Type))
                     return cell.Level == 1 && cell.Height == option.Height;
@@ -519,17 +534,36 @@ namespace XCity
             }
 
             var capacity = new int[component + 1];
+            // Water and sewage share the road network the way power does (pipes run under the roads).
+            var water = new int[component + 1];
+            var sewage = new int[component + 1];
             foreach (int index in _occupied)
-                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
-                    capacity[AdjacentComponent(index)] += PowerPlantCapacity;
+            {
+                CityCell source = _cells[index / GridSize, index % GridSize];
+                if (source.Type == CellType.PowerPlant) capacity[AdjacentComponent(index)] += PowerPlantCapacity;
+                else if (source.Model == BuildingModel.WaterPump) water[AdjacentComponent(index)] += UtilityCapacity;
+                else if (source.Model == BuildingModel.SewagePlant) sewage[AdjacentComponent(index)] += UtilityCapacity;
+            }
 
             _unpoweredZones = 0;
             Array.Clear(_powered, 0, _powered.Length);
+            Array.Clear(_watered, 0, _watered.Length);
+            Array.Clear(_sewered, 0, _sewered.Length);
             foreach (int index in _occupied)
             {
                 if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
                 int grid = AdjacentComponent(index);
                 if (grid == 0) continue;
+                if (water[grid] > 0)
+                {
+                    _watered[index] = true;
+                    water[grid]--;
+                }
+                if (sewage[grid] > 0)
+                {
+                    _sewered[index] = true;
+                    sewage[grid]--;
+                }
                 if (capacity[grid] == 0)
                 {
                     _unpoweredZones++;

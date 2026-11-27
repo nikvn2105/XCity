@@ -221,6 +221,38 @@ namespace XCity
                 case BuildingModel.ShoppingMall:
                     BuildMall(b, height);
                     break;
+                case BuildingModel.WaterPump:
+                case BuildingModel.SewagePlant:
+                    BuildUtility(b, cell.Model, height);
+                    break;
+            }
+        }
+
+        private static void BuildUtility(MeshBuilder b, BuildingModel model, float h)
+        {
+            var concrete = new Color32(176, 178, 170, 255);
+            var slate = new Color32(84, 98, 105, 255);
+            var water = new Color32(78, 128, 142, 255);
+            var steel = new Color32(150, 161, 166, 255);
+            b.AddBox(new Vector3(0, 0.067f, 0), new Vector3(3.38f, 0.054f, 3.38f), concrete, concrete);
+            if (model == BuildingModel.WaterPump)
+            {
+                AddWindowBlock(b, new Vector3(-0.85f, 0.04f, -0.55f), 1.35f, 1.75f, h * 0.70f, 2, concrete, slate);
+                for (int i = 0; i < 2; i++)
+                {
+                    var tank = new Vector3(0.85f, 0.09f, -0.80f + i * 1.45f);
+                    b.AddCylinder(tank, 0.62f, 0.62f, h * 0.85f, 14, steel, true, slate);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    var basin = new Vector3(0.62f, 0.10f, -0.85f + i * 1.40f);
+                    b.AddBox(basin, new Vector3(1.85f, 0.18f, 1.15f), concrete, concrete);
+                    b.AddBox(basin + new Vector3(0, 0.095f, 0), new Vector3(1.65f, 0.01f, 0.95f), water, water);
+                }
+                AddWindowBlock(b, new Vector3(-1.10f, 0.04f, -0.60f), 0.95f, 1.45f, h * 0.65f, 2, concrete, slate);
             }
         }
 

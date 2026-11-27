@@ -51,6 +51,7 @@ namespace XCity
 
         private Text _hudStatusText;
         private Button _undoButton;
+        private Button _loanButton;
         private Button _catalogButton;
         private GameObject _catalog;
         private GameObject _catalogOptions;
@@ -245,7 +246,7 @@ namespace XCity
             statusRect.anchorMin = Vector2.zero;
             statusRect.anchorMax = Vector2.one;
             statusRect.offsetMin = new Vector2(20, 0);
-            statusRect.offsetMax = new Vector2(-188, 0);
+            statusRect.offsetMax = new Vector2(-360, 0);
             _hudStatusText = statusObj.AddComponent<Text>();
             _hudStatusText.font = font;
             _hudStatusText.fontSize = 21;
@@ -262,6 +263,19 @@ namespace XCity
             undoRect.offsetMin = new Vector2(-172, 8);
             undoRect.offsetMax = new Vector2(-12, -8);
             _undoButton.onClick.AddListener(UndoBuild);
+
+            _loanButton = CreateHudButton(topBar.transform, font, $"Vay ${CitySimulation.LoanAmount:N0}", "TakeLoan");
+            var loanRect = (RectTransform)_loanButton.transform;
+            loanRect.anchorMin = new Vector2(1, 0);
+            loanRect.anchorMax = Vector2.one;
+            loanRect.offsetMin = new Vector2(-344, 8);
+            loanRect.offsetMax = new Vector2(-180, -8);
+            _loanButton.onClick.AddListener(() =>
+            {
+                CancelGesture();
+                _cityDirty |= _city.TryTakeLoan();
+                RefreshHUD();
+            });
 
             var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), new Color(0.08f, 0.10f, 0.14f, 0.88f));
             var layout = bottomBar.AddComponent<HorizontalLayoutGroup>();
@@ -337,6 +351,8 @@ namespace XCity
                 BuildingModel.Market, BuildingModel.HighStreet, BuildingModel.ShoppingMall);
             AddCatalogCategory(root, tabs, font, "Dịch vụ", BuildTool.CivicService,
                 BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation, BuildingModel.Harbor);
+            AddCatalogCategory(root, tabs, font, "Tiện ích", BuildTool.CivicService,
+                BuildingModel.WaterPump, BuildingModel.SewagePlant);
             _catalog.SetActive(false);
         }
 
@@ -1040,7 +1056,11 @@ namespace XCity
             };
             if (type == CellType.Residential && cell.Level > 0)
                 label += $" · Cấp {cell.Level} · {BuildingCatalog.Residents(cell)} dân · Hạnh phúc {_city.GetHappiness(point.x, point.y)}%" +
-                    $" · Dịch vụ: {DescribeCoverage(_city.GetCoverage(point.x, point.y))}";
+                    $" · Dịch vụ: {DescribeCoverage(_city.GetCoverage(point.x, point.y))}" +
+                    (_city.HasWater(point.x, point.y) ? "" : " · Thiếu nước") +
+                    (_city.HasSewage(point.x, point.y) ? "" : " · Thiếu thoát nước");
+            if (cell.Model == BuildingModel.WaterPump || cell.Model == BuildingModel.SewagePlant)
+                label += $" · Cấp {CitySimulation.UtilityCapacity} ô qua đường";
             var service = ServiceCatalog.Get(cell.Model);
             if (service.Radius > 0)
                 label += $" · Bán kính {service.Radius} ô";
@@ -1103,6 +1123,7 @@ namespace XCity
         private void RefreshHUD()
         {
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
+            if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;
             if (_hudStatusText != null)
             {
                 if (_activeTool != BuildTool.Pan && _inspectionOutline != null)
@@ -1136,7 +1157,8 @@ namespace XCity
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 if (_speed == 0) hint = $"Đang tạm dừng  |  {hint}";
-                string text = $"${_city.Money:N0} ({_city.LastNetIncome:+#,##0;-#,##0;0})  |  Dân: {_city.Population:N0}" +
+                string debt = _city.LoanBalance > 0 ? $" · Nợ ${_city.LoanBalance:N0}" : "";
+                string text = $"${_city.Money:N0} ({_city.LastNetIncome:+#,##0;-#,##0;0}){debt}  |  Dân: {_city.Population:N0}" +
                     $"  |  Việc làm: {_city.Jobs:N0}  |  Nhu cầu  Ở {Signed(_city.ResidentialDemand)}" +
                     $" · TM {Signed(_city.CommercialDemand)} · CN {Signed(_city.IndustrialDemand)}\n{hint}";
                 if (text == _lastHudText) return;

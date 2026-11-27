@@ -63,6 +63,11 @@ namespace XCity
         internal const int WorkforcePercent = 60;
         internal const int BaseHappiness = 40;
         internal const int HappinessPerService = 15;
+        internal const int MissingUtilityPenalty = 10;
+        public const int LoanAmount = 20000;
+        public const int LoanRepaid = 24000;
+        public const int LoanRepayment = 250;
+        public const int MaxLoanBalance = 3 * LoanRepaid;
         private readonly ServiceCoverage[] _coverage = new ServiceCoverage[GridSize * GridSize];
         private bool _coverageDirty = true;
 
@@ -75,6 +80,29 @@ namespace XCity
         /// <summary>Share of jobs that can be filled, 0-100. Understaffed businesses pay less tax.</summary>
         public int EmploymentPercent { get; private set; } = 100;
         public int AverageHappiness { get; private set; }
+        /// <summary>What the city still owes; repaid automatically each tick.</summary>
+        public int LoanBalance { get; private set; }
+        public bool CanTakeLoan => LoanBalance + LoanRepaid <= MaxLoanBalance;
+
+        public bool TryTakeLoan()
+        {
+            if (!CanTakeLoan) return false;
+            Money += LoanAmount;
+            LoanBalance += LoanRepaid;
+            return true;
+        }
+
+        public bool HasWater(int x, int z)
+        {
+            RefreshPower();
+            return IsInBounds(x, z) && _watered[CellIndex(x, z)];
+        }
+
+        public bool HasSewage(int x, int z)
+        {
+            RefreshPower();
+            return IsInBounds(x, z) && _sewered[CellIndex(x, z)];
+        }
 
         public ServiceCoverage GetCoverage(int x, int z)
         {
@@ -83,11 +111,12 @@ namespace XCity
         }
 
         public int GetHappiness(int x, int z) =>
-            BaseHappiness + HappinessPerService * ServiceCatalog.Count(GetCoverage(x, z));
+            BaseHappiness + HappinessPerService * ServiceCatalog.Count(GetCoverage(x, z)) -
+            (HasWater(x, z) ? 0 : MissingUtilityPenalty) - (HasSewage(x, z) ? 0 : MissingUtilityPenalty);
 
-        // A home needs one service type in reach to reach level 2, and two for level 3.
+        // A home needs water, sewage and one service type in reach to reach level 2, and two services for level 3.
         private bool CanUpgradeResidence(int x, int z, int level) =>
-            ResidentialDemand > 0 && ServiceCatalog.Count(GetCoverage(x, z)) >= level;
+            ResidentialDemand > 0 && HasWater(x, z) && HasSewage(x, z) && ServiceCatalog.Count(GetCoverage(x, z)) >= level;
 
         private float DevelopmentChance(CellType type)
         {
