@@ -35,6 +35,7 @@ namespace XCity
             _construction?.Update(0.05f, true, LocalView);
             _vehicles?.Prewarm(20f);
             _helicopters?.Prewarm(14f);
+            _watercraft?.Prewarm(8f);
             _citizens?.Prewarm(18f);
             RefreshWorldMap();
             File.WriteAllBytes(Path.Combine(_previewOutput, "world-map.png"), _worldMapTexture.EncodeToPNG());
@@ -60,14 +61,7 @@ namespace XCity
             var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
             RenderTexture prevActive = RenderTexture.active;
             RenderTexture prevCamTarget = _cam.targetTexture;
-            var clearanceBoat = new GameObject("Bridge clearance preview");
-            clearanceBoat.transform.SetParent(transform, false);
-            var builder = new MeshBuilder();
-            BuildingMeshFactory.BuildPreviewWatercraft(builder, new Vector3(1807.7f, 0f, 1478f), 1);
-            var boatMesh = new Mesh { name = "Bridge clearance boat" };
-            builder.ApplyTo(boatMesh);
-            clearanceBoat.AddComponent<MeshFilter>().sharedMesh = boatMesh;
-            clearanceBoat.AddComponent<MeshRenderer>().sharedMaterial = _vertexColorMat;
+            WorldView lastPrewarmed = LocalView;
 
             try
             {
@@ -82,6 +76,13 @@ namespace XCity
                     _camYaw = shot.Yaw;
                     UpdateCameraTransform();
                     RefreshSceneDetail(int.MaxValue);
+                    if (_chunkScheduler.ShowEffects && !LocalView.SameAnchor(lastPrewarmed))
+                    {
+                        lastPrewarmed = LocalView;
+                        _vehicles?.Prewarm(8f);
+                        _watercraft?.Prewarm(5f);
+                        _citizens?.Prewarm(6f);
+                    }
                     var counts = _chunkScheduler.GetChunkCounts();
                     Debug.Log($"XCITY_PREVIEW_LOD {shot.Name} full={counts.Full} overview={counts.Overview} hidden={counts.Hidden} effects={_chunkScheduler.ShowEffects}");
 
@@ -99,8 +100,6 @@ namespace XCity
             {
                 _cam.targetTexture = prevCamTarget;
                 RenderTexture.active = prevActive;
-                Destroy(clearanceBoat);
-                Destroy(boatMesh);
                 Destroy(rt);
                 Destroy(tex);
             }
