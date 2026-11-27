@@ -31,6 +31,7 @@ namespace XCity
 
             var shots = new (string Name, Vector3 Target, float Distance, float Pitch, float Yaw)[]
             {
+                ("catalog", new Vector3(38f, 0f, 34f), 29f, 48f, 180f),
                 ("overview", new Vector3(54f, 0f, 54f), 136f, 54f, 45f),
                 ("residential", new Vector3(34f, 0f, 34f), 30f, 35f, 30f),
                 ("commercial", new Vector3(96f, 0f, 34f), 32f, 30f, 210f),

@@ -10,7 +10,63 @@ namespace XCity
         Residential,
         Commercial,
         Industrial,
-        PowerPlant
+        PowerPlant,
+        School
+    }
+
+    public enum BuildingModel
+    {
+        Default,
+        RowHouse,
+        Villa,
+        Apartment,
+        Preschool,
+        PrimarySchool,
+        HighSchool,
+        University,
+        Workshop,
+        Warehouse,
+        Factory,
+        Office,
+        OfficeTower,
+        Market,
+        ShoppingMall
+    }
+
+    internal static class BuildingCatalog
+    {
+        public static (CellType Type, string Name, int Cost, float Height, int Seats) Get(BuildingModel model) =>
+            model switch
+            {
+                BuildingModel.RowHouse => (CellType.Residential, "Nhà phố", 50, 2.7f, 0),
+                BuildingModel.Villa => (CellType.Residential, "Biệt thự", 100, 2.5f, 0),
+                BuildingModel.Apartment => (CellType.Residential, "Chung cư", 130, 4.6f, 0),
+                BuildingModel.Preschool => (CellType.School, "Mầm non", 350, 2.2f, 60),
+                BuildingModel.PrimarySchool => (CellType.School, "Tiểu học", 700, 3.0f, 180),
+                BuildingModel.HighSchool => (CellType.School, "Trung học", 1200, 4.0f, 360),
+                BuildingModel.University => (CellType.School, "Đại học", 2200, 5.0f, 700),
+                BuildingModel.Workshop => (CellType.Industrial, "Xưởng sản xuất", 60, 2.4f, 0),
+                BuildingModel.Warehouse => (CellType.Industrial, "Kho vận", 100, 2.8f, 0),
+                BuildingModel.Factory => (CellType.Industrial, "Nhà máy", 160, 3.8f, 0),
+                BuildingModel.Office => (CellType.Commercial, "Văn phòng", 90, 4.2f, 0),
+                BuildingModel.OfficeTower => (CellType.Commercial, "Tháp văn phòng", 200, 7.2f, 0),
+                BuildingModel.Market => (CellType.Commercial, "Chợ khu phố", 60, 2.3f, 0),
+                BuildingModel.ShoppingMall => (CellType.Commercial, "Trung tâm thương mại", 240, 4.5f, 0),
+                _ => default
+            };
+
+        public static int SchoolUpkeep(BuildingModel model) => Get(model).Seats / 15;
+
+        public static int Residents(CityCell cell)
+        {
+            int residentsPerLevel = cell.Model switch
+            {
+                BuildingModel.Villa => 8,
+                BuildingModel.Apartment => 20,
+                _ => CitySimulation.ResidentsPerLevel
+            };
+            return cell.Level * residentsPerLevel;
+        }
     }
 
     public enum ZoneStatus
@@ -28,6 +84,7 @@ namespace XCity
     public struct CityCell
     {
         public CellType Type;
+        public BuildingModel Model;
         public int Level;
         public float Height;
     }
@@ -94,7 +151,7 @@ namespace XCity
         {
             if (!IsInBounds(x, z)) return ZoneStatus.NotZoned;
             CityCell cell = _cells[x, z];
-            if (!IsZone(cell.Type)) return ZoneStatus.NotZoned;
+            if (!UsesPower(cell.Type)) return ZoneStatus.NotZoned;
             if (!Roads.HasRoadAccess(x, z))
                 return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
             RefreshPower();
@@ -103,16 +160,16 @@ namespace XCity
             return cell.Level == 0 ? ZoneStatus.WaitingForDevelopment : ZoneStatus.Developed;
         }
 
-        public bool TrySetCell(int x, int z, CellType type) =>
-            TryApplyBuild(new[] { (x, z) }, type);
+        public bool TrySetCell(int x, int z, CellType type, BuildingModel model = BuildingModel.Default) =>
+            TryApplyBuild(new[] { (x, z) }, type, model);
 
-        public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type)
+        public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type, BuildingModel model = BuildingModel.Default)
         {
             int moneyBefore = Money;
             int populationBefore = Population;
             var changed = new List<(int X, int Z, CityCell Cell)>();
             foreach (var point in points)
-                TrySetCell(point.X, point.Z, type, changed);
+                TrySetCell(point.X, point.Z, type, model, changed);
 
             if (changed.Count == 0) return false;
             _undoCells = changed;
@@ -141,26 +198,33 @@ namespace XCity
             return true;
         }
 
-        private bool TrySetCell(int x, int z, CellType type, List<(int X, int Z, CityCell Cell)> changed)
+        private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
+            List<(int X, int Z, CityCell Cell)> changed)
         {
-            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.PowerPlant) return false;
+            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.School) return false;
+            var option = BuildingCatalog.Get(model);
+            if (model == BuildingModel.Default ? type == CellType.School : option.Cost == 0 || option.Type != type)
+                return false;
             ref CityCell cell = ref _cells[x, z];
-            if (cell.Type == type) return false;
+            if (cell.Type == type && cell.Model == model) return false;
 
             int cost = type switch
             {
                 CellType.Road => RoadCost,
                 CellType.Empty => 10,
                 CellType.PowerPlant => PowerPlantCost,
-                _ => ZoneCost
+                _ => model == BuildingModel.Default ? ZoneCost : option.Cost
             };
             if (type != CellType.Empty && Money < cost) return false;
 
             changed.Add((x, z, cell));
-            if (cell.Type == CellType.Residential) Population -= ResidentsPerLevel * cell.Level;
-            cell = type == CellType.PowerPlant
-                ? new CityCell { Type = type, Level = 1, Height = PowerPlantHeight }
-                : new CityCell { Type = type };
+            if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
+            cell = type switch
+            {
+                CellType.PowerPlant => new CityCell { Type = type, Level = 1, Height = PowerPlantHeight },
+                CellType.School => new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
+                _ => new CityCell { Type = type, Model = model }
+            };
             _powerDirty = true;
             Money -= cost;
             Roads.SetRoad(x, z, type == CellType.Road);
@@ -192,12 +256,19 @@ namespace XCity
                         continue;
                     }
 
+                    if (cell.Type == CellType.School)
+                    {
+                        netIncome -= BuildingCatalog.SchoolUpkeep(cell.Model);
+                        continue;
+                    }
+
                     ZoneStatus status = GetZoneStatus(x, z);
                     bool operating = status == ZoneStatus.Developed || status == ZoneStatus.WaitingForDevelopment;
                     if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < 0.35f)
                     {
                         cell.Level = 1;
-                        cell.Height = cell.Type switch
+                        cell.Height = cell.Model != BuildingModel.Default
+                            ? BuildingCatalog.Get(cell.Model).Height : cell.Type switch
                         {
                             CellType.Residential => 2.4f + NextRandom() * 2.1f,
                             CellType.Commercial => 4f + NextRandom() * 3.5f,
@@ -214,8 +285,9 @@ namespace XCity
                         CellChanged?.Invoke(x, z);
                     }
 
-                    if (cell.Type == CellType.Residential) population += ResidentsPerLevel * cell.Level;
-                    if (operating) taxIncome += 15 * cell.Level;
+                    if (cell.Type == CellType.Residential) population += BuildingCatalog.Residents(cell);
+                    if (operating)
+                        taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 : 15 * cell.Level;
                 }
             }
 
@@ -230,7 +302,7 @@ namespace XCity
         {
             var snapshot = new CitySnapshot
             {
-                schemaVersion = 3,
+                schemaVersion = 4,
                 money = Money,
                 tick = TickCount,
                 randomState = _randomState,
@@ -247,7 +319,7 @@ namespace XCity
         internal static bool TryRestore(CitySnapshot snapshot, out CitySimulation city)
         {
             city = null;
-            if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > 3) || snapshot.tick < 0 ||
+            if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > 4) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
                 snapshot.cells == null || snapshot.cells.Length != GridSize * GridSize)
                 return false;
@@ -269,7 +341,7 @@ namespace XCity
 
                     restored._cells[x, z] = cell;
                     restored.Roads.SetRoad(x, z, cell.Type == CellType.Road);
-                    if (cell.Type == CellType.Residential) restored.Population += ResidentsPerLevel * cell.Level;
+                    if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
                 }
             }
 
@@ -279,12 +351,19 @@ namespace XCity
 
         private static bool IsValidSavedCell(CityCell cell, int version)
         {
+            if (cell.Model != BuildingModel.Default)
+            {
+                var option = BuildingCatalog.Get(cell.Model);
+                if (version < 4 || option.Cost == 0 || option.Type != cell.Type) return false;
+                if (cell.Type == CellType.School) return cell.Level == 1 && cell.Height == option.Height;
+            }
+
             if (cell.Type == CellType.PowerPlant)
                 return version >= 2 && cell.Level == 1 && cell.Height == PowerPlantHeight;
             int maxLevel = version >= 3 && cell.Type == CellType.Residential ? MaxResidentialLevel : 1;
             if (cell.Type < CellType.Empty || cell.Type > CellType.Industrial || cell.Level < 0 || cell.Level > maxLevel)
                 return false;
-            return cell.Level == 0 ? cell.Height == 0f : IsZone(cell.Type) && cell.Height >= 2.2f && cell.Height <= 7.5f;
+            return cell.Level == 0 ? cell.Height == 0f : UsesPower(cell.Type) && cell.Height >= 2.2f && cell.Height <= 7.5f;
         }
 
         private void RefreshPower()
@@ -327,7 +406,7 @@ namespace XCity
             {
                 for (int z = 0; z < GridSize; z++)
                 {
-                    if (!IsZone(_cells[x, z].Type)) continue;
+                    if (!UsesPower(_cells[x, z].Type)) continue;
                     int grid = AdjacentComponent(x, z);
                     if (grid == 0) continue;
                     if (capacity[grid] == 0)
@@ -358,8 +437,8 @@ namespace XCity
             }
         }
 
-        private static bool IsZone(CellType type) =>
-            type >= CellType.Residential && type <= CellType.Industrial;
+        private static bool UsesPower(CellType type) =>
+            (type >= CellType.Residential && type <= CellType.Industrial) || type == CellType.School;
 
         private static bool IsInBounds(int x, int z) =>
             x >= 0 && x < GridSize && z >= 0 && z < GridSize;

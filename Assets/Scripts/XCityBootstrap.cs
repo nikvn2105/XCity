@@ -13,7 +13,8 @@ namespace XCity
         Commercial,
         Industrial,
         Bulldoze,
-        PowerPlant
+        PowerPlant,
+        School
     }
 
     public partial class XCityBootstrap : MonoBehaviour
@@ -41,6 +42,11 @@ namespace XCity
 
         private Text _hudStatusText;
         private Button _undoButton;
+        private Button _catalogButton;
+        private GameObject _catalog;
+        private GameObject _catalogOptions;
+        private Image _catalogTab;
+        private BuildingModel _activeBuildingModel;
         private readonly Dictionary<BuildTool, Image> _toolButtons = new Dictionary<BuildTool, Image>();
 
         private Material _groundMat;
@@ -277,14 +283,87 @@ namespace XCity
 
             AddToolButton(bottomBar.transform, font, "Xem", BuildTool.Pan);
             AddToolButton(bottomBar.transform, font, "Đường", BuildTool.Road);
-            AddToolButton(bottomBar.transform, font, "Nhà ở (R)", BuildTool.Residential);
-            AddToolButton(bottomBar.transform, font, "Thương mại (C)", BuildTool.Commercial);
-            AddToolButton(bottomBar.transform, font, "Công nghiệp (I)", BuildTool.Industrial);
+            _catalogButton = CreateHudButton(bottomBar.transform, font, "Xây", "OpenCatalog");
+            _catalogButton.onClick.AddListener(ToggleCatalog);
+            SetupBuildCatalog(font);
             AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
             AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
 
             SelectTool(BuildTool.Road);
             RefreshHUD();
+        }
+
+        private void SetupBuildCatalog(Font font)
+        {
+            _catalog = new GameObject("BuildCatalog", typeof(RectTransform));
+            var root = (RectTransform)_catalog.transform;
+            root.SetParent(_safeAreaRoot, false);
+            root.anchorMin = Vector2.zero;
+            root.anchorMax = Vector2.one;
+            root.offsetMin = root.offsetMax = Vector2.zero;
+
+            Transform tabs = CreateCatalogRow(root, "Categories", 94, 146);
+            AddCatalogCategory(root, tabs, font, "Nhà ở", BuildTool.Residential,
+                BuildingModel.RowHouse, BuildingModel.Villa, BuildingModel.Apartment);
+            AddCatalogCategory(root, tabs, font, "Trường học", BuildTool.School,
+                BuildingModel.Preschool, BuildingModel.PrimarySchool, BuildingModel.HighSchool, BuildingModel.University);
+            AddCatalogCategory(root, tabs, font, "Công nghiệp", BuildTool.Industrial,
+                BuildingModel.Workshop, BuildingModel.Warehouse, BuildingModel.Factory);
+            AddCatalogCategory(root, tabs, font, "Văn phòng", BuildTool.Commercial,
+                BuildingModel.Office, BuildingModel.OfficeTower);
+            AddCatalogCategory(root, tabs, font, "Thương mại", BuildTool.Commercial,
+                BuildingModel.Market, BuildingModel.ShoppingMall);
+            _catalog.SetActive(false);
+        }
+
+        private static Transform CreateCatalogRow(Transform parent, string name, float bottom, float top)
+        {
+            var row = CreatePanel(parent, name, new Vector2(0.1f, 0), new Vector2(0.9f, 0),
+                new Vector2(0, bottom), new Vector2(0, top), new Color(0.08f, 0.10f, 0.14f, 0.94f));
+            var layout = row.AddComponent<HorizontalLayoutGroup>();
+            layout.padding = new RectOffset(8, 8, 7, 7);
+            layout.spacing = 8;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = true;
+            return row.transform;
+        }
+
+        private void AddCatalogCategory(Transform root, Transform tabs, Font font, string label, BuildTool tool,
+            params BuildingModel[] models)
+        {
+            Button tab = CreateHudButton(tabs, font, label, label);
+            Transform options = CreateCatalogRow(root, label, 152, 226);
+            foreach (BuildingModel model in models)
+            {
+                var item = BuildingCatalog.Get(model);
+                string price = item.Seats > 0 ? $"${item.Cost:N0} · {item.Seats:N0} chỗ" : $"${item.Cost:N0}/ô";
+                Button button = CreateHudButton(options, font, $"{item.Name}\n{price}", model.ToString());
+                button.onClick.AddListener(() =>
+                {
+                    _activeBuildingModel = model;
+                    SelectTool(tool);
+                });
+            }
+
+            options.gameObject.SetActive(false);
+            tab.onClick.AddListener(() => ShowCatalogCategory(options.gameObject, tab.image));
+            if (_catalogOptions == null) ShowCatalogCategory(options.gameObject, tab.image);
+        }
+
+        private void ShowCatalogCategory(GameObject options, Image tab)
+        {
+            if (_catalogOptions != null) _catalogOptions.SetActive(false);
+            if (_catalogTab != null) _catalogTab.color = new Color(0.20f, 0.24f, 0.30f);
+            _catalogOptions = options;
+            _catalogTab = tab;
+            _catalogOptions.SetActive(true);
+            _catalogTab.color = new Color(0.19f, 0.52f, 0.96f);
+        }
+
+        private void ToggleCatalog()
+        {
+            CancelGesture();
+            _catalog.SetActive(!_catalog.activeSelf);
         }
 
         private static GameObject CreatePanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax, Color color)
@@ -304,7 +383,11 @@ namespace XCity
         private void AddToolButton(Transform parent, Font font, string label, BuildTool tool)
         {
             Button button = CreateHudButton(parent, font, label, "Btn_" + tool);
-            button.onClick.AddListener(() => SelectTool(tool));
+            button.onClick.AddListener(() =>
+            {
+                _activeBuildingModel = BuildingModel.Default;
+                SelectTool(tool);
+            });
             _toolButtons[tool] = button.image;
         }
 
@@ -338,6 +421,14 @@ namespace XCity
         {
             CancelGesture();
             _activeTool = tool;
+            _catalog.SetActive(false);
+            bool catalogTool = _activeBuildingModel != BuildingModel.Default;
+            _catalogButton.image.color = catalogTool
+                ? new Color(0.19f, 0.52f, 0.96f)
+                : new Color(0.20f, 0.24f, 0.30f);
+            _catalogButton.GetComponentInChildren<Text>().text = catalogTool
+                ? BuildingCatalog.Get(_activeBuildingModel).Name
+                : "Xây";
             _inspectedCell = null;
             RefreshHUD();
             foreach (var kv in _toolButtons)
@@ -450,14 +541,21 @@ namespace XCity
             }
         }
 
+        private bool IsSinglePlacement => _activeTool == BuildTool.PowerPlant || _activeTool == BuildTool.School;
+
         private void BeginGesture(Vector2 position)
         {
             if (IsPointerOverUI(position)) return;
+            if (_catalog.activeSelf)
+            {
+                _catalog.SetActive(false);
+                return;
+            }
             _isDragging = true;
             _gestureStart = position;
             _panMoved = false;
             _lastPointerPos = position;
-            if (_activeTool != BuildTool.Pan && _activeTool != BuildTool.PowerPlant && TryGetCell(position, out var cell))
+            if (_activeTool != BuildTool.Pan && !IsSinglePlacement && TryGetCell(position, out var cell))
                 AddStrokeSample(cell);
         }
 
@@ -479,7 +577,7 @@ namespace XCity
                 _camTarget.z = Mathf.Clamp(_camTarget.z, 0f, maxBound);
                 UpdateCameraTransform();
             }
-            else if (_activeTool != BuildTool.PowerPlant && TryGetCell(position, out var cell))
+            else if (!IsSinglePlacement && TryGetCell(position, out var cell))
             {
                 AddStrokeSample(cell);
             }
@@ -504,10 +602,13 @@ namespace XCity
             if (_isDragging && _activeTool != BuildTool.Pan &&
                 !IsPointerOverUI(position) && TryGetCell(position, out var cell))
             {
-                if (_activeTool == BuildTool.PowerPlant)
+                if (IsSinglePlacement)
                 {
                     if (!IsPanMovement(position))
-                        _cityDirty |= _city.TrySetCell(cell.x, cell.y, CellType.PowerPlant);
+                    {
+                        CellType placement = _activeTool == BuildTool.School ? CellType.School : CellType.PowerPlant;
+                        _cityDirty |= _city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel);
+                    }
                     RefreshHUD();
                 }
                 else
@@ -643,7 +744,7 @@ namespace XCity
                 BuildTool.Industrial => CellType.Industrial,
                 _ => CellType.Empty
             };
-            _cityDirty |= _city.TryApplyBuild(GetStrokeCells(), type);
+            _cityDirty |= _city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel);
         }
 
         private IEnumerable<(int X, int Z)> GetStrokeCells()
@@ -758,7 +859,7 @@ namespace XCity
                 _ => Color.white
             };
 
-            string label = type switch
+            string label = cell.Model != BuildingModel.Default ? BuildingCatalog.Get(cell.Model).Name : type switch
             {
                 CellType.Road => "Đường",
                 CellType.Residential => "Nhà ở",
@@ -768,14 +869,16 @@ namespace XCity
                 _ => "Ô trống"
             };
             if (type == CellType.Residential && cell.Level > 0)
-                label += $" · {cell.Level * CitySimulation.ResidentsPerLevel} dân";
+                label += $" · {BuildingCatalog.Residents(cell)} dân";
+            if (type == CellType.School)
+                label += $" · {BuildingCatalog.Get(cell.Model).Seats:N0} chỗ · Phí: ${BuildingCatalog.SchoolUpkeep(cell.Model):N0}";
             return status switch
             {
                 ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",
                 ZoneStatus.WaitingForDevelopment => label + " · Đang chờ phát triển",
                 ZoneStatus.DevelopedWithoutRoad => label + " · Mất kết nối đường",
                 ZoneStatus.NeedsPower or ZoneStatus.DevelopedWithoutPower => label + " · Thiếu điện",
-                ZoneStatus.Developed => label + " · Đã phát triển",
+                ZoneStatus.Developed => label + (type == CellType.School ? " · Đang hoạt động" : " · Đã phát triển"),
                 _ => type == CellType.PowerPlant
                     ? label + (_city.Roads.HasRoadAccess(point.x, point.y)
                         ? $" · Cấp {CitySimulation.PowerPlantCapacity} ô" : " · Cần đường liền kề")
@@ -803,8 +906,16 @@ namespace XCity
                     BuildTool.Road => "Kéo để vẽ đường · Thả để đặt",
                     BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
+                    BuildTool.School => "Chạm để đặt trường học",
                     _ => "Chạm hoặc kéo để phân khu"
                 };
+                if (_activeBuildingModel != BuildingModel.Default)
+                {
+                    var item = BuildingCatalog.Get(_activeBuildingModel);
+                    hint = _city.Money < item.Cost
+                        ? $"Thiếu ngân sách · {item.Name} · ${item.Cost:N0}"
+                        : $"{hint} · {item.Name} · ${item.Cost:N0}";
+                }
                 if (_activeTool == BuildTool.Road && _stroke.Count > 0)
                 {
                     bool affordable = _roadStrokeCost <= _city.Money;
@@ -812,7 +923,7 @@ namespace XCity
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
-                if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô\n{hint}";
+                if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population &&
                     _lastHudTax == _city.LastTaxIncome && _lastHudNet == _city.LastNetIncome)
                     return;

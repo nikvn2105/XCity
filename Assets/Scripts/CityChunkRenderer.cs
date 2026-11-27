@@ -223,6 +223,7 @@ namespace XCity
                     CellType.Residential => new Color32(105, 153, 106, 255),
                     CellType.Commercial => new Color32(126, 151, 161, 255),
                     CellType.Industrial => new Color32(163, 146, 113, 255),
+                    CellType.School => new Color32(136, 151, 116, 255),
                     _ => new Color32(146, 145, 144, 255)
                 };
                 _surface.AddBox(new Vector3(0, BuildingBase * 0.5f, 0),

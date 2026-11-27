@@ -9,6 +9,15 @@ namespace XCity
             const int size = CitySimulation.GridSize;
             var cells = new CityCell[size * size];
 
+            BuildingModel[,] displayBlock =
+            {
+                { BuildingModel.RowHouse, BuildingModel.Villa, BuildingModel.Apartment },
+                { BuildingModel.Preschool, BuildingModel.PrimarySchool, BuildingModel.HighSchool },
+                { BuildingModel.University, BuildingModel.Office, BuildingModel.OfficeTower },
+                { BuildingModel.Market, BuildingModel.ShoppingMall, BuildingModel.Workshop },
+                { BuildingModel.Warehouse, BuildingModel.Factory, BuildingModel.Default }
+            };
+
             for (int x = 0; x < size; x++)
             {
                 for (int z = 0; z < size; z++)
@@ -20,8 +29,18 @@ namespace XCity
                         continue;
                     }
 
-                    // Leave a neighborhood green and a lakeside buffer in the graphics preview.
-                    if ((x >= 7 && x <= 10 && z >= 7 && z <= 10) || (x >= 26 && z >= 25)) continue;
+                    if (x >= 7 && x < 12 && z >= 7 && z < 10)
+                    {
+                        BuildingModel model = displayBlock[x - 7, z - 7];
+                        if (model != BuildingModel.Default)
+                        {
+                            var option = BuildingCatalog.Get(model);
+                            cells[idx] = new CityCell { Type = option.Type, Model = model, Height = option.Height, Level = 1 };
+                        }
+                        continue;
+                    }
+
+                    if (x >= 26 && z >= 25) continue;
 
                     uint h = BuildingMeshFactory.Hash(x, z, 777);
                     float u = (h & 0xFFFFu) / 65535f;
@@ -67,7 +86,7 @@ namespace XCity
 
             var snapshot = new CitySnapshot
             {
-                schemaVersion = 3,
+                schemaVersion = 4,
                 money = 50000,
                 tick = 0,
                 randomState = 12345,

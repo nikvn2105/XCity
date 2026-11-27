@@ -101,11 +101,18 @@ namespace XCity
             {
                 CellType.Residential => LotGrass,
                 CellType.Commercial => LotPaving,
+                CellType.School => new Color32(157, 170, 140, 255),
                 _ => LotAsphalt
             };
             b.AddBox(new Vector3(0f, 0.02f, 0f), new Vector3(3.7f, 0.04f, 3.7f), lotColor, lotColor);
 
             float h = Mathf.Max(1.5f, cell.Height);
+            if (cell.Model != BuildingModel.Default)
+            {
+                BuildCatalogModel(b, cell, h, ref paletteRng, ref shapeRng);
+                return;
+            }
+
             switch (cell.Type)
             {
                 case CellType.Residential:
@@ -150,6 +157,231 @@ namespace XCity
             // Two safety cones near the road edge
             b.AddCylinder(new Vector3(-0.65f, 0.03f, 1.10f), 0.11f, 0.03f, 0.28f, 6, coneOrange, true, coneOrange);
             b.AddCylinder(new Vector3(0.65f, 0.03f, 1.10f), 0.11f, 0.03f, 0.28f, 6, coneOrange, true, coneOrange);
+        }
+
+        private static void BuildCatalogModel(MeshBuilder b, CityCell cell, float height,
+            ref CellRng palette, ref CellRng shape)
+        {
+            switch (cell.Model)
+            {
+                case BuildingModel.RowHouse:
+                case BuildingModel.Villa:
+                case BuildingModel.Apartment:
+                    BuildHousingOption(b, cell, height, ref palette);
+                    break;
+                case BuildingModel.Preschool:
+                case BuildingModel.PrimarySchool:
+                case BuildingModel.HighSchool:
+                case BuildingModel.University:
+                    BuildSchool(b, cell.Model, height);
+                    break;
+                case BuildingModel.Workshop:
+                case BuildingModel.Warehouse:
+                    BuildIndustrialShed(b, cell.Model == BuildingModel.Warehouse, height);
+                    break;
+                case BuildingModel.Factory:
+                    BuildIndustrial(b, height, ref palette, ref shape);
+                    break;
+                case BuildingModel.Office:
+                case BuildingModel.OfficeTower:
+                    BuildOffice(b, cell.Model == BuildingModel.OfficeTower, height);
+                    break;
+                case BuildingModel.Market:
+                    BuildMarket(b, height);
+                    break;
+                case BuildingModel.ShoppingMall:
+                    BuildMall(b, height);
+                    break;
+            }
+        }
+
+        private static void BuildHousingOption(MeshBuilder b, CityCell cell, float h, ref CellRng palette)
+        {
+            Color32 wall = WallPalette[palette.Range(0, WallPalette.Length)];
+            Color32 roof = RoofPalette[palette.Range(0, RoofPalette.Length)];
+            if (cell.Model == BuildingModel.Apartment)
+            {
+                AddWindowBlock(b, new Vector3(0, 0.04f, -0.12f), 2.75f, 2.48f, h - 0.30f,
+                    cell.Level + 2, wall, roof);
+                for (int floor = 0; floor < cell.Level + 1; floor++)
+                    b.AddBox(new Vector3(0.69f, 1.0f + floor * 0.78f, 1.20f),
+                        new Vector3(1.14f, 0.10f, 0.42f), ConcreteLight, ConcreteLight);
+                b.AddBox(new Vector3(-0.45f, h - 0.13f, -0.34f),
+                    new Vector3(0.80f, 0.30f, 0.72f), wall, roof);
+                return;
+            }
+
+            if (cell.Model == BuildingModel.Villa)
+            {
+                float body = h * 0.60f;
+                AddWindowBlock(b, new Vector3(-0.28f, 0.04f, -0.24f), 2.05f, 1.9f, body,
+                    cell.Level, wall, roof);
+                b.AddGableRoof(new Vector3(-0.28f, body + 0.04f, -0.24f),
+                    2.05f, 1.9f, h * 0.19f, 0.12f, roof, wall);
+                b.AddBox(new Vector3(1.06f, 0.10f, 0.77f), new Vector3(0.98f, 0.12f, 1.16f),
+                    ConcreteLight, new Color32(119, 185, 188, 255));
+                b.AddCylinder(new Vector3(-1.36f, 0.04f, 1.22f), 0.23f, 0.16f, 0.73f,
+                    6, new Color32(89, 138, 88, 255), true, LotGrass);
+                return;
+            }
+
+            for (int house = -1; house <= 1; house++)
+            {
+                float x = house * 0.97f;
+                float body = h * 0.70f + (house == 0 ? 0.12f : 0f);
+                Color32 tone = house == 0 ? wall : Darken(wall, house < 0 ? 0.88f : 0.96f);
+                AddWindowBlock(b, new Vector3(x, 0.04f, -0.06f), 0.91f, 2.04f, body,
+                    cell.Level, tone, roof);
+                b.AddGableRoof(new Vector3(x, body + 0.04f, -0.06f),
+                    0.91f, 2.04f, h * 0.18f, 0.025f, roof, tone);
+            }
+        }
+
+        private static void BuildSchool(MeshBuilder b, BuildingModel model, float h)
+        {
+            var courtyard = new Color32(199, 171, 127, 255);
+            var cream = new Color32(231, 219, 180, 255);
+            var darkTeal = new Color32(66, 119, 121, 255);
+            var brick = new Color32(163, 91, 71, 255);
+            b.AddBox(new Vector3(0, 0.052f, 0.99f), new Vector3(2.88f, 0.024f, 1.32f), courtyard, courtyard);
+
+            switch (model)
+            {
+                case BuildingModel.Preschool:
+                    AddWindowBlock(b, new Vector3(0, 0.04f, -0.62f), 2.48f, 1.48f, 1.36f,
+                        1, cream, brick);
+                    b.AddGableRoof(new Vector3(0, 1.40f, -0.62f), 2.48f, 1.48f, 0.65f, 0.08f, brick, cream);
+                    b.AddBox(new Vector3(0.68f, 0.24f, 1.12f), new Vector3(0.78f, 0.34f, 0.68f),
+                        darkTeal, new Color32(239, 185, 78, 255));
+                    break;
+                case BuildingModel.PrimarySchool:
+                    AddWindowBlock(b, new Vector3(0, 0.04f, -0.65f), 2.94f, 1.32f, h * 0.82f,
+                        2, cream, darkTeal);
+                    AddWindowBlock(b, new Vector3(-1.07f, 0.04f, 0.52f), 0.78f, 0.92f, 1.65f,
+                        1, cream, darkTeal);
+                    AddSchoolCourt(b, 0.38f, darkTeal);
+                    break;
+                case BuildingModel.HighSchool:
+                    AddWindowBlock(b, new Vector3(0, 0.04f, -0.57f), 3.0f, 1.50f, h * 0.82f,
+                        3, brick, ConcreteLight);
+                    AddWindowBlock(b, new Vector3(-1.1f, 0.04f, 0.36f), 0.82f, 0.78f, h * 0.48f,
+                        1, cream, ConcreteLight);
+                    AddSchoolCourt(b, 0.34f, darkTeal);
+                    break;
+                case BuildingModel.University:
+                    AddWindowBlock(b, new Vector3(-0.88f, 0.04f, -0.60f), 1.18f, 1.52f, h * 0.93f,
+                        4, cream, darkTeal);
+                    AddWindowBlock(b, new Vector3(0.66f, 0.04f, -0.45f), 1.48f, 1.74f, h * 0.62f,
+                        3, brick, ConcreteLight);
+                    b.AddCylinder(new Vector3(0.33f, 0.066f, 0.94f), 0.43f, 0.39f, 0.17f,
+                        10, ConcreteLight, true, new Color32(128, 182, 183, 255));
+                    break;
+            }
+
+            b.AddBox(new Vector3(-1.42f, 0.78f, 1.32f), new Vector3(0.05f, 1.45f, 0.05f),
+                ConcreteLight, ConcreteLight);
+            b.AddBox(new Vector3(-1.18f, 1.30f, 1.32f), new Vector3(0.43f, 0.23f, 0.035f), brick, brick);
+        }
+
+        private static void AddSchoolCourt(MeshBuilder b, float x, Color32 surface)
+        {
+            b.AddBox(new Vector3(x, 0.069f, 0.96f), new Vector3(1.68f, 0.016f, 1.06f), surface, surface);
+            b.AddBox(new Vector3(x, 0.081f, 0.96f), new Vector3(0.033f, 0.012f, 0.97f),
+                ConcreteLight, ConcreteLight);
+        }
+
+        private static void BuildIndustrialShed(MeshBuilder b, bool warehouse, float h)
+        {
+            var wall = new Color32(154, 151, 140, 255);
+            var roof = warehouse ? new Color32(75, 112, 125, 255) : new Color32(140, 88, 70, 255);
+            float body = h * (warehouse ? 0.80f : 0.66f);
+            var size = new Vector3(3.10f, body, 2.14f);
+            var center = new Vector3(0, body * 0.5f + 0.04f, -0.40f);
+            b.AddBox(center, size, wall, roof);
+            if (warehouse)
+            {
+                b.AddBox(new Vector3(0, body + 0.07f, -0.40f), new Vector3(3.30f, 0.10f, 2.28f), roof, roof);
+                for (int bay = -1; bay <= 1; bay++)
+                    b.AddFacadeRect(center, size, 0, bay * 0.86f - 0.30f, bay * 0.86f + 0.30f,
+                        0.06f, body * 0.62f, roof);
+            }
+            else
+            {
+                b.AddGableRoof(new Vector3(0, body + 0.04f, -0.40f), 3.10f, 2.14f, h * 0.22f, 0.07f, roof, wall);
+                b.AddFacadeRect(center, size, 0, -0.62f, 0.62f, 0.06f, body * 0.75f, WindowGlass);
+                b.AddBox(new Vector3(-1.16f, 0.29f, 1.03f), new Vector3(0.52f, 0.50f, 0.61f), roof, wall);
+            }
+        }
+
+        private static void BuildOffice(MeshBuilder b, bool tower, float h)
+        {
+            var glass = new Color32(76, 143, 165, 255);
+            var roof = new Color32(136, 163, 168, 255);
+            AddWindowBlock(b, new Vector3(0, 0.04f, -0.10f), 3.05f, 2.75f, 1.08f, 1, ConcreteLight, glass);
+            float width = tower ? 1.89f : 2.58f;
+            AddWindowBlock(b, new Vector3(0, 1.12f, -0.18f), width, 2.21f, h - 1.44f,
+                tower ? 7 : 3, glass, roof);
+            if (tower)
+            {
+                b.AddBox(new Vector3(0.56f, h - 0.12f, -0.45f), new Vector3(0.45f, 0.36f, 1.07f), roof, ConcreteLight);
+                b.AddBox(new Vector3(-0.46f, h - 0.12f, -0.29f), new Vector3(0.06f, 0.44f, 0.06f), roof, ConcreteLight);
+            }
+        }
+
+        private static void BuildMarket(MeshBuilder b, float h)
+        {
+            var timber = new Color32(144, 111, 84, 255);
+            for (int stall = 0; stall < 3; stall++)
+            {
+                float x = (stall - 1) * 0.92f;
+                Color32 canopy = AwningPalette[stall];
+                b.AddBox(new Vector3(x, 0.33f, 0.07f), new Vector3(0.74f, 0.57f, 1.68f), timber, ConcreteLight);
+                b.AddBox(new Vector3(x, h * 0.61f, -0.33f), new Vector3(0.78f, 0.10f, 1.89f), canopy, canopy);
+                b.AddBox(new Vector3(x - 0.32f, 0.98f, 0.51f), new Vector3(0.05f, 0.95f, 0.05f), timber, timber);
+                b.AddBox(new Vector3(x + 0.32f, 0.98f, 0.51f), new Vector3(0.05f, 0.95f, 0.05f), timber, timber);
+            }
+        }
+
+        private static void BuildMall(MeshBuilder b, float h)
+        {
+            var brick = new Color32(181, 134, 104, 255);
+            var ivory = new Color32(225, 218, 199, 255);
+            var glass = new Color32(91, 161, 178, 255);
+            AddWindowBlock(b, new Vector3(0, 0.04f, -0.16f), 3.42f, 2.8f, h * 0.62f, 2, ivory, brick);
+            AddWindowBlock(b, new Vector3(0, h * 0.62f + 0.04f, -0.36f), 2.86f, 2.03f, h * 0.26f,
+                1, brick, ivory);
+            b.AddGableRoof(new Vector3(0, h * 0.88f + 0.04f, -0.36f), 0.89f, 1.47f, h * 0.095f,
+                0.035f, glass, glass);
+            b.AddBox(new Vector3(0, 1.06f, 1.42f), new Vector3(2.02f, 0.15f, 0.48f), glass, ivory);
+        }
+
+        private static void AddWindowBlock(MeshBuilder b, Vector3 foot, float width, float depth, float height,
+            int floors, Color32 wall, Color32 top)
+        {
+            var size = new Vector3(width, height, depth);
+            var center = foot + Vector3.up * (height * 0.5f);
+            b.AddBox(center, size, wall, top);
+
+            float floorHeight = height / floors;
+            int columns = width > 2.2f ? 3 : width > 1.1f ? 2 : 1;
+            float bay = width / columns;
+            for (int floor = 0; floor < floors; floor++)
+            {
+                float y = foot.y + (floor + 0.36f) * floorHeight;
+                for (int column = 0; column < columns; column++)
+                {
+                    float x = (column + 0.5f) * bay - width * 0.5f;
+                    Color32 window = (floor + column) % 5 == 3 ? LitWindowGlass : WindowGlass;
+                    b.AddFacadeRect(center, size, 0, x - bay * 0.30f, x + bay * 0.30f,
+                        y, y + floorHeight * 0.38f, window);
+                    b.AddFacadeRect(center, size, 1, x - bay * 0.30f, x + bay * 0.30f,
+                        y, y + floorHeight * 0.38f, WindowGlass);
+                }
+
+                for (int side = 2; side < 4; side++)
+                    b.AddFacadeRect(center, size, side, -depth * 0.31f, depth * 0.31f,
+                        y, y + floorHeight * 0.34f, WindowGlass);
+            }
         }
 
         private static void BuildResidential(MeshBuilder b, int level, float h, ref CellRng paletteRng, ref CellRng shapeRng)

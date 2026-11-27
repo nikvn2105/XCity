@@ -37,7 +37,7 @@ namespace XCity
                     CityCell cell = _city.GetCell(x, z);
                     bool waiting = IsZone(cell.Type) && cell.Level == 0 &&
                                    _city.GetZoneStatus(x, z) == ZoneStatus.WaitingForDevelopment;
-                    if (cell.Level > 0 || cell.Type == CellType.PowerPlant || waiting)
+                    if (cell.Level > 0 || waiting)
                         _dirty.Add(new Vector2Int(x / ChunkSize, z / ChunkSize));
                 }
             }
@@ -104,8 +104,7 @@ namespace XCity
                     }
 
                     CityCell cell = _city.GetCell(x, z);
-                    bool isDevelopedZone = IsZone(cell.Type) && cell.Level > 0;
-                    if (isDevelopedZone || cell.Type == CellType.PowerPlant)
+                    if (cell.Level > 0)
                     {
                         _waitingRendered[x, z] = false;
                         int quarterTurns = PickQuarterTurns(_city, x, z);
