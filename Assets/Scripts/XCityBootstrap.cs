@@ -193,7 +193,7 @@ namespace XCity
             statusRect.offsetMax = new Vector2(-20, 0);
             _hudStatusText = statusObj.AddComponent<Text>();
             _hudStatusText.font = font;
-            _hudStatusText.fontSize = 24;
+            _hudStatusText.fontSize = 21;
             _hudStatusText.color = Color.white;
             _hudStatusText.alignment = TextAnchor.MiddleLeft;
 
@@ -613,7 +613,8 @@ namespace XCity
             }
 
             Vector2Int point = _inspectedCell.Value;
-            CellType type = _city.GetCell(point.x, point.y).Type;
+            CityCell cell = _city.GetCell(point.x, point.y);
+            CellType type = cell.Type;
             ZoneStatus status = _city.GetZoneStatus(point.x, point.y);
             if (_inspectionOutline == null)
             {
@@ -656,6 +657,8 @@ namespace XCity
                 CellType.PowerPlant => "Nhà máy điện",
                 _ => "Ô trống"
             };
+            if (type == CellType.Residential && cell.Level > 0)
+                label += $" · {cell.Level * CitySimulation.ResidentsPerLevel} dân";
             return status switch
             {
                 ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",
@@ -673,6 +676,8 @@ namespace XCity
         private string _lastHudHint;
         private int _lastHudMoney;
         private int _lastHudPopulation;
+        private int _lastHudTax;
+        private int _lastHudNet;
 
         private void RefreshHUD()
         {
@@ -696,13 +701,16 @@ namespace XCity
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
-                if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
-                if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population)
+                if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô\n{hint}";
+                if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population &&
+                    _lastHudTax == _city.LastTaxIncome && _lastHudNet == _city.LastNetIncome)
                     return;
                 _lastHudHint = hint;
                 _lastHudMoney = _city.Money;
                 _lastHudPopulation = _city.Population;
-                _hudStatusText.text = $"XCity  |  Ngân sách: ${_city.Money:N0}  |  Dân số: {_city.Population:N0}  |  {hint}";
+                _lastHudTax = _city.LastTaxIncome;
+                _lastHudNet = _city.LastNetIncome;
+                _hudStatusText.text = $"XCity  |  Ngân sách: ${_city.Money:N0}  |  Dân số: {_city.Population:N0}  |  Thuế: {_city.LastTaxIncome:N0}  |  Ròng: {_city.LastNetIncome:+#,##0;-#,##0;0}\n{hint}";
             }
         }
     }

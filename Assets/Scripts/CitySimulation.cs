@@ -39,6 +39,8 @@ namespace XCity
         public int money;
         public long tick;
         public long randomState;
+        public int lastTaxIncome;
+        public int lastNetIncome;
         public CityCell[] cells;
     }
 
@@ -50,6 +52,8 @@ namespace XCity
         private readonly CityCell[,] _cells = new CityCell[GridSize, GridSize];
         public const int PowerPlantCost = 1000;
         public const int PowerPlantCapacity = 24;
+        public const int ResidentsPerLevel = 12;
+        private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         private const float PowerPlantHeight = 3.2f;
         private readonly bool[,] _powered = new bool[GridSize, GridSize];
@@ -74,6 +78,8 @@ namespace XCity
         public int Money { get; private set; } = 50000;
         public int Population { get; private set; }
         public long TickCount { get; private set; }
+        public int LastTaxIncome { get; private set; }
+        public int LastNetIncome { get; private set; }
         public event Action<int, int> CellChanged;
         public RoadGraph Roads { get; } = new RoadGraph(GridSize);
 
@@ -107,7 +113,7 @@ namespace XCity
             };
             if (type != CellType.Empty && Money < cost) return false;
 
-            if (cell.Type == CellType.Residential) Population -= 12 * cell.Level;
+            if (cell.Type == CellType.Residential) Population -= ResidentsPerLevel * cell.Level;
             cell = type == CellType.PowerPlant
                 ? new CityCell { Type = type, Level = 1, Height = PowerPlantHeight }
                 : new CityCell { Type = type };
@@ -122,6 +128,7 @@ namespace XCity
         {
             int population = 0;
             int netIncome = 0;
+            int taxIncome = 0;
             for (int x = 0; x < GridSize; x++)
             {
                 for (int z = 0; z < GridSize; z++)
@@ -154,13 +161,23 @@ namespace XCity
                         CellChanged?.Invoke(x, z);
                     }
 
-                    if (cell.Type == CellType.Residential) population += 12 * cell.Level;
-                    if (operating) netIncome += 15 * cell.Level;
+                    else if (status == ZoneStatus.Developed && cell.Type == CellType.Residential &&
+                             cell.Level < MaxResidentialLevel && NextRandom() < 0.12f)
+                    {
+                        cell.Level++;
+                        cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
+                        CellChanged?.Invoke(x, z);
+                    }
+
+                    if (cell.Type == CellType.Residential) population += ResidentsPerLevel * cell.Level;
+                    if (operating) taxIncome += 15 * cell.Level;
                 }
             }
 
             Population = population;
-            Money += netIncome;
+            LastTaxIncome = taxIncome;
+            LastNetIncome = taxIncome + netIncome;
+            Money += LastNetIncome;
             TickCount++;
         }
 
@@ -168,10 +185,12 @@ namespace XCity
         {
             var snapshot = new CitySnapshot
             {
-                schemaVersion = 2,
+                schemaVersion = 3,
                 money = Money,
                 tick = TickCount,
                 randomState = _randomState,
+                lastTaxIncome = LastTaxIncome,
+                lastNetIncome = LastNetIncome,
                 cells = new CityCell[GridSize * GridSize]
             };
             for (int x = 0; x < GridSize; x++)
@@ -183,7 +202,7 @@ namespace XCity
         internal static bool TryRestore(CitySnapshot snapshot, out CitySimulation city)
         {
             city = null;
-            if (snapshot == null || (snapshot.schemaVersion != 1 && snapshot.schemaVersion != 2) || snapshot.tick < 0 ||
+            if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > 3) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
                 snapshot.cells == null || snapshot.cells.Length != GridSize * GridSize)
                 return false;
@@ -191,6 +210,8 @@ namespace XCity
             var restored = new CitySimulation((uint)snapshot.randomState)
             {
                 Money = snapshot.money,
+                LastTaxIncome = snapshot.schemaVersion >= 3 ? snapshot.lastTaxIncome : 0,
+                LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
                 TickCount = snapshot.tick
             };
             for (int x = 0; x < GridSize; x++)
@@ -203,7 +224,7 @@ namespace XCity
 
                     restored._cells[x, z] = cell;
                     restored.Roads.SetRoad(x, z, cell.Type == CellType.Road);
-                    if (cell.Type == CellType.Residential) restored.Population += 12 * cell.Level;
+                    if (cell.Type == CellType.Residential) restored.Population += ResidentsPerLevel * cell.Level;
                 }
             }
 
@@ -215,7 +236,8 @@ namespace XCity
         {
             if (cell.Type == CellType.PowerPlant)
                 return version >= 2 && cell.Level == 1 && cell.Height == PowerPlantHeight;
-            if (cell.Type < CellType.Empty || cell.Type > CellType.Industrial || cell.Level < 0 || cell.Level > 1)
+            int maxLevel = version >= 3 && cell.Type == CellType.Residential ? MaxResidentialLevel : 1;
+            if (cell.Type < CellType.Empty || cell.Type > CellType.Industrial || cell.Level < 0 || cell.Level > maxLevel)
                 return false;
             return cell.Level == 0 ? cell.Height == 0f : IsZone(cell.Type) && cell.Height >= 2.2f && cell.Height <= 7.5f;
         }
