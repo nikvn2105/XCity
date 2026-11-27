@@ -99,7 +99,7 @@ namespace XCity
         private void BuildSettingsPanel()
         {
             Font font = Resources.Load<Font>("NotoSans-Regular");
-            _settingsPanel = CreatePanel(_safeAreaRoot, "Settings", new Vector2(0.2f, 0.28f), new Vector2(0.8f, 0.78f),
+            _settingsPanel = CreatePanel(_safeAreaRoot, "Settings", new Vector2(0.2f, 0.14f), new Vector2(0.8f, 0.86f),
                 Vector2.zero, Vector2.zero, new Color(0.06f, 0.08f, 0.12f, 0.96f));
             var layout = _settingsPanel.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(18, 18, 14, 14);
@@ -128,9 +128,11 @@ namespace XCity
             }
 
             _fpsCounterButton = CreateHudButton(_settingsPanel.transform, font, "", "FpsCounter");
+            KeepTall(_fpsCounterButton.transform);
             _fpsCounterButton.onClick.AddListener(() => SetFpsCounter(_fpsText == null || !_fpsText.gameObject.activeSelf));
 
             Button close = CreateHudButton(_settingsPanel.transform, font, "Đóng", "CloseSettings");
+            KeepTall(close.transform);
             close.onClick.AddListener(ToggleSettings);
 
             void AddSettingsLabel(Font labelFont, string label)
@@ -145,6 +147,9 @@ namespace XCity
                 text.text = label;
             }
 
+            // Unity hides a Text that does not fit its rect, so rows keep enough height for the 20pt button labels.
+            void KeepTall(Transform item) => item.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
+
             Transform AddSettingsRow()
             {
                 var row = new GameObject("Row", typeof(RectTransform));
@@ -153,6 +158,7 @@ namespace XCity
                 rowLayout.spacing = 8;
                 rowLayout.childForceExpandWidth = true;
                 rowLayout.childForceExpandHeight = true;
+                KeepTall(row.transform);
                 return row.transform;
             }
         }

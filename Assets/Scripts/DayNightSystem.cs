@@ -12,7 +12,8 @@ namespace XCity
 
     internal sealed class DayNightSystem
     {
-        private const float CycleDurationSeconds = 120f;
+        // A relaxed pace: one full day and night every 10 minutes at 1x speed.
+        private const float CycleDurationSeconds = 600f;
 
         private readonly Light _sun;
         private readonly Camera _cam;
