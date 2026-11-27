@@ -330,33 +330,66 @@ namespace XCity
         }
 
         // Demolition never pushes the treasury below zero, so a broke city can still clear costly buildings.
-        private int AffordableDemolition(int tiles) => Math.Min(DemolishCost * tiles, Math.Max(0, Money));
+        private int AffordableDemolition(int tiles, int? budget = null) =>
+            Math.Min(DemolishCost * tiles, Math.Max(0, budget ?? Money));
+
+        // Placement quotes exclude affordability. Demolition charges at most the remaining cash.
+        internal bool TryQuoteCell(int x, int z, CellType type, BuildingModel model, out int cost,
+            out int bridgeGroup, int? budget = null)
+        {
+            cost = 0;
+            bridgeGroup = -1;
+            if (IsBankrupt || !IsInBounds(x, z) || type < CellType.Empty || type > CellType.CivicService)
+                return false;
+
+            CityCell cell = _cells[x, z];
+            if (cell.IsBridge)
+            {
+                if (type != CellType.Empty) return false;
+                RoadConnections axis = cell.BridgeAxis;
+                int dx = axis == BridgeAlongX ? 1 : 0;
+                int dz = axis == BridgeAlongZ ? 1 : 0;
+                while (IsInBounds(x - dx, z - dz) && _cells[x - dx, z - dz].BridgeAxis == axis)
+                {
+                    x -= dx;
+                    z -= dz;
+                }
+
+                bridgeGroup = CellIndex(x, z);
+                int count = 1;
+                while (IsInBounds(x + dx * count, z + dz * count) &&
+                    _cells[x + dx * count, z + dz * count].BridgeAxis == axis)
+                    count++;
+                cost = AffordableDemolition(count, budget);
+                return true;
+            }
+
+            if (!IsBuildable(x, z) || (BuildingCatalog.NeedsShore(model) && !CanPlaceHarbor(x, z))) return false;
+            var option = BuildingCatalog.Get(model);
+            if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
+                return false;
+            if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation) return false;
+            if (cell.Type == type && cell.Model == model) return false;
+
+            cost = type switch
+            {
+                CellType.Road => RoadCost,
+                CellType.Empty => AffordableDemolition(1, budget),
+                CellType.PowerPlant => PowerPlantCost,
+                _ => model == BuildingModel.Default ? ZoneCost : option.Cost
+            };
+            return true;
+        }
 
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
             List<(int X, int Z, CityCell Cell)> changed)
         {
-            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.CivicService) return false;
-            if (_cells[x, z].IsBridge)
-                return type == CellType.Empty && RemoveBridge(x, z, changed);
-            if (!IsBuildable(x, z)) return false;
-            if (BuildingCatalog.NeedsShore(model) && !CanPlaceHarbor(x, z)) return false;
-            var option = BuildingCatalog.Get(model);
-            if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
-                return false;
-            if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation)
-                return false;
-            ref CityCell cell = ref _cells[x, z];
-            if (cell.Type == type && cell.Model == model) return false;
-
-            int cost = type switch
-            {
-                CellType.Road => RoadCost,
-                CellType.Empty => AffordableDemolition(1),
-                CellType.PowerPlant => PowerPlantCost,
-                _ => model == BuildingModel.Default ? ZoneCost : option.Cost
-            };
+            if (!TryQuoteCell(x, z, type, model, out int cost, out int bridgeGroup)) return false;
+            if (bridgeGroup >= 0) return RemoveBridge(x, z, changed);
             if (cost > 0 && Money < cost) return false;
 
+            var option = BuildingCatalog.Get(model);
+            ref CityCell cell = ref _cells[x, z];
             CityCell previous = cell;
             changed.Add((x, z, previous));
             if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);

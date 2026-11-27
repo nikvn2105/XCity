@@ -56,6 +56,42 @@ namespace XCity.Tests
         }
 
         [Fact]
+        public void BuildQuote_MatchesPlacementAndBridgeDemolitionWithoutChangingTheCity()
+        {
+            var city = new CitySimulation();
+            var (x, z) = FindLandPlot();
+            var (waterX, waterZ) = FindWater();
+            int before = city.Money;
+
+            Assert.True(city.TryQuoteCell(x, z, CellType.Residential, BuildingModel.Default, out int quote, out _));
+            Assert.Equal(CitySimulation.ZoneCost, quote);
+            Assert.True(city.TryQuoteCell(x, z, CellType.Residential, BuildingModel.RowHouse, out int modelCost, out _));
+            Assert.Equal(BuildingCatalog.Get(BuildingModel.RowHouse).Cost, modelCost);
+            Assert.False(city.TryQuoteCell(x, z, CellType.School, BuildingModel.University, out _, out _));
+            Assert.Equal(before, city.Money);
+            Assert.Equal(CellType.Empty, city.GetCell(x, z).Type);
+            Assert.True(city.TrySetCell(x, z, CellType.Residential));
+            Assert.Equal(quote, before - city.Money);
+            Assert.False(city.TryQuoteCell(x, z, CellType.Residential, BuildingModel.Default, out _, out _));
+            Assert.False(city.TryQuoteCell(waterX, waterZ, CellType.Residential, BuildingModel.Default, out _, out _));
+
+            var (startX, endX, bridgeZ) = FindBridgeSpan();
+            Assert.True(city.TryBuildBridge(startX, bridgeZ, endX, bridgeZ));
+            Assert.True(city.TryQuoteCell(startX + 1, bridgeZ, CellType.Empty, BuildingModel.Default,
+                out int bridgeCost, out int firstGroup));
+            Assert.True(city.TryQuoteCell(endX - 1, bridgeZ, CellType.Empty, BuildingModel.Default,
+                out int otherCost, out int lastGroup));
+            Assert.Equal(firstGroup, lastGroup);
+            Assert.Equal(bridgeCost, otherCost);
+            Assert.True(city.TryQuoteCell(startX + 1, bridgeZ, CellType.Empty, BuildingModel.Default,
+                out int cappedCost, out _, budget: 5));
+            Assert.Equal(5, cappedCost);
+            before = city.Money;
+            Assert.True(city.TrySetCell(startX + 1, bridgeZ, CellType.Empty));
+            Assert.Equal(bridgeCost, before - city.Money);
+        }
+
+        [Fact]
         public void Undo_RemainsAvailableAfterSimulationTicks()
         {
             var city = new CitySimulation();
