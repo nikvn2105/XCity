@@ -1,0 +1,54 @@
+# Packages the unsigned IPA on a Codemagic Mac from the Xcode project that the GitHub
+# "Build XCity iOS (.ipa)" workflow already built on Linux (artifact XCity-XcodeProject).
+# Needs a "github" variable group with GITHUB_TOKEN: fine-grained, this repo only, Actions: read.
+workflows:
+  ios-unsigned-ipa:
+    name: XCity unsigned IPA (from GitHub Xcode project)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: 16.4
+      groups:
+        - github
+    scripts:
+      - name: Download latest Xcode project artifact
+        script: |
+          set -euo pipefail
+          api="https://api.github.com/repos/nikvn2105/XCity/actions/artifacts?name=XCity-XcodeProject&per_page=20"
+          url=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "$api" |
+            python3 -c 'import json,sys; a=[x for x in json.load(sys.stdin)["artifacts"] if not x["expired"]]; print(a[0]["archive_download_url"] if a else "")')
+          if [ -z "$url" ]; then echo "No unexpired XCity-XcodeProject artifact on GitHub"; exit 1; fi
+          mkdir -p ios-build
+          curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o ios-build/project.zip "$url"
+          unzip -q ios-build/project.zip -d ios-build
+          tar -xf ios-build/XCity-XcodeProject.tar -C ios-build
+      # ProMotion iPhones cap apps at 60 Hz unless Info.plist opts in; the in-game 120 FPS option needs this.
+      - name: Allow 120 Hz on ProMotion iPhones
+        script: |
+          plist=ios-build/XCity/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CADisableMinimumFrameDurationOnPhone bool true" "$plist" ||
+            /usr/libexec/PlistBuddy -c "Set :CADisableMinimumFrameDurationOnPhone true" "$plist"
+      - name: Build unsigned .app
+        script: |
+          set -euo pipefail
+          xcodebuild -version
+          cd ios-build/XCity
+          xcodebuild -project Unity-iPhone.xcodeproj -scheme Unity-iPhone -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' ARCHS=arm64 \
+            -derivedDataPath "$CM_BUILD_DIR/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" build
+      - name: Verify and package unsigned IPA
+        script: |
+          set -euo pipefail
+          shopt -s nullglob
+          apps=("$CM_BUILD_DIR"/DerivedData/Build/Products/Release-iphoneos/*.app)
+          [ ${#apps[@]} -eq 1 ] || { echo "Expected exactly one Release-iphoneos app"; exit 1; }
+          app="${apps[0]}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = com.nikstudiovn.xcity
+          lipo "$app/Frameworks/UnityFramework.framework/UnityFramework" -verify_arch arm64
+          mkdir -p ipa-out/Payload
+          ditto "$app" "ipa-out/Payload/$(basename "$app")"
+          ditto -c -k --keepParent ipa-out/Payload XCity-unsigned.ipa
+          unzip -tq XCity-unsigned.ipa
+    artifacts:
+      - XCity-unsigned.ipa
