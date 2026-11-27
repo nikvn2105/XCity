@@ -49,6 +49,19 @@ namespace XCity
 
         public bool ShowEffects { get; private set; } = true;
 
+        private float _detailScale = 1f;
+
+        /// <summary>Stretches the full-detail range (distance and camera altitude); set per graphics level.</summary>
+        public float DetailScale
+        {
+            get => _detailScale;
+            set
+            {
+                _detailScale = value;
+                _hasPendingChanges = true;
+            }
+        }
+
         public void Refresh(Camera camera, int budget)
         {
             Vector3 eye = camera.transform.position;
@@ -70,7 +83,7 @@ namespace XCity
             _buildings.SetCameraPosition(eye);
 
             GeometryUtility.CalculateFrustumPlanes(camera, _frustum);
-            ShowEffects = eye.y < (ShowEffects ? FullExitAltitude : FullEnterAltitude);
+            ShowEffects = eye.y < (ShowEffects ? FullExitAltitude : FullEnterAltitude) * _detailScale;
             _allowOverview = eye.y < (_allowOverview ? OverviewExitAltitude : OverviewEnterAltitude);
             _changes.Clear();
 
@@ -99,7 +112,7 @@ namespace XCity
                     if (bufferedBounds.SqrDistance(eye) <= viewDistanceSq &&
                         GeometryUtility.TestPlanesAABB(_frustum, bufferedBounds))
                     {
-                        float fullDist = current == ChunkDetail.Full ? FullExitDistance : FullEnterDistance;
+                        float fullDist = (current == ChunkDetail.Full ? FullExitDistance : FullEnterDistance) * _detailScale;
                         float overviewDist = current == ChunkDetail.Overview || current == ChunkDetail.Full
                             ? OverviewExitDistance : OverviewEnterDistance;
                         float distSq = bounds.SqrDistance(eye);

@@ -46,13 +46,15 @@ namespace XCity
             Application.targetFrameRate = _frameRate;
             QualitySettings.vSyncCount = 0;
 
-            var (shadows, resolution, distance, cascades, msaa, renderScale) = _graphicsLevel switch
+            // Retuned after an iPhone 14 Pro Max held 120 FPS at the old Ultra: High and Ultra now spend that headroom.
+            var (shadows, resolution, distance, cascades, msaa, renderScale, detail) = _graphicsLevel switch
             {
-                0 => (LightShadows.None, ShadowResolution.Low, 0f, 1, 0, 0.6f),
-                1 => (LightShadows.Hard, ShadowResolution.Low, 80f, 1, 0, 0.75f),
-                2 => (LightShadows.Soft, ShadowResolution.Medium, 150f, 2, 2, 0.9f),
-                _ => (LightShadows.Soft, ShadowResolution.High, 250f, 4, 4, 1f)
+                0 => (LightShadows.None, ShadowResolution.Low, 0f, 1, 0, 0.6f, 1f),
+                1 => (LightShadows.Soft, ShadowResolution.Low, 100f, 2, 0, 0.8f, 1f),
+                2 => (LightShadows.Soft, ShadowResolution.High, 220f, 2, 4, 1f, 1.25f),
+                _ => (LightShadows.Soft, ShadowResolution.VeryHigh, 400f, 4, 4, 1f, 1.6f)
             };
+            if (_chunkScheduler != null) _chunkScheduler.DetailScale = detail;
             if (_sunLight != null) _sunLight.shadows = shadows;
             QualitySettings.shadows = shadows == LightShadows.None ? ShadowQuality.Disable : ShadowQuality.All;
             QualitySettings.shadowResolution = resolution;
