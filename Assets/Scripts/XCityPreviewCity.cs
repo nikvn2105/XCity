@@ -6,7 +6,7 @@ namespace XCity
     {
         public static CitySimulation Create()
         {
-            const int size = CitySimulation.GridSize;
+            const int size = CitySimulation.LegacySize;
             var cells = new CityCell[size * size];
 
             BuildingModel[,] displayBlock =
@@ -125,7 +125,7 @@ namespace XCity
 
             var snapshot = new CitySnapshot
             {
-                schemaVersion = CitySimulation.CurrentSchemaVersion,
+                schemaVersion = 5,
                 money = 50000,
                 tick = 0,
                 randomState = 12345,

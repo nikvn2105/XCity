@@ -27,10 +27,16 @@ namespace XCity
 
             Shader.SetGlobalFloat("_XCityTime", 12.5f);
             _construction?.SeedPreviewSites();
+            var previewCenter = Vector3.one * ((CitySimulation.LegacyOffset + 16) * CellSize);
+            _camTarget = new Vector3(previewCenter.x, 0f, previewCenter.z);
+            UpdateCameraTransform();
+            RefreshSceneDetail(int.MaxValue);
             _industrialSmoke?.Prewarm(15f);
-            _construction?.Update(0.05f);
+            _construction?.Update(0.05f, true, LocalView);
             _vehicles?.Prewarm(20f);
             _citizens?.Prewarm(18f);
+            RefreshWorldMap();
+            File.WriteAllBytes(Path.Combine(_previewOutput, "world-map.png"), _worldMapTexture.EncodeToPNG());
 
             var shots = new (string Name, Vector3 Target, float Distance, float Pitch, float Yaw)[]
             {
@@ -41,7 +47,8 @@ namespace XCity
                 ("commercial", new Vector3(85f, 0.6f, 48f), 34f, 48f, 210f),
                 ("public-services", new Vector3(109f, 0.6f, 49f), 40f, 52f, 155f),
                 ("industry", new Vector3(34f, 0f, 94f), 25f, 36f, 135f),
-                ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f)
+                ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f),
+                ("coast", new Vector3(742f, 0f, 250f), 145f, 57f, 30f)
             };
 
             const int width = 1280;
@@ -57,7 +64,8 @@ namespace XCity
                 for (int i = 0; i < shots.Length; i++)
                 {
                     var shot = shots[i];
-                    _camTarget = shot.Target;
+                    float offset = CitySimulation.LegacyOffset * CellSize;
+                    _camTarget = shot.Target + new Vector3(offset, 0f, offset);
                     _camDistance = shot.Distance;
                     _camPitch = shot.Pitch;
                     _camYaw = shot.Yaw;

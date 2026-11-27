@@ -126,6 +126,15 @@ namespace XCity
 
         public void Prewarm(float seconds) => Update(seconds);
 
+        private WorldView _view;
+
+        public void SetView(WorldView view)
+        {
+            if (_view.SameAnchor(view)) return;
+            _view = view;
+            _emittersDirty = true;
+        }
+
         public void SetVisible(bool visible)
         {
             if (_go.activeSelf != visible) _go.SetActive(visible);
@@ -247,9 +256,9 @@ namespace XCity
         private void RebuildEmitters()
         {
             _emitters.Clear();
-            for (int x = 0; x < CitySimulation.GridSize; x++)
+            for (int x = _view.MinX; x <= _view.MaxX; x++)
             {
-                for (int z = 0; z < CitySimulation.GridSize; z++)
+                for (int z = _view.MinZ; z <= _view.MaxZ; z++)
                 {
                     if (_construction != null && _construction.IsSiteActive(x, z)) continue;
                     CityCell cell = _city.GetCell(x, z);

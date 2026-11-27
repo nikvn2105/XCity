@@ -87,18 +87,17 @@ namespace XCity
             if (tick == _lastSyncedTick) return;
             _lastSyncedTick = tick;
 
-            for (int x = 0; x < CitySimulation.GridSize; x++)
+            foreach (int index in _city.OccupiedIndices)
             {
-                for (int z = 0; z < CitySimulation.GridSize; z++)
-                {
-                    if (_details[x / ChunkSize, z / ChunkSize] != ChunkDetail.Full ||
-                        _isUnderConstruction != null && _isUnderConstruction(x, z)) continue;
-                    CityCell cell = _city.GetCell(x, z);
-                    bool waiting = IsZone(cell.Type) && cell.Level == 0 &&
-                                   _city.GetZoneStatus(x, z) == ZoneStatus.WaitingForDevelopment;
-                    if (waiting != _waitingRendered[x, z])
-                        AddChunk(x, z);
-                }
+                int x = index / CitySimulation.GridSize;
+                int z = index % CitySimulation.GridSize;
+                if (_details[x / ChunkSize, z / ChunkSize] != ChunkDetail.Full ||
+                    _isUnderConstruction != null && _isUnderConstruction(x, z)) continue;
+
+                CityCell cell = _city.GetCell(x, z);
+                bool waiting = IsZone(cell.Type) && cell.Level == 0 &&
+                               _city.GetZoneStatus(x, z) == ZoneStatus.WaitingForDevelopment;
+                if (waiting != _waitingRendered[x, z]) AddChunk(x, z);
             }
         }
 

@@ -18,9 +18,11 @@ namespace XCity
         private const float FullExitAltitude = 57f;
         private const float FullEnterDistance = 54f;
         private const float FullExitDistance = 64f;
+        private const float ViewDistance = 278f;
 
         private readonly Plane[] _frustum = new Plane[6];
         private readonly ChunkDetail[,] _loaded = new ChunkDetail[Count, Count];
+        private readonly HashSet<Vector2Int> _active = new HashSet<Vector2Int>();
         private readonly List<(int X, int Z, ChunkDetail Detail, float Priority)> _changes =
             new List<(int X, int Z, ChunkDetail Detail, float Priority)>();
         private readonly CityChunkRenderer _terrain;
@@ -42,9 +44,19 @@ namespace XCity
             Vector3 eye = camera.transform.position;
             ShowEffects = eye.y < (ShowEffects ? FullExitAltitude : FullEnterAltitude);
             _changes.Clear();
-            for (int x = 0; x < Count; x++)
+            int minX = Mathf.Clamp(Mathf.FloorToInt((eye.x - ViewDistance) / _chunkSpan), 0, Count - 1);
+            int minZ = Mathf.Clamp(Mathf.FloorToInt((eye.z - ViewDistance) / _chunkSpan), 0, Count - 1);
+            int maxX = Mathf.Clamp(Mathf.FloorToInt((eye.x + ViewDistance) / _chunkSpan), 0, Count - 1);
+            int maxZ = Mathf.Clamp(Mathf.FloorToInt((eye.z + ViewDistance) / _chunkSpan), 0, Count - 1);
+            foreach (Vector2Int chunk in _active)
             {
-                for (int z = 0; z < Count; z++)
+                if (chunk.x < minX || chunk.x > maxX || chunk.y < minZ || chunk.y > maxZ)
+                    _changes.Add((chunk.x, chunk.y, ChunkDetail.Hidden, -200000f));
+            }
+
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int z = minZ; z <= maxZ; z++)
                 {
                     var center = new Vector3((x + 0.5f) * _chunkSpan, 4f, (z + 0.5f) * _chunkSpan);
                     var bounds = new Bounds(center, new Vector3(_chunkSpan, 12f, _chunkSpan));
@@ -53,7 +65,8 @@ namespace XCity
                     ChunkDetail current = _loaded[x, z];
                     ChunkDetail desired = ChunkDetail.Hidden;
 
-                    if (GeometryUtility.TestPlanesAABB(_frustum, bufferedBounds))
+                    if (bufferedBounds.SqrDistance(eye) <= ViewDistance * ViewDistance &&
+                        GeometryUtility.TestPlanesAABB(_frustum, bufferedBounds))
                     {
                         float distance = current == ChunkDetail.Full ? FullExitDistance : FullEnterDistance;
                         desired = ShowEffects && bounds.SqrDistance(eye) < distance * distance
@@ -76,6 +89,9 @@ namespace XCity
                 _terrain.SetDetail(change.X, change.Z, change.Detail);
                 _buildings.SetDetail(change.X, change.Z, change.Detail);
                 _loaded[change.X, change.Z] = change.Detail;
+                var position = new Vector2Int(change.X, change.Z);
+                if (change.Detail == ChunkDetail.Hidden) _active.Remove(position);
+                else _active.Add(position);
             }
         }
 
@@ -83,8 +99,9 @@ namespace XCity
         {
             int full = 0;
             int overview = 0;
-            foreach (ChunkDetail detail in _loaded)
+            foreach (Vector2Int chunk in _active)
             {
+                ChunkDetail detail = _loaded[chunk.x, chunk.y];
                 if (detail == ChunkDetail.Full) full++;
                 if (detail == ChunkDetail.Overview) overview++;
             }

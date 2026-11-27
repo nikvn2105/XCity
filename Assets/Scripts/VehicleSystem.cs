@@ -112,6 +112,22 @@ namespace XCity
                 Update(step);
         }
 
+        private WorldView _view;
+
+        public void SetView(WorldView view)
+        {
+            if (_view.SameAnchor(view)) return;
+            _view = view;
+            _recountTimer = RecountInterval;
+            for (int i = _vehicles.Count - 1; i >= 0; i--)
+            {
+                var cell = _vehicles[i].Cell;
+                if (view.Contains(cell.x, cell.y)) continue;
+                _vehicles.RemoveAt(i);
+                _topologyDirty = true;
+            }
+        }
+
         public void SetVisible(bool visible)
         {
             if (_go.activeSelf != visible) _go.SetActive(visible);
@@ -195,7 +211,7 @@ namespace XCity
                     v.InDir = v.OutDir;
                     v.T -= 1f;
 
-                    if (!IsRoad(v.Cell.x, v.Cell.y))
+                    if (!_view.Contains(v.Cell.x, v.Cell.y) || !IsRoad(v.Cell.x, v.Cell.y))
                     {
                         _vehicles.RemoveAt(i);
                         _topologyDirty = true;
@@ -221,9 +237,9 @@ namespace XCity
             _candidates.Clear();
             int developed = 0;
 
-            for (int x = 0; x < CitySimulation.GridSize; x++)
+            for (int x = _view.MinX; x <= _view.MaxX; x++)
             {
-                for (int z = 0; z < CitySimulation.GridSize; z++)
+                for (int z = _view.MinZ; z <= _view.MaxZ; z++)
                 {
                     CityCell cell = _city.GetCell(x, z);
                     if (cell.Type == CellType.Road)
@@ -291,7 +307,7 @@ namespace XCity
             for (int i = _vehicles.Count - 1; i >= 0; i--)
             {
                 Vehicle v = _vehicles[i];
-                if (!IsRoad(v.Cell.x, v.Cell.y))
+                if (!_view.Contains(v.Cell.x, v.Cell.y) || !IsRoad(v.Cell.x, v.Cell.y))
                 {
                     _vehicles.RemoveAt(i);
                     _topologyDirty = true;

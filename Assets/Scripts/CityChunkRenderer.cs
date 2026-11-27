@@ -132,6 +132,8 @@ namespace XCity
                     var center = new Vector3((x - startX + 0.5f) * _cellSize, 0, (z - startZ + 0.5f) * _cellSize);
                     _surface.SetFrame(center, 0);
                     _props.SetFrame(center, 0);
+                    if (!WorldTerrain.IsLand(x, z)) continue;
+                    AddCoast(x, z);
                     if (cell.Type == CellType.Road)
                     {
                         if (full) AddStreet(center, x, z);
@@ -163,6 +165,29 @@ namespace XCity
                 renderer.shadowCastingMode = shadows;
             }
             builder.ApplyTo(mesh);
+        }
+
+        private void AddCoast(int x, int z)
+        {
+            if (WorldTerrain.LandHeight(x, z) > 0.13f) return;
+            float edge = _cellSize * 0.5f;
+            const float waterline = -1.08f;
+            var sand = new Color32(164, 153, 119, 255);
+            var shore = new Color32(122, 134, 106, 255);
+            if (!WorldTerrain.IsLand(x + 1, z)) Cliff(edge, -edge, edge, edge, Vector3.right);
+            if (!WorldTerrain.IsLand(x - 1, z)) Cliff(-edge, edge, -edge, -edge, Vector3.left);
+            if (!WorldTerrain.IsLand(x, z + 1)) Cliff(edge, edge, -edge, edge, Vector3.forward);
+            if (!WorldTerrain.IsLand(x, z - 1)) Cliff(-edge, -edge, edge, -edge, Vector3.back);
+
+            void Cliff(float x0, float z0, float x1, float z1, Vector3 normal)
+            {
+                _surface.AddQuad(new Vector3(x0, waterline, z0), new Vector3(x1, waterline, z1),
+                    new Vector3(x1, 0.007f, z1), new Vector3(x0, 0.007f, z0), normal, shore);
+                Vector3 outside = normal * (_cellSize * 0.18f);
+                var a = new Vector3(x0, -0.97f, z0);
+                var b = new Vector3(x1, -0.97f, z1);
+                _surface.AddQuad(a, b, b + outside, a + outside, Vector3.up, sand);
+            }
         }
 
         private void AddOverviewStreet(Vector3 center, int x, int z)
@@ -267,7 +292,7 @@ namespace XCity
         private void AddLot(CellType type, int x, int z, bool full)
         {
             float half = _cellSize * 0.5f;
-            float grass = Mathf.PerlinNoise(x * 0.15f + 12f, z * 0.15f + 22f);
+            float grass = WorldTerrain.Vegetation(x, z);
             Rect(_surface, -half, -half, half, half, 0.007f, Color32.Lerp(GrassDark, GrassLight, grass));
 
             if (type != CellType.Empty)
@@ -290,7 +315,7 @@ namespace XCity
             if (!full) return;
 
             uint seed = BuildingMeshFactory.Hash(x, z, 921);
-            float grove = Mathf.PerlinNoise(x * 0.18f + 42f, z * 0.18f + 52f);
+            float grove = WorldTerrain.Vegetation(x, z);
             float threshold = _city.Roads.HasRoadAccess(x, z) ? 0.53f : 0.39f;
             if (grove > threshold && seed % 5u < 3u)
             {

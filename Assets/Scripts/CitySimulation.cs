@@ -116,22 +116,26 @@ namespace XCity
         public int lastTaxIncome;
         public int lastNetIncome;
         public CityCell[] cells;
+        public int[] cellIndices;
     }
 
     public sealed class CitySimulation
     {
-        public const int GridSize = 32;
+        internal const int LegacySize = 32;
+        public const int GridSize = 512;
+        internal const int LegacyOffset = (GridSize - LegacySize) / 2;
         public const int RoadCost = 100;
         public const int ZoneCost = 50;
         private readonly CityCell[,] _cells = new CityCell[GridSize, GridSize];
+        private readonly SortedSet<int> _occupied = new SortedSet<int>();
         public const int PowerPlantCost = 1000;
         public const int PowerPlantCapacity = 24;
         public const int ResidentsPerLevel = 12;
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 5;
-        private readonly bool[,] _powered = new bool[GridSize, GridSize];
+        internal const int CurrentSchemaVersion = 6;
+        private readonly HashSet<int> _powered = new HashSet<int>();
         private bool _powerDirty = true;
         private int _unpoweredZones;
         private uint _randomState;
@@ -163,6 +167,20 @@ namespace XCity
         public event Action<int, int> CellChanged;
         public RoadGraph Roads { get; } = new RoadGraph(GridSize);
 
+        internal IEnumerable<int> OccupiedIndices => _occupied;
+
+        internal static int CellIndex(int x, int z) => x * GridSize + z;
+
+        internal static bool IsBuildable(int x, int z) => IsInBounds(x, z) && WorldTerrain.IsLand(x, z);
+
+        private void TrackCell(int x, int z, CellType type)
+        {
+            int index = CellIndex(x, z);
+            if (type == CellType.Empty) _occupied.Remove(index);
+            else _occupied.Add(index);
+            Roads.SetRoad(x, z, type == CellType.Road);
+        }
+
         public CityCell GetCell(int x, int z) => _cells[x, z];
 
         public ZoneStatus GetZoneStatus(int x, int z)
@@ -173,7 +191,7 @@ namespace XCity
             if (!Roads.HasRoadAccess(x, z))
                 return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
             RefreshPower();
-            if (!_powered[x, z])
+            if (!_powered.Contains(CellIndex(x, z)))
                 return cell.Level == 0 ? ZoneStatus.NeedsPower : ZoneStatus.DevelopedWithoutPower;
             return cell.Level == 0 ? ZoneStatus.WaitingForDevelopment : ZoneStatus.Developed;
         }
@@ -205,7 +223,7 @@ namespace XCity
             foreach (var entry in cells)
             {
                 _cells[entry.X, entry.Z] = entry.Cell;
-                Roads.SetRoad(entry.X, entry.Z, entry.Cell.Type == CellType.Road);
+                TrackCell(entry.X, entry.Z, entry.Cell.Type);
             }
 
             Money = _undoMoney;
@@ -219,7 +237,7 @@ namespace XCity
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
             List<(int X, int Z, CityCell Cell)> changed)
         {
-            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.CivicService) return false;
+            if (!IsBuildable(x, z) || type < CellType.Empty || type > CellType.CivicService) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;
@@ -246,7 +264,7 @@ namespace XCity
             };
             _powerDirty = true;
             Money -= cost;
-            Roads.SetRoad(x, z, type == CellType.Road);
+            TrackCell(x, z, type);
             CellChanged?.Invoke(x, z);
             return true;
         }
@@ -257,57 +275,55 @@ namespace XCity
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
-            for (int x = 0; x < GridSize; x++)
+            foreach (int index in _occupied)
             {
-                for (int z = 0; z < GridSize; z++)
+                int x = index / GridSize;
+                int z = index % GridSize;
+                ref CityCell cell = ref _cells[x, z];
+                if (cell.Type == CellType.Road)
                 {
-                    ref CityCell cell = ref _cells[x, z];
-                    if (cell.Type == CellType.Empty) continue;
-                    if (cell.Type == CellType.Road)
-                    {
-                        netIncome -= 2;
-                        continue;
-                    }
-
-                    if (cell.Type == CellType.PowerPlant)
-                    {
-                        netIncome -= PowerPlantUpkeep;
-                        continue;
-                    }
-
-                    if (BuildingCatalog.IsPublicService(cell.Type))
-                    {
-                        netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
-                        continue;
-                    }
-
-                    ZoneStatus status = GetZoneStatus(x, z);
-                    bool operating = status == ZoneStatus.Developed || status == ZoneStatus.WaitingForDevelopment;
-                    if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < 0.35f)
-                    {
-                        cell.Level = 1;
-                        cell.Height = cell.Model != BuildingModel.Default
-                            ? BuildingCatalog.Get(cell.Model).Height : cell.Type switch
-                        {
-                            CellType.Residential => 2.4f + NextRandom() * 2.1f,
-                            CellType.Commercial => 4f + NextRandom() * 3.5f,
-                            _ => 2.2f + NextRandom() * 1.6f
-                        };
-                        CellChanged?.Invoke(x, z);
-                    }
-
-                    else if (status == ZoneStatus.Developed && cell.Type == CellType.Residential &&
-                             cell.Level < MaxResidentialLevel && NextRandom() < 0.12f)
-                    {
-                        cell.Level++;
-                        cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
-                        CellChanged?.Invoke(x, z);
-                    }
-
-                    if (cell.Type == CellType.Residential) population += BuildingCatalog.Residents(cell);
-                    if (operating)
-                        taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 : 15 * cell.Level;
+                    netIncome -= 2;
+                    continue;
                 }
+
+                if (cell.Type == CellType.PowerPlant)
+                {
+                    netIncome -= PowerPlantUpkeep;
+                    continue;
+                }
+
+                if (BuildingCatalog.IsPublicService(cell.Type))
+                {
+                    netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
+                    continue;
+                }
+
+                ZoneStatus status = GetZoneStatus(x, z);
+                bool operating = status == ZoneStatus.Developed || status == ZoneStatus.WaitingForDevelopment;
+                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < 0.35f)
+                {
+                    cell.Level = 1;
+                    cell.Height = cell.Model != BuildingModel.Default
+                        ? BuildingCatalog.Get(cell.Model).Height : cell.Type switch
+                    {
+                        CellType.Residential => 2.4f + NextRandom() * 2.1f,
+                        CellType.Commercial => 4f + NextRandom() * 3.5f,
+                        _ => 2.2f + NextRandom() * 1.6f
+                    };
+                    CellChanged?.Invoke(x, z);
+                }
+
+                else if (status == ZoneStatus.Developed && cell.Type == CellType.Residential &&
+                         cell.Level < MaxResidentialLevel && NextRandom() < 0.12f)
+                {
+                    cell.Level++;
+                    cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
+                    CellChanged?.Invoke(x, z);
+                }
+
+                if (cell.Type == CellType.Residential) population += BuildingCatalog.Residents(cell);
+                if (operating)
+                    taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 : 15 * cell.Level;
             }
 
             Population = population;
@@ -327,11 +343,15 @@ namespace XCity
                 randomState = _randomState,
                 lastTaxIncome = LastTaxIncome,
                 lastNetIncome = LastNetIncome,
-                cells = new CityCell[GridSize * GridSize]
+                cells = new CityCell[_occupied.Count],
+                cellIndices = new int[_occupied.Count]
             };
-            for (int x = 0; x < GridSize; x++)
-                for (int z = 0; z < GridSize; z++)
-                    snapshot.cells[x * GridSize + z] = _cells[x, z];
+            int offset = 0;
+            foreach (int index in _occupied)
+            {
+                snapshot.cellIndices[offset] = index;
+                snapshot.cells[offset++] = _cells[index / GridSize, index % GridSize];
+            }
             return snapshot;
         }
 
@@ -340,8 +360,13 @@ namespace XCity
             city = null;
             if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > CurrentSchemaVersion) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
-                snapshot.cells == null || snapshot.cells.Length != GridSize * GridSize)
+                snapshot.cells == null)
                 return false;
+
+            bool legacy = snapshot.schemaVersion < 6;
+            if (legacy ? snapshot.cells.Length != LegacySize * LegacySize :
+                snapshot.cellIndices == null || snapshot.cells.Length != snapshot.cellIndices.Length ||
+                snapshot.cells.Length > GridSize * GridSize) return false;
 
             var restored = new CitySimulation((uint)snapshot.randomState)
             {
@@ -350,18 +375,23 @@ namespace XCity
                 LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
                 TickCount = snapshot.tick
             };
-            for (int x = 0; x < GridSize; x++)
+            int previous = -1;
+            for (int i = 0; i < snapshot.cells.Length; i++)
             {
-                for (int z = 0; z < GridSize; z++)
-                {
-                    CityCell cell = snapshot.cells[x * GridSize + z];
-                    if (!IsValidSavedCell(cell, snapshot.schemaVersion))
-                        return false;
-
-                    restored._cells[x, z] = cell;
-                    restored.Roads.SetRoad(x, z, cell.Type == CellType.Road);
-                    if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
-                }
+                CityCell cell = snapshot.cells[i];
+                if (!IsValidSavedCell(cell, snapshot.schemaVersion)) return false;
+                int index = legacy ? CellIndex(i / LegacySize + LegacyOffset, i % LegacySize + LegacyOffset) :
+                    snapshot.cellIndices[i];
+                if (index <= previous || index >= GridSize * GridSize || (!legacy && cell.Type == CellType.Empty))
+                    return false;
+                previous = index;
+                if (cell.Type == CellType.Empty) continue;
+                int x = index / GridSize;
+                int z = index % GridSize;
+                if (!IsBuildable(x, z)) return false;
+                restored._cells[x, z] = cell;
+                restored.TrackCell(x, z, cell.Type);
+                if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
             }
 
             city = restored;
@@ -391,70 +421,64 @@ namespace XCity
         {
             if (!_powerDirty) return;
 
-            var components = new int[GridSize, GridSize];
+            var components = new Dictionary<int, int>();
             var pending = new Queue<int>();
             int component = 0;
-            for (int x = 0; x < GridSize; x++)
+            foreach (int index in _occupied)
             {
-                for (int z = 0; z < GridSize; z++)
+                int x = index / GridSize;
+                int z = index % GridSize;
+                if (_cells[x, z].Type != CellType.Road || components.ContainsKey(index)) continue;
+                component++;
+                Visit(index);
+                while (pending.Count > 0)
                 {
-                    if (_cells[x, z].Type != CellType.Road || components[x, z] != 0) continue;
-                    component++;
-                    Visit(x, z);
-                    while (pending.Count > 0)
-                    {
-                        int index = pending.Dequeue();
-                        int rx = index / GridSize;
-                        int rz = index % GridSize;
-                        RoadConnections edges = Roads.GetConnections(rx, rz);
-                        if ((edges & RoadConnections.West) != 0) Visit(rx - 1, rz);
-                        if ((edges & RoadConnections.East) != 0) Visit(rx + 1, rz);
-                        if ((edges & RoadConnections.South) != 0) Visit(rx, rz - 1);
-                        if ((edges & RoadConnections.North) != 0) Visit(rx, rz + 1);
-                    }
+                    int road = pending.Dequeue();
+                    RoadConnections edges = Roads.GetConnections(road / GridSize, road % GridSize);
+                    if ((edges & RoadConnections.West) != 0) Visit(road - GridSize);
+                    if ((edges & RoadConnections.East) != 0) Visit(road + GridSize);
+                    if ((edges & RoadConnections.South) != 0) Visit(road - 1);
+                    if ((edges & RoadConnections.North) != 0) Visit(road + 1);
                 }
             }
 
             var capacity = new int[component + 1];
-            for (int x = 0; x < GridSize; x++)
-                for (int z = 0; z < GridSize; z++)
-                    if (_cells[x, z].Type == CellType.PowerPlant)
-                        capacity[AdjacentComponent(x, z)] += PowerPlantCapacity;
+            foreach (int index in _occupied)
+                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
+                    capacity[AdjacentComponent(index)] += PowerPlantCapacity;
 
             _unpoweredZones = 0;
-            Array.Clear(_powered, 0, _powered.Length);
-            for (int x = 0; x < GridSize; x++)
+            _powered.Clear();
+            foreach (int index in _occupied)
             {
-                for (int z = 0; z < GridSize; z++)
+                if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
+                int grid = AdjacentComponent(index);
+                if (grid == 0) continue;
+                if (capacity[grid] == 0)
                 {
-                    if (!UsesPower(_cells[x, z].Type)) continue;
-                    int grid = AdjacentComponent(x, z);
-                    if (grid == 0) continue;
-                    if (capacity[grid] == 0)
-                    {
-                        _unpoweredZones++;
-                        continue;
-                    }
-
-                    _powered[x, z] = true;
-                    capacity[grid]--;
+                    _unpoweredZones++;
+                    continue;
                 }
+                _powered.Add(index);
+                capacity[grid]--;
             }
+
             _powerDirty = false;
 
-            void Visit(int x, int z)
+            void Visit(int index)
             {
-                if (components[x, z] != 0) return;
-                components[x, z] = component;
-                pending.Enqueue(x * GridSize + z);
+                if (components.ContainsKey(index)) return;
+                components[index] = component;
+                pending.Enqueue(index);
             }
 
-            int AdjacentComponent(int x, int z)
+            int AdjacentComponent(int index)
             {
-                if (x > 0 && components[x - 1, z] != 0) return components[x - 1, z];
-                if (x < GridSize - 1 && components[x + 1, z] != 0) return components[x + 1, z];
-                if (z > 0 && components[x, z - 1] != 0) return components[x, z - 1];
-                return z < GridSize - 1 ? components[x, z + 1] : 0;
+                if (index >= GridSize && components.TryGetValue(index - GridSize, out int west)) return west;
+                if (index < GridSize * (GridSize - 1) && components.TryGetValue(index + GridSize, out int east)) return east;
+                int z = index % GridSize;
+                if (z > 0 && components.TryGetValue(index - 1, out int south)) return south;
+                return z < GridSize - 1 && components.TryGetValue(index + 1, out int north) ? north : 0;
             }
         }
 

@@ -60,14 +60,13 @@ namespace XCity
             _buildingRenderer = buildingRenderer;
             _cellSize = cellSize;
 
-            for (int x = 0; x < CitySimulation.GridSize; x++)
+            foreach (int index in _city.OccupiedIndices)
             {
-                for (int z = 0; z < CitySimulation.GridSize; z++)
-                {
-                    CityCell cell = _city.GetCell(x, z);
-                    _knownTypes[x, z] = cell.Type;
-                    _knownLevels[x, z] = cell.Level;
-                }
+                int x = index / CitySimulation.GridSize;
+                int z = index % CitySimulation.GridSize;
+                CityCell cell = _city.GetCell(x, z);
+                _knownTypes[x, z] = cell.Type;
+                _knownLevels[x, z] = cell.Level;
             }
 
             _mesh = new Mesh { name = "ConstructionSites" };
@@ -170,7 +169,7 @@ namespace XCity
             for (int i = 0; i < anchors.Length; i++)
             {
                 var anchor = anchors[i];
-                if (TryFindDevelopedNear(anchor.X, anchor.Z, out int sx, out int sz, out CityCell cell))
+                if (TryFindDevelopedNear(anchor.X + CitySimulation.LegacyOffset, anchor.Z + CitySimulation.LegacyOffset, out int sx, out int sz, out CityCell cell))
                     StartOrResetSite(sx, sz, cell, anchor.Progress);
             }
         }
@@ -210,7 +209,7 @@ namespace XCity
             if (_go.activeSelf != visible) _go.SetActive(visible);
         }
 
-        public void Update(float dt, bool draw = true)
+        public void Update(float dt, bool draw, WorldView view)
         {
             if (dt > 0f) _animTime += dt;
 
@@ -251,7 +250,8 @@ namespace XCity
 
             _builder.Clear();
             for (int i = 0; i < _sites.Count; i++)
-                BuildSiteMesh(_sites[i]);
+                if (view.Contains(_sites[i].X, _sites[i].Z))
+                    BuildSiteMesh(_sites[i]);
 
             _builder.ApplyTo(_mesh);
             _meshDirty = true;

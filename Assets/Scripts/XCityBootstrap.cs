@@ -53,11 +53,8 @@ namespace XCity
         private BuildingModel _activeBuildingModel;
         private readonly Dictionary<BuildTool, Image> _toolButtons = new Dictionary<BuildTool, Image>();
 
-        private Material _groundMat;
         private Material _roadMat;
-        private Material _shoreMat;
         private Material _waterMat;
-        private Mesh _waterMarks;
         private Material _vertexColorMat;
         private Material _buildingMaterial;
 
@@ -111,8 +108,6 @@ namespace XCity
         private void CreateMaterials()
         {
             Shader shader = Resources.Load<Shader>("XCityWorld");
-            _groundMat = MakeMat(shader, new Color(0.31f, 0.45f, 0.32f));
-            _shoreMat = MakeMat(shader, new Color(0.52f, 0.58f, 0.43f));
             _waterMat = MakeMat(shader, new Color(0.37f, 0.58f, 0.64f));
             _roadMat = MakeMat(shader, new Color(0.18f, 0.20f, 0.23f));
         }
@@ -147,9 +142,7 @@ namespace XCity
             RenderSettings.fogEndDistance = 265f;
 
             float worldSpan = GridSize * CellSize;
-            AddLandscapeBase("City island", worldSpan, worldSpan, 0f, 2.5f, _groundMat);
-            AddLandscapeBase("Shore", worldSpan, worldSpan + 1.7f, -0.58f, 1.8f, _shoreMat);
-            AddLandscapeBase("Water", worldSpan, 800f, -1.05f, 0.2f, _waterMat);
+            AddLandscapeBase("Ocean", worldSpan, worldSpan + 800f, -1.05f, 0.2f, _waterMat);
             Shader vc = Resources.Load<Shader>("XCityVertexColor");
             if (vc == null)
             {
@@ -157,7 +150,6 @@ namespace XCity
                 vc = Resources.Load<Shader>("XCityWorld");
             }
             _vertexColorMat = new Material(vc);
-            AddWaterMarks(worldSpan);
             _cityRenderer = new CityChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _buildingMaterial = new Material(vc);
             _buildingMaterial.EnableKeyword("XCITY_ARCHITECTURE");
@@ -184,36 +176,6 @@ namespace XCity
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
-        private void AddWaterMarks(float worldSpan)
-        {
-            var builder = new MeshBuilder();
-            var center = new Vector3(worldSpan * 0.5f, -1.035f, worldSpan * 0.5f);
-            for (int side = 0; side < 4; side++)
-            {
-                builder.SetFrame(center, side);
-                for (int i = 0; i < 48; i++)
-                {
-                    uint seed = BuildingMeshFactory.Hash(side, i, 480);
-                    float x = (seed & 255u) / 255f * (worldSpan + 28f) - (worldSpan * 0.5f + 14f);
-                    float z = worldSpan * 0.5f + 1.4f + (seed >> 8 & 255u) / 255f * 23f;
-                    float width = 0.65f + (seed >> 16 & 255u) / 255f * 2.1f;
-                    var tint = new Color32(109, 163, 170, 255);
-                    builder.AddQuad(new Vector3(x, 0, z), new Vector3(x + 0.18f, 0, z + 0.10f),
-                        new Vector3(x + width, 0, z + 0.08f), new Vector3(x + width - 0.19f, 0, z),
-                        Vector3.up, tint);
-                }
-            }
-
-            _waterMarks = new Mesh { name = "Shoreline ripples" };
-            builder.ApplyTo(_waterMarks);
-            var waterDetails = new GameObject("Shoreline ripples");
-            waterDetails.transform.SetParent(transform, false);
-            waterDetails.AddComponent<MeshFilter>().sharedMesh = _waterMarks;
-            var renderer = waterDetails.AddComponent<MeshRenderer>();
-            renderer.sharedMaterial = _vertexColorMat;
-            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        }
-
         private void SetupCamera()
         {
             var camObj = new GameObject("MainCamera");
@@ -222,11 +184,16 @@ namespace XCity
             _cam.clearFlags = CameraClearFlags.SolidColor;
             _cam.backgroundColor = RenderSettings.fogColor;
             _cam.nearClipPlane = 0.5f;
-            _cam.farClipPlane = 500f;
+            _cam.farClipPlane = 320f;
             camObj.AddComponent<AudioListener>();
 
             float center = GridSize * CellSize * 0.5f;
             _camTarget = new Vector3(center, 0f, center);
+            foreach (int index in _city.OccupiedIndices)
+            {
+                _camTarget = new Vector3((index / GridSize + 0.5f) * CellSize, 0f, (index % GridSize + 0.5f) * CellSize);
+                break;
+            }
             UpdateCameraTransform();
         }
 
@@ -292,6 +259,7 @@ namespace XCity
             layout.childForceExpandHeight = true;
 
             AddToolButton(bottomBar.transform, font, "Xem", BuildTool.Pan);
+            SetupWorldMap(bottomBar.transform, font);
             AddToolButton(bottomBar.transform, font, "Đường", BuildTool.Road);
             _catalogButton = CreateHudButton(bottomBar.transform, font, "Xây", "OpenCatalog");
             _catalogButton.onClick.AddListener(ToggleCatalog);
@@ -476,6 +444,7 @@ namespace XCity
 
         private void HandleInput()
         {
+            if (_worldMapPanel.activeSelf) return;
             if (Input.touchCount > 0)
             {
                 HandleTouch();
@@ -663,9 +632,18 @@ namespace XCity
             float closest = float.PositiveInfinity;
             point = default;
             float width = CellSize * CityChunkRenderer.BuildingWidthRatio;
-            for (int x = 0; x < GridSize; x++)
+            if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float planeDistance))
+                return false;
+
+            Vector3 ground = ray.GetPoint(planeDistance);
+            Vector3 roof = ray.GetPoint(Mathf.Max(0f, planeDistance - 9f / Mathf.Max(0.001f, -ray.direction.y)));
+            int minX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(ground.x, roof.x) / CellSize) - 1, 0, GridSize - 1);
+            int maxX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(ground.x, roof.x) / CellSize) + 1, 0, GridSize - 1);
+            int minZ = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(ground.z, roof.z) / CellSize) - 1, 0, GridSize - 1);
+            int maxZ = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(ground.z, roof.z) / CellSize) + 1, 0, GridSize - 1);
+            for (int x = minX; x <= maxX; x++)
             {
-                for (int z = 0; z < GridSize; z++)
+                for (int z = minZ; z <= maxZ; z++)
                 {
                     float height = _city.GetCell(x, z).Height;
                     if (height <= 0f) continue;
@@ -689,7 +667,7 @@ namespace XCity
             if (!ground.Raycast(ray, out float distance)) return false;
             Vector3 hit = ray.GetPoint(distance);
             cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
-            return cell.x >= 0 && cell.x < GridSize && cell.y >= 0 && cell.y < GridSize;
+            return CitySimulation.IsBuildable(cell.x, cell.y);
         }
 
         private void AddStrokeSample(Vector2Int destination)
@@ -724,6 +702,7 @@ namespace XCity
 
         private void AddStrokeCell(Vector2Int cell)
         {
+            if (!CitySimulation.IsBuildable(cell.x, cell.y)) return;
             if (!_strokeCells.Add(cell)) return;
 
             int index = _stroke.Count;
@@ -803,6 +782,8 @@ namespace XCity
             if (_cityDirty && _save.Write(_city)) _cityDirty = false;
         }
 
+        private WorldView LocalView => new WorldView(Mathf.FloorToInt(_camTarget.x / CellSize), Mathf.FloorToInt(_camTarget.z / CellSize));
+
         private void RefreshSceneDetail(int budget)
         {
             _chunkScheduler.Refresh(_cam, budget);
@@ -811,6 +792,11 @@ namespace XCity
             _industrialSmoke.SetVisible(visible);
             _vehicles.SetVisible(visible);
             _citizens.SetVisible(visible);
+            if (!visible) return;
+            var view = LocalView;
+            _industrialSmoke.SetView(view);
+            _vehicles.SetView(view);
+            _citizens.SetView(view);
         }
 
         private void LateUpdate()
@@ -818,7 +804,7 @@ namespace XCity
             RefreshSceneDetail(2);
             _cityRenderer.RebuildDirtyChunks(1);
             bool visible = _chunkScheduler.ShowEffects;
-            _construction.Update(Time.deltaTime, visible);
+            _construction.Update(Time.deltaTime, visible, LocalView);
             _buildingRenderer.RebuildDirtyChunks(1);
 
             if (!visible) return;
@@ -837,10 +823,8 @@ namespace XCity
             _vehicles?.Dispose();
             _citizens?.Dispose();
             Destroy(_vertexColorMat);
-            Destroy(_groundMat);
-            Destroy(_shoreMat);
             Destroy(_waterMat);
-            Destroy(_waterMarks);
+            Destroy(_worldMapTexture);
             Destroy(_roadMat);
             Destroy(_roadPreviewMat);
             Destroy(_buildingMaterial);
