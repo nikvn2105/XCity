@@ -263,5 +263,56 @@ namespace XCity.Tests
             Assert.Equal(240, restored.Population);
             Assert.Equal(restored.Population, restored.PeakPopulation);
         }
+
+        [Fact]
+        public void StarterCityWithOnlyMilestoneZeroBuildings_ExceedsFiveHundredPopulationInThousandTicks()
+        {
+            var (x, z) = FindLand(6, 30);
+            var city = new CitySimulation(1);
+            Assert.Equal(0, city.PeakPopulation);
+
+            // Milestone-0 buildings only, arranged across two connected streets with enough power plants.
+            var starterModels = new[]
+            {
+                BuildingModel.RowHouse,
+                BuildingModel.Market,
+                BuildingModel.HighStreet,
+                BuildingModel.Workshop,
+                BuildingModel.Warehouse
+            };
+            for (int i = 0; i < starterModels.Length; i++)
+                Assert.Equal(0, BuildingCatalog.UnlockPopulation(starterModels[i]));
+
+            Assert.True(city.TryApplyBuild(Enumerable.Range(z, 30).Select(dz => (x + 1, dz)), CellType.Road));
+            Assert.True(city.TryApplyBuild(Enumerable.Range(z, 30).Select(dz => (x + 4, dz)), CellType.Road));
+            Assert.True(city.TryApplyBuild(new[] { (x + 2, z), (x + 3, z) }, CellType.Road));
+
+            for (int dz = 0; dz < 5; dz++)
+                Assert.True(city.TrySetCell(x + 5, z + dz, CellType.PowerPlant));
+
+            for (int dz = 1; dz < 30; dz++)
+            {
+                Assert.True(city.TrySetCell(x, z + dz, CellType.Residential, BuildingModel.RowHouse));
+                Assert.True(city.TrySetCell(x + 2, z + dz, CellType.Residential));
+                if (dz % 3 == 0)
+                {
+                    BuildingModel comModel = dz % 6 == 0 ? BuildingModel.HighStreet : BuildingModel.Market;
+                    Assert.True(city.TrySetCell(x + 3, z + dz, CellType.Commercial, comModel));
+                }
+                else
+                {
+                    BuildingModel indModel = dz % 2 == 0 ? BuildingModel.Warehouse : BuildingModel.Workshop;
+                    Assert.True(city.TrySetCell(x + 3, z + dz, CellType.Industrial, indModel));
+                }
+            }
+
+            for (int i = 0; i < 1000; i++)
+                city.Tick();
+
+            Assert.True(city.Population > 500, $"expected population > 500 after 1000 ticks, got {city.Population} (peak {city.PeakPopulation}, happiness {city.AverageHappiness})");
+            Assert.True(city.PeakPopulation > 500);
+            Assert.False(city.IsBankrupt);
+            Assert.True(city.Money > 0);
+        }
     }
 }
