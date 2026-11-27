@@ -140,7 +140,10 @@ namespace XCity
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
         internal const int CurrentSchemaVersion = 7;
-        private readonly HashSet<int> _powered = new HashSet<int>();
+        // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
+        private readonly bool[] _powered = new bool[GridSize * GridSize];
+        private readonly int[] _roadComponent = new int[GridSize * GridSize];
+        private readonly Queue<int> _pendingRoads = new Queue<int>();
         private bool _powerDirty = true;
         private int _unpoweredZones;
         private uint _randomState;
@@ -208,7 +211,7 @@ namespace XCity
             if (!Roads.HasRoadAccess(x, z))
                 return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
             RefreshPower();
-            if (!_powered.Contains(CellIndex(x, z)))
+            if (!_powered[CellIndex(x, z)])
                 return cell.Level == 0 ? ZoneStatus.NeedsPower : ZoneStatus.DevelopedWithoutPower;
             return cell.Level == 0 ? ZoneStatus.WaitingForDevelopment : ZoneStatus.Developed;
         }
@@ -493,14 +496,15 @@ namespace XCity
         {
             if (!_powerDirty) return;
 
-            var components = new Dictionary<int, int>();
-            var pending = new Queue<int>();
+            int[] components = _roadComponent;
+            Queue<int> pending = _pendingRoads;
+            Array.Clear(components, 0, components.Length);
             int component = 0;
             foreach (int index in _occupied)
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (_cells[x, z].Type != CellType.Road || components.ContainsKey(index)) continue;
+                if (_cells[x, z].Type != CellType.Road || components[index] != 0) continue;
                 component++;
                 Visit(index);
                 while (pending.Count > 0)
@@ -520,7 +524,7 @@ namespace XCity
                     capacity[AdjacentComponent(index)] += PowerPlantCapacity;
 
             _unpoweredZones = 0;
-            _powered.Clear();
+            Array.Clear(_powered, 0, _powered.Length);
             foreach (int index in _occupied)
             {
                 if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
@@ -531,7 +535,7 @@ namespace XCity
                     _unpoweredZones++;
                     continue;
                 }
-                _powered.Add(index);
+                _powered[index] = true;
                 capacity[grid]--;
             }
 
@@ -539,7 +543,7 @@ namespace XCity
 
             void Visit(int index)
             {
-                if (components.ContainsKey(index)) return;
+                if (components[index] != 0) return;
                 components[index] = component;
                 pending.Enqueue(index);
             }
