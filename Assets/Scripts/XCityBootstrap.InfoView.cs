@@ -5,7 +5,7 @@ namespace XCity
 {
     public partial class XCityBootstrap
     {
-        private const float MinCamDistance = 14f;
+        private const float MinCamDistance = 7f;
         private const float MaxCamDistance = 2800f;
 
         private GameObject _infoLegend;
