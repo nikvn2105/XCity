@@ -56,6 +56,7 @@ namespace XCity
             Version++;
         }
 
+        private readonly Queue<int> _frontier = new Queue<int>();
         private int[] _visited;
         private byte[] _arrivedBy;
         private int _search;
@@ -82,7 +83,8 @@ namespace XCity
             }
 
             int start = startX * _size + startZ, goal = goalX * _size + goalZ;
-            var frontier = new Queue<int>();
+            Queue<int> frontier = _frontier;
+            frontier.Clear();
             frontier.Enqueue(start);
             _visited[start] = _search;
             int seen = 1;

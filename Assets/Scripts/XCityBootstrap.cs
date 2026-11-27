@@ -92,6 +92,8 @@ namespace XCity
         private Vector2Int _bridgeEnd;
         private BridgeQuote _bridgeQuote;
         private Vector2Int _lastStrokeSample;
+        private const float ShoreWarningDuration = 3f;
+        private float _shoreWarningUntil;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoStart()
@@ -113,6 +115,12 @@ namespace XCity
             LoadDisplaySettings();
             SetupCamera();
             SetupHUD();
+            // After SetupHUD, which clears the banner.
+            if (_city.DroppedCellsOnLoad > 0)
+            {
+                _unlockBanner = $"Đã gỡ {_city.DroppedCellsOnLoad} công trình không còn hợp lệ trên bản đồ";
+                _unlockBannerUntil = Time.unscaledTime + 10f;
+            }
             RestoreFpsCounter();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
@@ -517,6 +525,7 @@ namespace XCity
                 ? BuildingCatalog.Get(_activeBuildingModel).Name
                 : "Xây";
             _inspectedCell = null;
+            _shoreWarningUntil = 0f;
             RefreshHUD();
             foreach (var kv in _toolButtons)
             {
@@ -532,6 +541,11 @@ namespace XCity
             RunSimulationTick();
             HandleInput();
             UpdateFpsCounter();
+            if (_shoreWarningUntil > 0f && Time.unscaledTime >= _shoreWarningUntil)
+            {
+                _shoreWarningUntil = 0f;
+                RefreshHUD();
+            }
             if (_cityDirty && Time.unscaledTime >= _nextAutosave)
                 SaveCity(background: true);
         }
@@ -728,8 +742,14 @@ namespace XCity
                             ? CellType.PowerPlant : BuildingCatalog.Get(_activeBuildingModel).Type;
                         if (_city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel))
                         {
+                            _shoreWarningUntil = 0f;
                             _cityDirty = true;
                             _audio?.PlayBuild();
+                        }
+                        else if (BuildingCatalog.NeedsShore(_activeBuildingModel))
+                        {
+                            _shoreWarningUntil = _city.CanPlaceHarbor(cell.x, cell.y)
+                                ? 0f : Time.unscaledTime + ShoreWarningDuration;
                         }
                     }
                     RefreshHUD();
@@ -817,6 +837,7 @@ namespace XCity
             cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
             if (cell.x < 0 || cell.y < 0 || cell.x >= GridSize || cell.y >= GridSize) return false;
             return _activeTool == BuildTool.Bridge || CitySimulation.IsBuildable(cell.x, cell.y) ||
+                (IsSinglePlacement && BuildingCatalog.NeedsShore(_activeBuildingModel)) ||
                 (_activeTool == BuildTool.Bulldoze || _activeTool == BuildTool.Pan) &&
                 _city.GetCell(cell.x, cell.y).IsBridge;
         }
@@ -1211,6 +1232,13 @@ namespace XCity
             };
         }
 
+        private string GetShoreHint() =>
+            Time.unscaledTime < _shoreWarningUntil
+                ? "Không giáp nước — chọn ô sát bờ"
+                : _activeBuildingModel == BuildingModel.Harbor
+                    ? "Đặt sát mép nước (một cạnh giáp biển)"
+                    : "Đặt sát mép nước, cạnh đường có điện";
+
         private GameObject _bankruptPanel;
 
         private void ShowBankruptcy()
@@ -1297,13 +1325,14 @@ namespace XCity
                     BuildTool.Bridge => GetBridgeHint(),
                     BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
-                    BuildTool.School or BuildTool.CivicService => "Chạm để đặt công trình",
+                    BuildTool.School or BuildTool.CivicService => BuildingCatalog.NeedsShore(_activeBuildingModel)
+                        ? GetShoreHint() : "Chạm để đặt công trình",
                     _ => "Chạm hoặc kéo để phân khu"
                 };
                 if (_activeBuildingModel != BuildingModel.Default)
                 {
                     var item = BuildingCatalog.Get(_activeBuildingModel);
-                    hint = _city.Money < item.Cost
+                    hint = _city.Money < item.Cost && Time.unscaledTime >= _shoreWarningUntil
                         ? $"Thiếu ngân sách · {item.Name} · ${item.Cost:N0}"
                         : $"{hint} · {item.Name} · ${item.Cost:N0}";
                 }
@@ -1313,10 +1342,6 @@ namespace XCity
                     _roadPreviewMat.color = affordable ? Color.green : Color.red;
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
-                if (BuildingCatalog.NeedsShore(_activeBuildingModel) && _city.Money >= BuildingCatalog.Get(_activeBuildingModel).Cost)
-                    hint = _activeBuildingModel == BuildingModel.Harbor
-                        ? "Chạm vào ô đất sát mặt nước để đặt cảng"
-                        : "Chạm vào ô đất sát mặt nước, cạnh đường có điện";
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 string uxPrefix = GetUXStatusPrefix();

@@ -373,15 +373,21 @@ namespace XCity
             return true;
         }
 
+        private int[] _tickWorkers = new int[1];
+        private int[] _tickJobs = new int[1];
+
         public void Tick()
         {
             if (IsBankrupt) return;
-            // Residents change as homes grow, so seats and commutes are re-evaluated from the state at tick start.
-            _coverageDirty = true;
+            // Apply residential growth from the previous tick before assigning school seats.
+            _coverageDirty |= _coverageChangedByGrowth;
             RefreshCoverage();
             RefreshTraffic();
-            var networkWorkers = new int[_componentRoads.Count];
-            var networkJobs = new int[_componentRoads.Count];
+            int networks = _componentRoads.Count;
+            ClearCapacity(ref _tickWorkers, networks);
+            ClearCapacity(ref _tickJobs, networks);
+            int[] networkWorkers = _tickWorkers;
+            int[] networkJobs = _tickJobs;
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
