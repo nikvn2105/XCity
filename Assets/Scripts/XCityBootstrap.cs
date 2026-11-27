@@ -103,13 +103,13 @@ namespace XCity
 
         private void Awake()
         {
-            Application.targetFrameRate = 30;
             _save = new CitySave(Application.persistentDataPath);
             _previewOutput = GetPreviewOutputArg();
             _city = _previewOutput != null ? XCityPreviewCity.Create() : _save.Load();
             _nextAutosave = Time.unscaledTime + 15f;
             CreateMaterials();
             SetupEnvironment();
+            LoadDisplaySettings();
             SetupCamera();
             SetupHUD();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
@@ -479,7 +479,7 @@ namespace XCity
 
         private void HandleInput()
         {
-            if (_worldMapPanel.activeSelf || _bankruptPanel != null) return;
+            if (_worldMapPanel.activeSelf || _bankruptPanel != null || SettingsOpen) return;
             if (Input.touchCount > 0)
             {
                 HandleTouch();

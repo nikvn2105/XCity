@@ -1,0 +1,158 @@
+using System;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.UI;
+
+namespace XCity
+{
+    public partial class XCityBootstrap
+    {
+        private static readonly string[] GraphicsLabels = { "Thấp", "Trung bình", "Cao", "Cực cao" };
+        private static readonly int[] FrameRates = { 30, 60, 120 };
+        private const string GraphicsKey = "xcity.graphics";
+        private const string FrameRateKey = "xcity.fps";
+        private const int DefaultGraphics = 2;
+        private const int DefaultFrameRate = 30;
+
+        private int _graphicsLevel = DefaultGraphics;
+        private int _frameRate = DefaultFrameRate;
+        private GameObject _settingsPanel;
+        private readonly Image[] _graphicsButtons = new Image[GraphicsLabels.Length];
+        private readonly Image[] _frameRateButtons = new Image[FrameRates.Length];
+
+        private bool SettingsOpen => _settingsPanel != null && _settingsPanel.activeSelf;
+
+        private void LoadDisplaySettings()
+        {
+            if (_previewOutput == null)
+            {
+                _graphicsLevel = Mathf.Clamp(PlayerPrefs.GetInt(GraphicsKey, DefaultGraphics), 0, GraphicsLabels.Length - 1);
+                int saved = PlayerPrefs.GetInt(FrameRateKey, DefaultFrameRate);
+                _frameRate = Array.IndexOf(FrameRates, saved) >= 0 ? saved : DefaultFrameRate;
+            }
+            ApplyDisplaySettings();
+        }
+
+        private void ApplyDisplaySettings()
+        {
+            Application.targetFrameRate = _frameRate;
+            QualitySettings.vSyncCount = 0;
+
+            var (shadows, resolution, distance, cascades, msaa, renderScale) = _graphicsLevel switch
+            {
+                0 => (LightShadows.None, ShadowResolution.Low, 0f, 1, 0, 0.6f),
+                1 => (LightShadows.Hard, ShadowResolution.Low, 80f, 1, 0, 0.75f),
+                2 => (LightShadows.Soft, ShadowResolution.Medium, 150f, 2, 2, 0.9f),
+                _ => (LightShadows.Soft, ShadowResolution.High, 250f, 4, 4, 1f)
+            };
+            if (_sunLight != null) _sunLight.shadows = shadows;
+            QualitySettings.shadows = shadows == LightShadows.None ? ShadowQuality.Disable : ShadowQuality.All;
+            QualitySettings.shadowResolution = resolution;
+            QualitySettings.shadowDistance = distance;
+            QualitySettings.shadowCascades = cascades;
+            QualitySettings.antiAliasing = msaa;
+
+            // Rendering fewer pixels is the biggest GPU saving on a 2796x1290 panel. Preview captures keep their size.
+            if (_previewOutput == null && !Application.isEditor)
+            {
+                int longSide = Mathf.Max(Display.main.systemWidth, Display.main.systemHeight);
+                int shortSide = Mathf.Min(Display.main.systemWidth, Display.main.systemHeight);
+                Screen.SetResolution(Mathf.RoundToInt(longSide * renderScale), Mathf.RoundToInt(shortSide * renderScale), true);
+            }
+        }
+
+        private void SetGraphicsLevel(int level)
+        {
+            _graphicsLevel = level;
+            PlayerPrefs.SetInt(GraphicsKey, level);
+            PlayerPrefs.Save();
+            ApplyDisplaySettings();
+            RefreshSettingsButtons();
+        }
+
+        private void SetFrameRate(int fps)
+        {
+            _frameRate = fps;
+            PlayerPrefs.SetInt(FrameRateKey, fps);
+            PlayerPrefs.Save();
+            ApplyDisplaySettings();
+            RefreshSettingsButtons();
+        }
+
+        private void ToggleSettings()
+        {
+            CancelGesture();
+            if (_settingsPanel == null) BuildSettingsPanel();
+            else _settingsPanel.SetActive(!_settingsPanel.activeSelf);
+            RefreshSettingsButtons();
+        }
+
+        private void BuildSettingsPanel()
+        {
+            Font font = Resources.Load<Font>("NotoSans-Regular");
+            _settingsPanel = CreatePanel(_safeAreaRoot, "Settings", new Vector2(0.2f, 0.28f), new Vector2(0.8f, 0.78f),
+                Vector2.zero, Vector2.zero, new Color(0.06f, 0.08f, 0.12f, 0.96f));
+            var layout = _settingsPanel.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(18, 18, 14, 14);
+            layout.spacing = 10;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = true;
+
+            AddSettingsLabel(font, "Đồ họa");
+            Transform graphicsRow = AddSettingsRow();
+            for (int i = 0; i < GraphicsLabels.Length; i++)
+            {
+                int level = i;
+                Button button = CreateHudButton(graphicsRow, font, GraphicsLabels[i], "Graphics_" + i);
+                button.onClick.AddListener(() => SetGraphicsLevel(level));
+                _graphicsButtons[i] = button.image;
+            }
+
+            AddSettingsLabel(font, "Tốc độ khung hình (FPS) · cao hơn thì mượt hơn nhưng nóng máy và tốn pin hơn");
+            Transform fpsRow = AddSettingsRow();
+            for (int i = 0; i < FrameRates.Length; i++)
+            {
+                int fps = FrameRates[i];
+                Button button = CreateHudButton(fpsRow, font, fps + " FPS", "Fps_" + fps);
+                button.onClick.AddListener(() => SetFrameRate(fps));
+                _frameRateButtons[i] = button.image;
+            }
+
+            Button close = CreateHudButton(_settingsPanel.transform, font, "Đóng", "CloseSettings");
+            close.onClick.AddListener(ToggleSettings);
+
+            void AddSettingsLabel(Font labelFont, string label)
+            {
+                var go = new GameObject("Label", typeof(RectTransform));
+                go.transform.SetParent(_settingsPanel.transform, false);
+                var text = go.AddComponent<Text>();
+                text.font = labelFont;
+                text.fontSize = 18;
+                text.color = new Color(0.82f, 0.86f, 0.92f);
+                text.alignment = TextAnchor.LowerLeft;
+                text.text = label;
+            }
+
+            Transform AddSettingsRow()
+            {
+                var row = new GameObject("Row", typeof(RectTransform));
+                row.transform.SetParent(_settingsPanel.transform, false);
+                var rowLayout = row.AddComponent<HorizontalLayoutGroup>();
+                rowLayout.spacing = 8;
+                rowLayout.childForceExpandWidth = true;
+                rowLayout.childForceExpandHeight = true;
+                return row.transform;
+            }
+        }
+
+        private void RefreshSettingsButtons()
+        {
+            var active = new Color(0.19f, 0.52f, 0.96f);
+            var idle = new Color(0.20f, 0.24f, 0.30f);
+            for (int i = 0; i < _graphicsButtons.Length; i++)
+                if (_graphicsButtons[i] != null) _graphicsButtons[i].color = i == _graphicsLevel ? active : idle;
+            for (int i = 0; i < _frameRateButtons.Length; i++)
+                if (_frameRateButtons[i] != null) _frameRateButtons[i].color = FrameRates[i] == _frameRate ? active : idle;
+        }
+    }
+}

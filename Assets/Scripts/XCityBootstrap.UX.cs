@@ -94,6 +94,9 @@ namespace XCity
             _audioButton = CreateCompactButton(bar.transform, font, "Âm thanh: Bật", "Btn_Audio");
             _audioButton.onClick.AddListener(ToggleAudioMute);
 
+            Button settingsButton = CreateCompactButton(bar.transform, font, "Cài đặt", "Btn_Settings");
+            settingsButton.onClick.AddListener(ToggleSettings);
+
             RefreshUXButtons();
             RefreshRciBars();
         }

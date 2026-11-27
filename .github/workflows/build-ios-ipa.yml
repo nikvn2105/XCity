@@ -75,6 +75,14 @@ jobs:
         shell: bash
         run: tar -xf ios-build/XCity-XcodeProject.tar -C ios-build
 
+      # ProMotion iPhones cap apps at 60 Hz unless Info.plist opts in; the in-game 120 FPS option needs this.
+      - name: Allow 120 Hz on ProMotion iPhones
+        shell: bash
+        run: |
+          plist=ios-build/XCity/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CADisableMinimumFrameDurationOnPhone bool true" "$plist" ||
+            /usr/libexec/PlistBuddy -c "Set :CADisableMinimumFrameDurationOnPhone true" "$plist"
+
       - name: Build unsigned .app with Xcode 16.4
         shell: bash
         env:
