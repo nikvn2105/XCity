@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace XCity
 {
@@ -53,6 +54,61 @@ namespace XCity
             UpdateEdge(x, z, x, z - 1, RoadConnections.South, RoadConnections.North);
             UpdateEdge(x, z, x, z + 1, RoadConnections.North, RoadConnections.South);
             Version++;
+        }
+
+        private int[] _visited;
+        private byte[] _arrivedBy;
+        private int _search;
+
+        /// <summary>
+        /// Shortest route over connected road cells, as direction indices (0=W, 1=E, 2=S, 3=N, matching the
+        /// RoadConnections bits) leaving each cell from the start. Tiles cost the same, so breadth-first is optimal.
+        /// </summary>
+        // shortcut: gives up after maxCells visited cells, so very distant goals fall back to wandering; add A* if cities outgrow it.
+        public bool TryFindPath(int startX, int startZ, int goalX, int goalZ, List<int> route, int maxCells = 20000)
+        {
+            route.Clear();
+            if (_connections[startX, startZ] == RoadConnections.None || _connections[goalX, goalZ] == RoadConnections.None)
+                return false;
+            if (_visited == null)
+            {
+                _visited = new int[_size * _size];
+                _arrivedBy = new byte[_size * _size];
+            }
+            if (++_search == int.MaxValue)
+            {
+                Array.Clear(_visited, 0, _visited.Length);
+                _search = 1;
+            }
+
+            int start = startX * _size + startZ, goal = goalX * _size + goalZ;
+            var frontier = new Queue<int>();
+            frontier.Enqueue(start);
+            _visited[start] = _search;
+            int seen = 1;
+            while (frontier.Count > 0 && _visited[goal] != _search && seen < maxCells)
+            {
+                int cell = frontier.Dequeue();
+                RoadConnections edges = _connections[cell / _size, cell % _size];
+                for (int d = 0; d < 4; d++)
+                {
+                    if (((int)edges & (1 << d)) == 0) continue;
+                    int next = cell + Step(d);
+                    if (_visited[next] == _search) continue;
+                    _visited[next] = _search;
+                    _arrivedBy[next] = (byte)d;
+                    frontier.Enqueue(next);
+                    seen++;
+                }
+            }
+            if (_visited[goal] != _search) return false;
+
+            for (int cell = goal; cell != start; cell -= Step(_arrivedBy[cell]))
+                route.Add(_arrivedBy[cell]);
+            route.Reverse();
+            return true;
+
+            int Step(int d) => d == 0 ? -_size : d == 1 ? _size : d == 2 ? -1 : 1;
         }
 
         private bool Allows(int x, int z, RoadConnections direction) =>

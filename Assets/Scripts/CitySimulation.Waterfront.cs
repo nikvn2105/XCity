@@ -117,7 +117,7 @@ namespace XCity
 
         internal bool TryBuildBridge(int x, int z, int endX, int endZ)
         {
-            if (QuoteBridge(x, z, endX, endZ, out int cost) != BridgeQuote.Ready) return false;
+            if (IsBankrupt || QuoteBridge(x, z, endX, endZ, out int cost) != BridgeQuote.Ready) return false;
 
             int dx = Math.Sign(endX - x);
             int dz = Math.Sign(endZ - z);
@@ -135,9 +135,7 @@ namespace XCity
                 TrackCell(cx, cz, CellType.Road);
             }
 
-            _undoCells = changed;
-            _undoMoney = Money;
-            _undoPopulation = Population;
+            PushUndo(changed, cost);
             Money -= cost;
             _powerDirty = true;
             foreach (var entry in changed)
@@ -166,7 +164,7 @@ namespace XCity
                 z += dz;
             }
 
-            Money -= 10 * (changed.Count - firstChange);
+            Money -= AffordableDemolition(changed.Count - firstChange);
             _powerDirty = true;
             for (int i = firstChange; i < changed.Count; i++)
                 CellChanged?.Invoke(changed[i].X, changed[i].Z);

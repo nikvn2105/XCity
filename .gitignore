@@ -136,3 +136,8 @@ crashlytics-build.properties
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# .NET simulation test build output
+/Tests/**/[Bb]in/
+/Tests/**/[Oo]bj/
+!/Tests/**/*.csproj

@@ -348,6 +348,31 @@ namespace XCity
             }
         }
 
+        public void AddFlatQuad(float x0, float z0, float x1, float z1, float y, Color32 color)
+        {
+            AddQuad(new Vector3(x0, y, z0), new Vector3(x0, y, z1),
+                new Vector3(x1, y, z1), new Vector3(x1, y, z0), Vector3.up, color);
+        }
+
+        public void AddSimpleBox(Vector3 center, Vector3 size, Color32 wallColor, Color32 topColor)
+        {
+            Vector3 half = size * 0.5f;
+            Vector3 b00 = new Vector3(center.x - half.x, center.y - half.y, center.z - half.z);
+            Vector3 b01 = new Vector3(center.x - half.x, center.y - half.y, center.z + half.z);
+            Vector3 b11 = new Vector3(center.x + half.x, center.y - half.y, center.z + half.z);
+            Vector3 b10 = new Vector3(center.x + half.x, center.y - half.y, center.z - half.z);
+            Vector3 t00 = new Vector3(center.x - half.x, center.y + half.y, center.z - half.z);
+            Vector3 t01 = new Vector3(center.x - half.x, center.y + half.y, center.z + half.z);
+            Vector3 t11 = new Vector3(center.x + half.x, center.y + half.y, center.z + half.z);
+            Vector3 t10 = new Vector3(center.x + half.x, center.y + half.y, center.z - half.z);
+
+            AddQuad(t00, t01, t11, t10, Vector3.up, topColor);
+            AddQuad(b01, b11, t11, t01, Vector3.forward, wallColor);
+            AddQuad(b10, b00, t00, t10, Vector3.back, wallColor);
+            AddQuad(b00, b01, t01, t00, Vector3.left, wallColor);
+            AddQuad(b11, b10, t10, t11, Vector3.right, wallColor);
+        }
+
         public void ApplyTo(Mesh mesh)
         {
             mesh.Clear();

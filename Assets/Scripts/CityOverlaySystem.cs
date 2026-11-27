@@ -11,7 +11,8 @@ namespace XCity
         Power,
         Services,
         Education,
-        Environment
+        Environment,
+        Happiness
     }
 
     internal sealed class CityOverlaySystem : IDisposable
@@ -21,8 +22,6 @@ namespace XCity
         private readonly CitySimulation _city;
         private readonly float _cellSize;
         private readonly MeshBuilder _builder = new MeshBuilder();
-        private readonly List<Vector2Int> _serviceSites = new List<Vector2Int>(32);
-        private readonly List<Vector2Int> _eduSites = new List<Vector2Int>(32);
         private readonly List<Vector2Int> _polluters = new List<Vector2Int>(64);
 
         private readonly GameObject _go;
@@ -61,7 +60,8 @@ namespace XCity
             if (Mode == mode) return;
             Mode = mode;
             _dirty = true;
-            _go.SetActive(mode != CityOverlayMode.None);
+            // Happiness tints the chunk ground itself (it reaches the far view), so it needs no overlay quads.
+            _go.SetActive(mode != CityOverlayMode.None && mode != CityOverlayMode.Happiness);
             if (mode == CityOverlayMode.None)
                 _mesh.Clear();
         }
@@ -74,6 +74,7 @@ namespace XCity
                 CityOverlayMode.Power => CityOverlayMode.Services,
                 CityOverlayMode.Services => CityOverlayMode.Education,
                 CityOverlayMode.Education => CityOverlayMode.Environment,
+                CityOverlayMode.Environment => CityOverlayMode.Happiness,
                 _ => CityOverlayMode.None
             };
             SetMode(next);
@@ -85,6 +86,7 @@ namespace XCity
             CityOverlayMode.Services => "Dịch vụ",
             CityOverlayMode.Education => "Giáo dục",
             CityOverlayMode.Environment => "Môi trường",
+            CityOverlayMode.Happiness => "Hạnh phúc",
             _ => "Tắt"
         };
 
@@ -97,7 +99,7 @@ namespace XCity
 
         public void Update()
         {
-            if (Mode == CityOverlayMode.None) return;
+            if (Mode == CityOverlayMode.None || Mode == CityOverlayMode.Happiness) return;
             if (_lastTick != _city.TickCount)
             {
                 _lastTick = _city.TickCount;
@@ -111,8 +113,6 @@ namespace XCity
         {
             _dirty = false;
             _builder.Clear();
-            _serviceSites.Clear();
-            _eduSites.Clear();
             _polluters.Clear();
 
             int scanMinX = Mathf.Max(0, _view.MinX - 18);
@@ -120,7 +120,7 @@ namespace XCity
             int scanMinZ = Mathf.Max(0, _view.MinZ - 18);
             int scanMaxZ = Mathf.Min(CitySimulation.GridSize - 1, _view.MaxZ + 18);
 
-            if (Mode == CityOverlayMode.Services || Mode == CityOverlayMode.Education || Mode == CityOverlayMode.Environment)
+            if (Mode == CityOverlayMode.Environment)
             {
                 foreach (int idx in _city.OccupiedIndices)
                 {
@@ -128,11 +128,7 @@ namespace XCity
                     int z = idx % CitySimulation.GridSize;
                     if (x < scanMinX || x > scanMaxX || z < scanMinZ || z > scanMaxZ) continue;
                     CityCell cell = _city.GetCell(x, z);
-                    if (cell.Model == BuildingModel.FireStation || cell.Model == BuildingModel.Hospital || cell.Model == BuildingModel.PoliceStation)
-                        _serviceSites.Add(new Vector2Int(x, z));
-                    else if (cell.Type == CellType.School)
-                        _eduSites.Add(new Vector2Int(x, z));
-                    else if (cell.Type == CellType.Industrial || cell.Type == CellType.PowerPlant)
+                    if (cell.Type == CellType.Industrial || cell.Type == CellType.PowerPlant)
                         _polluters.Add(new Vector2Int(x, z));
                 }
             }
@@ -191,7 +187,9 @@ namespace XCity
                         return true;
                     }
                     if (cell.Type == CellType.Empty && !_city.Roads.HasRoadAccess(x, z)) return false;
-                    int cov = CountWithin(_serviceSites, x, z, 16);
+                    // Same coverage the simulation uses: real radii, and only from stations with road and power.
+                    ServiceCoverage reach = _city.GetCoverage(x, z) & (ServiceCoverage.Health | ServiceCoverage.Police | ServiceCoverage.Fire);
+                    int cov = ServiceCatalog.Count(reach);
                     if (cov >= 2) color = new Color32(52, 198, 122, 255);
                     else if (cov == 1) color = new Color32(158, 208, 86, 255);
                     else if (cell.Height > 0f) color = new Color32(232, 82, 58, 255);
@@ -205,8 +203,9 @@ namespace XCity
                         return true;
                     }
                     if (cell.Type != CellType.Residential) return false;
-                    int schools = CountWithin(_eduSites, x, z, 18);
-                    color = schools > 0 ? new Color32(72, 208, 122, 255) : new Color32(236, 138, 48, 255);
+                    // A home counts as schooled only if a school in reach still had a seat for it.
+                    bool schooled = (_city.GetCoverage(x, z) & ServiceCoverage.Education) != 0;
+                    color = schooled ? new Color32(72, 208, 122, 255) : new Color32(236, 138, 48, 255);
                     return true;
 
                 case CityOverlayMode.Environment:

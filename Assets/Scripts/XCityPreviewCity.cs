@@ -131,6 +131,7 @@ namespace XCity
                 randomState = 12345,
                 lastTaxIncome = 0,
                 lastNetIncome = 0,
+                peakPopulation = 5000,
                 cells = cells
             };
 

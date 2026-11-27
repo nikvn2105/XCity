@@ -36,7 +36,9 @@ namespace XCity
         PoliceStation,
         Hospital,
         FireStation,
-        Harbor
+        Harbor,
+        WaterPump,
+        SewagePlant
     }
 
     internal static class BuildingCatalog
@@ -63,8 +65,14 @@ namespace XCity
                 BuildingModel.Hospital => (CellType.CivicService, "Bệnh viện", 1800, 5.0f, 0),
                 BuildingModel.FireStation => (CellType.CivicService, "Trạm cứu hỏa", 1150, 3.4f, 0),
                 BuildingModel.Harbor => (CellType.CivicService, "Cảng tàu thuyền", 1450, 2.4f, 0),
+                BuildingModel.WaterPump => (CellType.CivicService, "Trạm bơm nước", 900, 2.6f, 0),
+                BuildingModel.SewagePlant => (CellType.CivicService, "Xử lý nước thải", 1000, 2.2f, 0),
                 _ => default
             };
+
+        // Harbors dock boats; pumps draw from and treatment plants drain into the water beside them.
+        public static bool NeedsShore(BuildingModel model) =>
+            model == BuildingModel.Harbor || model == BuildingModel.WaterPump || model == BuildingModel.SewagePlant;
 
         public static bool IsPublicService(CellType type) => type == CellType.School || type == CellType.CivicService;
 
@@ -74,7 +82,19 @@ namespace XCity
             BuildingModel.Hospital => 35,
             BuildingModel.FireStation => 24,
             BuildingModel.Harbor => 22,
+            BuildingModel.WaterPump => 20,
+            BuildingModel.SewagePlant => 25,
             _ => Get(model).Seats / 15
+        };
+
+        public static int UnlockPopulation(BuildingModel model) => model switch
+        {
+            BuildingModel.Apartment or BuildingModel.Office or BuildingModel.Factory or
+                BuildingModel.Preschool or BuildingModel.PrimarySchool or BuildingModel.PoliceStation => 500,
+            BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or
+                BuildingModel.Harbor => 2000,
+            BuildingModel.University or BuildingModel.OfficeTower or BuildingModel.ShoppingMall => 5000,
+            _ => 0
         };
 
         public static int Residents(CityCell cell)
@@ -120,6 +140,9 @@ namespace XCity
         public long randomState;
         public int lastTaxIncome;
         public int lastNetIncome;
+        public int loanBalance;
+        public int ticksInDebt;
+        public int peakPopulation;
         public CityCell[] cells;
         public int[] cellIndices;
     }
@@ -139,16 +162,40 @@ namespace XCity
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 7;
-        private readonly HashSet<int> _powered = new HashSet<int>();
+        internal const int CurrentSchemaVersion = 9;
+        public const int UtilityCapacity = 40;
+        // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
+        private readonly bool[] _powered = new bool[GridSize * GridSize];
+        private readonly bool[] _watered = new bool[GridSize * GridSize];
+        private readonly bool[] _sewered = new bool[GridSize * GridSize];
+        private readonly int[] _roadComponent = new int[GridSize * GridSize];
+        private readonly int[] _pendingRoads = new int[GridSize * GridSize];
+        private readonly HashSet<int> _utilityRoads = new HashSet<int>();
+        private readonly SortedSet<int> _utilityConsumers = new SortedSet<int>();
+        private readonly List<int> _orderedConsumers = new List<int>();
+        private bool _consumerOrderDirty = true;
+        private readonly HashSet<int> _utilitySources = new HashSet<int>();
+        private int[] _powerCapacity = new int[1];
+        private int[] _waterCapacity = new int[1];
+        private int[] _sewageCapacity = new int[1];
+        private int _componentRoadVersion = -1;
         private bool _powerDirty = true;
         private int _unpoweredZones;
         private uint _randomState;
-        private List<(int X, int Z, CityCell Cell)> _undoCells;
-        private int _undoMoney;
-        private int _undoPopulation;
+        internal const int MaxUndoSteps = 20;
+        private const int DemolishCost = 10;
+        private readonly List<UndoStep> _undoSteps = new List<UndoStep>();
 
-        public bool CanUndoBuild => _undoCells != null;
+        private sealed class UndoStep
+        {
+            public List<(int X, int Z, CityCell Cell)> Cells;
+            public int Spent;
+        }
+
+        public bool CanUndoBuild => _undoSteps.Count > 0;
+
+        /// <summary>Cells discarded while loading because they no longer fit the current terrain.</summary>
+        internal int DroppedCellsOnLoad { get; private set; }
 
         public int UnpoweredZones
         {
@@ -162,10 +209,12 @@ namespace XCity
         public CitySimulation(uint seed = 1)
         {
             _randomState = seed == 0 ? 1u : seed;
+            UpdateDemand(0, 0, 0);
         }
 
         public int Money { get; private set; } = 50000;
         public int Population { get; private set; }
+        public int PeakPopulation { get; private set; }
         public long TickCount { get; private set; }
         public int LastTaxIncome { get; private set; }
         public int LastNetIncome { get; private set; }
@@ -178,12 +227,42 @@ namespace XCity
 
         internal static bool IsBuildable(int x, int z) => IsInBounds(x, z) && WorldTerrain.IsLand(x, z);
 
-        private void TrackCell(int x, int z, CellType type)
+        private void TrackCell(int x, int z, CellType type, CityCell previous = default)
         {
             int index = CellIndex(x, z);
             if (type == CellType.Empty) _occupied.Remove(index);
             else _occupied.Add(index);
-            RoadConnections axis = _cells[x, z].BridgeAxis;
+            if (BuildingCatalog.IsPublicService(type)) _serviceCells.Add(index);
+            else _serviceCells.Remove(index);
+            CityCell current = _cells[x, z];
+            bool consumes = UsesPower(type);
+            bool usedPower = UsesPower(previous.Type);
+            int source = UtilitySource(current);
+            int previousSource = UtilitySource(previous);
+            if (type == CellType.Road) _utilityRoads.Add(index);
+            else _utilityRoads.Remove(index);
+            if (source != 0) _utilitySources.Add(index);
+            else _utilitySources.Remove(index);
+            bool consumersChanged = consumes ? _utilityConsumers.Add(index) : _utilityConsumers.Remove(index);
+            _consumerOrderDirty |= consumersChanged;
+            if (!consumes)
+            {
+                _powered[index] = _watered[index] = _sewered[index] = false;
+                _cellComponent[index] = 0;
+            }
+
+            if (consumes != usedPower || source != previousSource)
+                _powerDirty = true;
+            _trafficDirty = true;
+            if (_coverageChangedByGrowth ||
+                (previous.Model != current.Model &&
+                 (ServiceCatalog.Get(previous.Model).Coverage != ServiceCoverage.None ||
+                  ServiceCatalog.Get(current.Model).Coverage != ServiceCoverage.None)) ||
+                (previous.Type != type && (previous.Type == CellType.Residential || type == CellType.Residential)) ||
+                (type == CellType.Residential && BuildingCatalog.Residents(previous) != BuildingCatalog.Residents(current)))
+                _coverageDirty = true;
+
+            RoadConnections axis = current.BridgeAxis;
             Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis);
         }
 
@@ -197,7 +276,7 @@ namespace XCity
             if (!Roads.HasRoadAccess(x, z))
                 return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
             RefreshPower();
-            if (!_powered.Contains(CellIndex(x, z)))
+            if (!_powered[CellIndex(x, z)])
                 return cell.Level == 0 ? ZoneStatus.NeedsPower : ZoneStatus.DevelopedWithoutPower;
             return cell.Level == 0 ? ZoneStatus.WaitingForDevelopment : ZoneStatus.Developed;
         }
@@ -207,38 +286,51 @@ namespace XCity
 
         public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type, BuildingModel model = BuildingModel.Default)
         {
+            if (IsBankrupt) return false;
+            if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation) return false;
             int moneyBefore = Money;
-            int populationBefore = Population;
             var changed = new List<(int X, int Z, CityCell Cell)>();
             foreach (var point in points)
                 TrySetCell(point.X, point.Z, type, model, changed);
 
             if (changed.Count == 0) return false;
-            _undoCells = changed;
-            _undoMoney = moneyBefore;
-            _undoPopulation = populationBefore;
+            PushUndo(changed, moneyBefore - Money);
             return true;
         }
 
+        private void PushUndo(List<(int X, int Z, CityCell Cell)> cells, int spent)
+        {
+            if (_undoSteps.Count == MaxUndoSteps) _undoSteps.RemoveAt(0);
+            _undoSteps.Add(new UndoStep { Cells = cells, Spent = spent });
+        }
+
+        // Steps are undone newest first, so each restored cell is exactly the state that step replaced.
+        // Growth from later ticks is discarded with it; the money spent on the step is refunded in full.
         public bool TryUndoBuild()
         {
-            if (_undoCells == null) return false;
+            if (_undoSteps.Count == 0 || IsBankrupt) return false;
 
-            var cells = _undoCells;
-            _undoCells = null;
-            foreach (var entry in cells)
+            UndoStep step = _undoSteps[_undoSteps.Count - 1];
+            _undoSteps.RemoveAt(_undoSteps.Count - 1);
+            for (int i = step.Cells.Count - 1; i >= 0; i--)
             {
-                _cells[entry.X, entry.Z] = entry.Cell;
-                TrackCell(entry.X, entry.Z, entry.Cell.Type);
+                var entry = step.Cells[i];
+                ref CityCell cell = ref _cells[entry.X, entry.Z];
+                if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
+                if (entry.Cell.Type == CellType.Residential) Population += BuildingCatalog.Residents(entry.Cell);
+                CityCell previous = cell;
+                cell = entry.Cell;
+                TrackCell(entry.X, entry.Z, entry.Cell.Type, previous);
             }
 
-            Money = _undoMoney;
-            Population = _undoPopulation;
-            _powerDirty = true;
-            foreach (var entry in cells)
+            Money += step.Spent;
+            foreach (var entry in step.Cells)
                 CellChanged?.Invoke(entry.X, entry.Z);
             return true;
         }
+
+        // Demolition never pushes the treasury below zero, so a broke city can still clear costly buildings.
+        private int AffordableDemolition(int tiles) => Math.Min(DemolishCost * tiles, Math.Max(0, Money));
 
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
             List<(int X, int Z, CityCell Cell)> changed)
@@ -247,9 +339,11 @@ namespace XCity
             if (_cells[x, z].IsBridge)
                 return type == CellType.Empty && RemoveBridge(x, z, changed);
             if (!IsBuildable(x, z)) return false;
-            if (model == BuildingModel.Harbor && !CanPlaceHarbor(x, z)) return false;
+            if (BuildingCatalog.NeedsShore(model) && !CanPlaceHarbor(x, z)) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
+                return false;
+            if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation)
                 return false;
             ref CityCell cell = ref _cells[x, z];
             if (cell.Type == type && cell.Model == model) return false;
@@ -257,13 +351,14 @@ namespace XCity
             int cost = type switch
             {
                 CellType.Road => RoadCost,
-                CellType.Empty => 10,
+                CellType.Empty => AffordableDemolition(1),
                 CellType.PowerPlant => PowerPlantCost,
                 _ => model == BuildingModel.Default ? ZoneCost : option.Cost
             };
-            if (type != CellType.Empty && Money < cost) return false;
+            if (cost > 0 && Money < cost) return false;
 
-            changed.Add((x, z, cell));
+            CityCell previous = cell;
+            changed.Add((x, z, previous));
             if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
             cell = type switch
             {
@@ -272,19 +367,27 @@ namespace XCity
                     new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
                 _ => new CityCell { Type = type, Model = model }
             };
-            _powerDirty = true;
             Money -= cost;
-            TrackCell(x, z, type);
+            TrackCell(x, z, type, previous);
             CellChanged?.Invoke(x, z);
             return true;
         }
 
         public void Tick()
         {
-            _undoCells = null;
+            if (IsBankrupt) return;
+            // Residents change as homes grow, so seats and commutes are re-evaluated from the state at tick start.
+            _coverageDirty = true;
+            RefreshCoverage();
+            RefreshTraffic();
+            var networkWorkers = new int[_componentRoads.Count];
+            var networkJobs = new int[_componentRoads.Count];
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
+            int jobs = 0;
+            int commercialJobs = 0;
+            long happiness = 0;
             foreach (int index in _occupied)
             {
                 int x = index / GridSize;
@@ -305,12 +408,15 @@ namespace XCity
                 if (BuildingCatalog.IsPublicService(cell.Type))
                 {
                     netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
+                    int serviceJobs = OperatingJobs(x, z, cell);
+                    jobs += serviceJobs;
+                    networkJobs[_cellComponent[index]] += serviceJobs;
                     continue;
                 }
 
                 ZoneStatus status = GetZoneStatus(x, z);
                 bool operating = status == ZoneStatus.Developed || status == ZoneStatus.WaitingForDevelopment;
-                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < 0.35f)
+                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < DevelopmentChance(cell.Type))
                 {
                     cell.Level = 1;
                     cell.Height = cell.Model != BuildingModel.Default
@@ -320,26 +426,49 @@ namespace XCity
                         CellType.Commercial => 4f + NextRandom() * 3.5f,
                         _ => 2.2f + NextRandom() * 1.6f
                     };
+                    if (cell.Type == CellType.Residential) _coverageChangedByGrowth = true;
                     CellChanged?.Invoke(x, z);
                 }
 
                 else if (status == ZoneStatus.Developed && cell.Type == CellType.Residential &&
-                         cell.Level < MaxResidentialLevel && NextRandom() < 0.12f)
+                         cell.Level < MaxResidentialLevel && CanUpgradeResidence(x, z, cell.Level) &&
+                         NextRandom() < 0.12f)
                 {
                     cell.Level++;
                     cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
+                    _coverageChangedByGrowth = true;
                     CellChanged?.Invoke(x, z);
                 }
 
-                if (cell.Type == CellType.Residential) population += BuildingCatalog.Residents(cell);
+                if (cell.Type == CellType.Residential)
+                {
+                    population += BuildingCatalog.Residents(cell);
+                    happiness += (long)GetHappiness(x, z) * BuildingCatalog.Residents(cell);
+                    networkWorkers[_cellComponent[index]] += BuildingCatalog.Residents(cell) * WorkforcePercent / 100;
+                }
+                else if (status == ZoneStatus.Developed)
+                {
+                    int cellJobs = ServiceCatalog.Jobs(cell);
+                    jobs += cellJobs;
+                    networkJobs[_cellComponent[index]] += cellJobs;
+                    if (cell.Type == CellType.Commercial) commercialJobs += cellJobs;
+                }
                 if (operating)
-                    taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 : 15 * cell.Level;
+                    taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 :
+                        15 * cell.Level * EmploymentAt(x, z) / 100;
             }
 
             Population = population;
+            PeakPopulation = Math.Max(PeakPopulation, Population);
+            UpdateDemand(jobs, commercialJobs, happiness);
+            // This tick's commute staffs and loads the networks for the next one (roads cannot change mid-tick).
+            PublishTraffic(networkWorkers, networkJobs);
             LastTaxIncome = taxIncome;
-            LastNetIncome = taxIncome + netIncome;
+            int repayment = Math.Min(LoanBalance, LoanRepayment);
+            LoanBalance -= repayment;
+            LastNetIncome = taxIncome + netIncome - repayment;
             Money += LastNetIncome;
+            TicksInDebt = Money < 0 ? TicksInDebt + 1 : 0;
             TickCount++;
         }
 
@@ -353,6 +482,9 @@ namespace XCity
                 randomState = _randomState,
                 lastTaxIncome = LastTaxIncome,
                 lastNetIncome = LastNetIncome,
+                loanBalance = LoanBalance,
+                ticksInDebt = TicksInDebt,
+                peakPopulation = PeakPopulation,
                 cells = new CityCell[_occupied.Count],
                 cellIndices = new int[_occupied.Count]
             };
@@ -370,7 +502,8 @@ namespace XCity
             city = null;
             if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > CurrentSchemaVersion) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
-                snapshot.cells == null)
+                snapshot.cells == null || snapshot.loanBalance < 0 || snapshot.loanBalance > MaxLoanBalance ||
+                snapshot.ticksInDebt < 0 || snapshot.ticksInDebt > BankruptcyTicks || snapshot.peakPopulation < 0)
                 return false;
 
             bool legacy = snapshot.schemaVersion < 6;
@@ -383,6 +516,8 @@ namespace XCity
                 Money = snapshot.money,
                 LastTaxIncome = snapshot.schemaVersion >= 3 ? snapshot.lastTaxIncome : 0,
                 LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
+                LoanBalance = snapshot.loanBalance,
+                TicksInDebt = snapshot.ticksInDebt,
                 TickCount = snapshot.tick
             };
             int previous = -1;
@@ -398,19 +533,32 @@ namespace XCity
                 if (cell.Type == CellType.Empty) continue;
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (cell.IsBridge == IsBuildable(x, z)) return false;
+                if (cell.IsBridge == IsBuildable(x, z))
+                {
+                    restored.DroppedCellsOnLoad++;
+                    continue;
+                }
                 restored._cells[x, z] = cell;
                 restored.TrackCell(x, z, cell.Type);
                 if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
             }
 
+            var strandedHarbors = new List<int>();
             foreach (int index in restored._occupied)
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (restored._cells[x, z].Model == BuildingModel.Harbor && !restored.CanPlaceHarbor(x, z))
-                    return false;
+                if (BuildingCatalog.NeedsShore(restored._cells[x, z].Model) && !restored.CanPlaceHarbor(x, z))
+                    strandedHarbors.Add(index);
             }
+            foreach (int index in strandedHarbors)
+            {
+                restored._cells[index / GridSize, index % GridSize] = default;
+                restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);
+                restored.DroppedCellsOnLoad++;
+            }
+            restored.PeakPopulation = Math.Max(snapshot.peakPopulation, restored.Population);
+            restored.RecalculateEconomy();
             city = restored;
             return true;
         }
@@ -425,7 +573,8 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = cell.Model == BuildingModel.Harbor ? 7 : cell.Model >= BuildingModel.HighStreet ? 5 : 4;
+                int modelVersion = cell.Model >= BuildingModel.WaterPump ? 8 : cell.Model == BuildingModel.Harbor ? 7 :
+                    cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
                 if (BuildingCatalog.IsPublicService(cell.Type))
                     return cell.Level == 1 && cell.Height == option.Height;
@@ -439,69 +588,119 @@ namespace XCity
             return cell.Level == 0 ? cell.Height == 0f : UsesPower(cell.Type) && cell.Height >= 2.2f && cell.Height <= 7.5f;
         }
 
+        private static int UtilitySource(CityCell cell) =>
+            cell.Type == CellType.PowerPlant ? 1 : cell.Model == BuildingModel.WaterPump ? 2 :
+            cell.Model == BuildingModel.SewagePlant ? 3 : 0;
+
         private void RefreshPower()
         {
-            if (!_powerDirty) return;
+            bool topologyChanged = _componentRoadVersion != Roads.Version;
+            if (!_powerDirty && !topologyChanged) return;
+            if (topologyChanged) RebuildRoadComponents();
 
-            var components = new Dictionary<int, int>();
-            var pending = new Queue<int>();
-            int component = 0;
-            foreach (int index in _occupied)
+            int networks = _componentRoads.Count;
+            ClearCapacity(ref _powerCapacity, networks);
+            ClearCapacity(ref _waterCapacity, networks);
+            ClearCapacity(ref _sewageCapacity, networks);
+            foreach (int index in _utilitySources)
+                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
+                    _powerCapacity[AdjacentComponent(index)] += PowerPlantCapacity;
+
+            _unpoweredZones = 0;
+            if (_consumerOrderDirty)
             {
-                int x = index / GridSize;
-                int z = index % GridSize;
-                if (_cells[x, z].Type != CellType.Road || components.ContainsKey(index)) continue;
-                component++;
-                Visit(index);
-                while (pending.Count > 0)
+                _orderedConsumers.Clear();
+                _orderedConsumers.AddRange(_utilityConsumers);
+                _consumerOrderDirty = false;
+            }
+            foreach (int index in _orderedConsumers)
+            {
+                int network = AdjacentComponent(index);
+                _cellComponent[index] = network;
+                bool powered = network != 0 && _powerCapacity[network] > 0;
+                if (network != 0 && !powered) _unpoweredZones++;
+                if (powered) _powerCapacity[network]--;
+
+                if (_powered[index] != powered && _serviceCells.Contains(index))
+                    _coverageDirty = true;
+                _powered[index] = powered;
+            }
+
+            foreach (int index in _utilitySources)
+            {
+                if (!_powered[index]) continue;
+                BuildingModel model = _cells[index / GridSize, index % GridSize].Model;
+                int network = _cellComponent[index];
+                if (model == BuildingModel.WaterPump) _waterCapacity[network] += UtilityCapacity;
+                else if (model == BuildingModel.SewagePlant) _sewageCapacity[network] += UtilityCapacity;
+            }
+
+            foreach (int index in _orderedConsumers)
+            {
+                int network = _cellComponent[index];
+                bool water = _waterCapacity[network] > 0;
+                bool sewage = _sewageCapacity[network] > 0;
+                _watered[index] = water;
+                _sewered[index] = sewage;
+                if (water) _waterCapacity[network]--;
+                if (sewage) _sewageCapacity[network]--;
+            }
+
+            _trafficDirty = true;
+            _powerDirty = false;
+        }
+
+        private void RebuildRoadComponents()
+        {
+            _componentRoadVersion = Roads.Version;
+            int[] components = _roadComponent;
+            Array.Clear(components, 0, components.Length);
+            _componentRoads.Clear();
+            _componentRoads.Add(0);
+            int[] pending = _pendingRoads;
+
+            foreach (int index in _utilityRoads)
+            {
+                if (components[index] != 0) continue;
+                int component = _componentRoads.Count;
+                int head = 0;
+                int tail = 1;
+                components[index] = component;
+                pending[0] = index;
+
+                while (head < tail)
                 {
-                    int road = pending.Dequeue();
+                    int road = pending[head++];
                     RoadConnections edges = Roads.GetConnections(road / GridSize, road % GridSize);
                     if ((edges & RoadConnections.West) != 0) Visit(road - GridSize);
                     if ((edges & RoadConnections.East) != 0) Visit(road + GridSize);
                     if ((edges & RoadConnections.South) != 0) Visit(road - 1);
                     if ((edges & RoadConnections.North) != 0) Visit(road + 1);
                 }
-            }
+                _componentRoads.Add(tail);
 
-            var capacity = new int[component + 1];
-            foreach (int index in _occupied)
-                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
-                    capacity[AdjacentComponent(index)] += PowerPlantCapacity;
-
-            _unpoweredZones = 0;
-            _powered.Clear();
-            foreach (int index in _occupied)
-            {
-                if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
-                int grid = AdjacentComponent(index);
-                if (grid == 0) continue;
-                if (capacity[grid] == 0)
+                void Visit(int next)
                 {
-                    _unpoweredZones++;
-                    continue;
+                    if (components[next] != 0) return;
+                    components[next] = component;
+                    pending[tail++] = next;
                 }
-                _powered.Add(index);
-                capacity[grid]--;
             }
+        }
 
-            _powerDirty = false;
+        private int AdjacentComponent(int index)
+        {
+            RoadConnections access = Roads.GetAccess(index / GridSize, index % GridSize);
+            if ((access & RoadConnections.West) != 0) return _roadComponent[index - GridSize];
+            if ((access & RoadConnections.East) != 0) return _roadComponent[index + GridSize];
+            if ((access & RoadConnections.South) != 0) return _roadComponent[index - 1];
+            return (access & RoadConnections.North) != 0 ? _roadComponent[index + 1] : 0;
+        }
 
-            void Visit(int index)
-            {
-                if (components.ContainsKey(index)) return;
-                components[index] = component;
-                pending.Enqueue(index);
-            }
-
-            int AdjacentComponent(int index)
-            {
-                RoadConnections access = Roads.GetAccess(index / GridSize, index % GridSize);
-                if ((access & RoadConnections.West) != 0) return components[index - GridSize];
-                if ((access & RoadConnections.East) != 0) return components[index + GridSize];
-                if ((access & RoadConnections.South) != 0) return components[index - 1];
-                return (access & RoadConnections.North) != 0 ? components[index + 1] : 0;
-            }
+        private static void ClearCapacity(ref int[] buffer, int count)
+        {
+            if (buffer.Length < count) buffer = new int[Math.Max(count, buffer.Length * 2)];
+            else Array.Clear(buffer, 0, count);
         }
 
         private static bool UsesPower(CellType type) =>

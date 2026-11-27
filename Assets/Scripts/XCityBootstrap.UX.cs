@@ -94,6 +94,9 @@ namespace XCity
             _audioButton = CreateCompactButton(bar.transform, font, "Âm thanh: Bật", "Btn_Audio");
             _audioButton.onClick.AddListener(ToggleAudioMute);
 
+            Button settingsButton = CreateCompactButton(bar.transform, font, "Cài đặt", "Btn_Settings");
+            settingsButton.onClick.AddListener(ToggleSettings);
+
             RefreshUXButtons();
             RefreshRciBars();
         }
@@ -150,6 +153,8 @@ namespace XCity
         private void CycleOverlayMode()
         {
             _overlays?.CycleMode();
+            _cityRenderer?.SetInfoView(_overlays != null && _overlays.Mode == CityOverlayMode.Happiness);
+            RefreshInfoViewHUD();
             _audio?.PlayBuild();
             RefreshUXButtons();
         }
@@ -207,7 +212,10 @@ namespace XCity
         private void RefreshRciBars()
         {
             if (_rciResFill == null) return;
-            DayNightSystem.ComputeRciDemand(_city, out float r, out float c, out float ind);
+            // Bars show the simulation's own demand (-100..100) as a 0..1 fill.
+            float r = (_city.ResidentialDemand + 100) / 200f;
+            float c = (_city.CommercialDemand + 100) / 200f;
+            float ind = (_city.IndustrialDemand + 100) / 200f;
             _rciResFill.anchorMax = new Vector2(1f, r);
             _rciComFill.anchorMax = new Vector2(1f, c);
             _rciIndFill.anchorMax = new Vector2(1f, ind);
