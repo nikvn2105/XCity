@@ -13,12 +13,13 @@ namespace XCity
     internal sealed class DayNightSystem
     {
         // A relaxed pace: one full day and night every 10 minutes at 1x speed.
-        private const float CycleDurationSeconds = 600f;
+        public const float CycleDurationSeconds = 600f;
+        public const float StartTimeOfDay = 0.43f; // 10:19 AM
 
         private readonly Light _sun;
         private readonly Camera _cam;
         private readonly Material _waterMat;
-        private float _timeOfDay = 0.43f; // 10:19 AM morning start
+        private float _timeOfDay = StartTimeOfDay;
 
         public LightingMode Mode { get; private set; } = LightingMode.AutoCycle;
         public float NightFactor { get; private set; }
@@ -68,10 +69,11 @@ namespace XCity
             return $"{hh:00}:{mm:00}";
         }
 
-        public void Update(float dt)
+        // The clock comes from the city's tick count, so the sun matches the day shown in the HUD
+        // and survives save and load.
+        public void SyncClock(float timeOfDay)
         {
-            if (Mode == LightingMode.AutoCycle && dt > 0f)
-                _timeOfDay = Mathf.Repeat(_timeOfDay + dt / CycleDurationSeconds, 1f);
+            if (Mode == LightingMode.AutoCycle) _timeOfDay = Mathf.Repeat(timeOfDay, 1f);
             ApplyAtmosphere();
         }
 

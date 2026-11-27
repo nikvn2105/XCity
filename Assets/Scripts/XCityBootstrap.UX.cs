@@ -23,7 +23,6 @@ namespace XCity
         private RectTransform _rciComFill;
         private RectTransform _rciIndFill;
 
-        private Button _speedButton;
         private Button _lightButton;
         private Button _overlayButton;
         private Button _followButton;
@@ -45,6 +44,7 @@ namespace XCity
             _emergencies.OnFireStarted += () =>
             {
                 _audio?.PlayAlert();
+                ShowToast(UiText.FireStarted, UiTheme.Danger, _emergencies.FireWorldPos);
                 RefreshHUD();
             };
         }
@@ -65,22 +65,6 @@ namespace XCity
             layout.padding = new RectOffset(8, 8, 5, 5);
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = true;
-
-            // Compact R-C-I Demand indicator
-            var rciBox = CreatePanel(bar.transform, "RCIBars", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
-                new Color(0.14f, 0.17f, 0.23f, 1f));
-            var rciRow = rciBox.AddComponent<HorizontalLayoutGroup>();
-            rciRow.spacing = 4;
-            rciRow.padding = new RectOffset(6, 6, 4, 4);
-            rciRow.childForceExpandWidth = true;
-            rciRow.childForceExpandHeight = true;
-
-            _rciResFill = CreateDemandBar(rciBox.transform, font, "R", UiTheme.Residential);
-            _rciComFill = CreateDemandBar(rciBox.transform, font, "C", UiTheme.Commercial);
-            _rciIndFill = CreateDemandBar(rciBox.transform, font, "I", UiTheme.Industrial);
-
-            _speedButton = CreateCompactButton(bar.transform, font, "Tốc độ: 1×", "Btn_Speed");
-            _speedButton.onClick.AddListener(CycleSimSpeed);
 
             _lightButton = CreateCompactButton(bar.transform, font, "Tự động", "Btn_Light");
             _lightButton.onClick.AddListener(CycleLightingMode);
@@ -136,13 +120,6 @@ namespace XCity
             return btn;
         }
 
-        private void CycleSimSpeed()
-        {
-            _simSpeed = _simSpeed > 2f ? 0f : _simSpeed > 0.5f ? 3f : 1f;
-            _audio?.PlayBuild();
-            RefreshUXButtons();
-        }
-
         private void CycleLightingMode()
         {
             _dayNight?.CycleMode();
@@ -167,17 +144,6 @@ namespace XCity
 
         private void RefreshUXButtons()
         {
-            if (_speedButton != null)
-            {
-                string lbl = _simSpeed <= 0f ? "Tạm dừng" : _simSpeed > 2f ? "Tốc độ: 3×" : "Tốc độ: 1×";
-                _speedButton.GetComponentInChildren<Text>().text = lbl;
-                _speedButton.image.color = _simSpeed <= 0f
-                    ? UiTheme.Danger
-                    : _simSpeed > 2f
-                        ? UiTheme.Active
-                        : UiTheme.Button;
-            }
-
             if (_lightButton != null && _dayNight != null)
             {
                 _lightButton.GetComponentInChildren<Text>().text = _dayNight.GetModeLabel();

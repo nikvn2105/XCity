@@ -43,8 +43,6 @@ namespace XCity
             skipRect.offsetMax = new Vector2(-352f, -12f);
             _skipTutorialButton.onClick.AddListener(SkipTutorial);
 
-            if (_statusTextRect != null)
-                _statusTextRect.offsetMax = new Vector2(-460f, 0f);
         }
 
         private void SkipTutorial()
@@ -61,8 +59,6 @@ namespace XCity
             PlayerPrefs.Save();
             if (_skipTutorialButton != null)
                 _skipTutorialButton.gameObject.SetActive(false);
-            if (_statusTextRect != null)
-                _statusTextRect.offsetMax = new Vector2(-360f, 0f);
             _tutorialDoneBannerUntil = showBanner ? Time.unscaledTime + TutorialDoneBannerSeconds : 0f;
         }
 

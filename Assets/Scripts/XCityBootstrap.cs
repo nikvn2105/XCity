@@ -130,12 +130,8 @@ namespace XCity
             LoadDisplaySettings();
             SetupCamera();
             SetupHUD();
-            // After SetupHUD, which clears the banner.
             if (_city.DroppedCellsOnLoad > 0)
-            {
-                _unlockBanner = $"Đã gỡ {_city.DroppedCellsOnLoad} công trình không còn hợp lệ trên bản đồ";
-                _unlockBannerUntil = Time.unscaledTime + 10f;
-            }
+                ShowToast(string.Format(UiText.DroppedOnLoad, _city.DroppedCellsOnLoad), UiTheme.Warning);
             RestoreFpsCounter();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
@@ -283,21 +279,25 @@ namespace XCity
             Font font = UiTheme.Font;
 
             var topBar = CreatePanel(_safeAreaRoot, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), UiTheme.Panel);
+            SetupTopBarStats(topBar.transform, font);
+            var hintPill = CreatePanel(_safeAreaRoot, "HintPill", new Vector2(0.2f, 0), new Vector2(0.8f, 0),
+                new Vector2(0, 96), new Vector2(0, 128), UiTheme.Panel);
             var statusObj = new GameObject("StatusText");
-            statusObj.transform.SetParent(topBar.transform, false);
+            statusObj.transform.SetParent(hintPill.transform, false);
             var statusRect = statusObj.AddComponent<RectTransform>();
             statusRect.anchorMin = Vector2.zero;
             statusRect.anchorMax = Vector2.one;
-            statusRect.offsetMin = new Vector2(20, 0);
-            statusRect.offsetMax = new Vector2(-360, 0);
+            statusRect.offsetMin = new Vector2(14, 0);
+            statusRect.offsetMax = new Vector2(-14, 0);
             _hudStatusText = statusObj.AddComponent<Text>();
             _hudStatusText.font = font;
-            _hudStatusText.fontSize = 21;
-            _hudStatusText.color = Color.white;
-            _hudStatusText.alignment = TextAnchor.MiddleLeft;
+            _hudStatusText.fontSize = UiTheme.SmallSize + 2;
+            _hudStatusText.color = UiTheme.Text;
+            _hudStatusText.alignment = TextAnchor.MiddleCenter;
+            _hudStatusText.raycastTarget = false;
             _hudStatusText.resizeTextForBestFit = true;
-            _hudStatusText.resizeTextMinSize = 13;
-            _hudStatusText.resizeTextMaxSize = 21;
+            _hudStatusText.resizeTextMinSize = UiTheme.TinySize;
+            _hudStatusText.resizeTextMaxSize = UiTheme.SmallSize + 2;
             SetupStrokeCost(statusRect, font);
 
             _undoButton = CreateHudButton(topBar.transform, font, "Hoàn tác", "UndoBuild");
@@ -562,6 +562,7 @@ namespace XCity
             RunSimulationTick();
             HandleInput();
             UpdateCameraInertia();
+            UpdateTopBar();
             UpdateFpsCounter();
             if (_shoreWarningUntil > 0f && Time.unscaledTime >= _shoreWarningUntil)
             {
@@ -1164,7 +1165,7 @@ namespace XCity
             float simDt = Time.deltaTime * _simSpeed;
             _construction.Update(simDt, visible, LocalView);
             _buildingRenderer.RebuildDirtyChunks(1);
-            _dayNight?.Update(simDt);
+            _dayNight?.SyncClock(GameDays);
 
             if (!visible)
             {
@@ -1384,7 +1385,6 @@ namespace XCity
             AutoStart();
         }
 
-        private static string Signed(int value) => value.ToString("+0;-0;0");
 
         private void SetupStrokeCost(RectTransform parent, Font font)
         {
@@ -1405,7 +1405,7 @@ namespace XCity
             rect.SetParent(parent, false);
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
             rect.pivot = Vector2.zero;
-            rect.anchoredPosition = new Vector2(x, -23f);
+            rect.anchoredPosition = new Vector2(x, -11f);
             rect.sizeDelta = new Vector2(width, 22f);
             var label = obj.AddComponent<Text>();
             label.font = font;
@@ -1473,10 +1473,7 @@ namespace XCity
                             unlockedNames.Add(BuildingCatalog.Get(model).Name);
                     }
                     if (unlockedNames.Count > 0)
-                    {
-                        _unlockBanner = "Đã mở khóa: " + string.Join(", ", unlockedNames);
-                        _unlockBannerUntil = Time.unscaledTime + 6f;
-                    }
+                        ShowToast(UiText.Unlocked + string.Join(", ", unlockedNames), UiTheme.Active);
                 }
                 _catalogUnlockTier = unlockTier;
                 RefreshCatalogUnlocks();
@@ -1484,6 +1481,7 @@ namespace XCity
 
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;
+            RefreshTopBar();
             if (_hudStatusText != null)
             {
                 if (_activeTool != BuildTool.Pan && _inspectionOutline != null)
@@ -1523,23 +1521,13 @@ namespace XCity
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 string uxPrefix = GetUXStatusPrefix();
                 if (uxPrefix != null) hint = $"{uxPrefix}  |  {hint}";
-                if (_unlockBanner != null)
-                {
-                    if (Time.unscaledTime < _unlockBannerUntil)
-                        hint = $"{_unlockBanner}  |  {hint}";
-                    else
-                        _unlockBanner = null;
-                }
                 string tutorialPrefix = GetTutorialStatusPrefix();
                 if (tutorialPrefix != null) hint = $"{tutorialPrefix}  |  {hint}";
                 if (_simSpeed <= 0f) hint = $"Đang tạm dừng  |  {hint}";
                 if (_city.TicksInDebt > 0 && !_city.IsBankrupt)
                     hint = $"Cảnh báo phá sản: còn {CitySimulation.BankruptcyTicks - _city.TicksInDebt} lượt · Vay hoặc cắt giảm chi phí  |  {hint}";
                 if (_city.IsBankrupt) ShowBankruptcy();
-                string debt = _city.LoanBalance > 0 ? $" · Nợ ${_city.LoanBalance:N0}" : "";
-                string text = $"${_city.Money:N0} ({_city.LastNetIncome:+#,##0;-#,##0;0}){debt}  |  Dân: {_city.Population:N0}" +
-                    $"  |  Việc làm: {_city.Jobs:N0}  |  Nhu cầu  Ở {Signed(_city.ResidentialDemand)}" +
-                    $" · TM {Signed(_city.CommercialDemand)} · CN {Signed(_city.IndustrialDemand)}\n{(showStrokeCost ? "\u00a0" : hint)}";
+                string text = showStrokeCost ? "\u00a0" : hint;
                 if (text == _lastHudText) return;
                 _lastHudText = text;
                 _hudStatusText.text = text;
