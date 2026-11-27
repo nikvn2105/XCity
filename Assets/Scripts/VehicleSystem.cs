@@ -186,18 +186,32 @@ namespace XCity
                     if (j == i) continue;
                     Vehicle other = _vehicles[j];
                     float minGapSame = Mathf.Clamp((v.Template.Length + other.Template.Length) * 0.5f / _cellSize + 0.14f, 0.42f, 0.96f);
-                    if (other.Cell == v.Cell && other.OutDir == v.OutDir && other.T > v.T)
+                    if (other.Cell == v.Cell)
                     {
-                        float gap = other.T - v.T;
-                        if (gap < minGapSame)
-                            desiredSpeed = gap < minGapSame * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                        if (other.OutDir == v.OutDir && other.T > v.T)
+                        {
+                            float gap = other.T - v.T;
+                            if (gap < minGapSame)
+                                desiredSpeed = gap < minGapSame * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                        }
+                        else if (other.OutDir != v.OutDir && other.InDir != (v.OutDir ^ 1) && v.T < 0.42f && other.T >= 0.25f && other.T <= 0.78f)
+                        {
+                            desiredSpeed = 0f;
+                        }
                     }
-                    else if (other.Cell == nextCell && other.InDir == v.OutDir)
+                    else if (other.Cell == nextCell)
                     {
-                        float gap = (1f - v.T) + other.T;
-                        float minGapNext = minGapSame - 0.04f;
-                        if (gap < minGapNext)
-                            desiredSpeed = gap < minGapNext * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                        if (other.InDir == v.OutDir)
+                        {
+                            float gap = (1f - v.T) + other.T;
+                            float minGapNext = minGapSame - 0.04f;
+                            if (gap < minGapNext)
+                                desiredSpeed = gap < minGapNext * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                        }
+                        else if (other.InDir != (v.OutDir ^ 1) && (1f - v.T) < 0.38f && other.T >= 0.12f && other.T <= 0.88f)
+                        {
+                            desiredSpeed = 0f;
+                        }
                     }
                 }
 
