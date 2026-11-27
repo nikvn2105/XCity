@@ -28,6 +28,7 @@ namespace XCity
         private float _nextAutosave;
         private CityChunkRenderer _cityRenderer;
         private BuildingChunkRenderer _buildingRenderer;
+        private ConstructionSystem _construction;
         private VehicleSystem _vehicles;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
@@ -148,6 +149,7 @@ namespace XCity
             AddWaterMarks(worldSpan);
             _cityRenderer = new CityChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _vertexColorMat, transform);
+            _construction = new ConstructionSystem(_city, _buildingRenderer, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
         }
 
@@ -690,6 +692,7 @@ namespace XCity
         {
             Shader.SetGlobalFloat("_XCityTime", Time.time);
             _cityRenderer.RebuildDirtyChunks();
+            _construction.Update(Time.deltaTime);
             _buildingRenderer.RebuildDirtyChunks();
             _vehicles.Update(Time.deltaTime);
         }
@@ -697,6 +700,7 @@ namespace XCity
         private void OnDestroy()
         {
             _cityRenderer?.Dispose();
+            _construction?.Dispose();
             _buildingRenderer?.Dispose();
             _vehicles?.Dispose();
             Destroy(_vertexColorMat);

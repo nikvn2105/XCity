@@ -123,6 +123,35 @@ namespace XCity
             }
         }
 
+        public static void BuildGroundwork(MeshBuilder b, int x, int z, CellType type, int quarterTurns, Vector3 cellCenterLocal)
+        {
+            b.SetFrame(cellCenterLocal + Vector3.up * CityChunkRenderer.BuildingBase, quarterTurns);
+
+            var rng = new CellRng(Hash(x, z, (int)type + 505));
+            Color32 dirt = new Color32(154, 140, 118, 255);
+            Color32 stakeWood = new Color32(138, 102, 66, 255);
+            Color32 coneOrange = new Color32(235, 115, 35, 255);
+            Color32 brickRed = new Color32(180, 82, 62, 255);
+
+            // Cleared dirt/gravel pad
+            b.AddBox(new Vector3(0f, 0.015f, 0f), new Vector3(2.6f, 0.03f, 2.6f), dirt, dirt);
+
+            // 4 corner stakes
+            b.AddBox(new Vector3(-1.18f, 0.18f, -1.18f), new Vector3(0.08f, 0.36f, 0.08f), stakeWood, stakeWood);
+            b.AddBox(new Vector3(1.18f, 0.18f, -1.18f), new Vector3(0.08f, 0.36f, 0.08f), stakeWood, stakeWood);
+            b.AddBox(new Vector3(-1.18f, 0.18f, 1.18f), new Vector3(0.08f, 0.36f, 0.08f), stakeWood, stakeWood);
+            b.AddBox(new Vector3(1.18f, 0.18f, 1.18f), new Vector3(0.08f, 0.36f, 0.08f), stakeWood, stakeWood);
+
+            // Small material pallet
+            float px = rng.Next() < 0.5f ? -0.55f : 0.55f;
+            b.AddBox(new Vector3(px, 0.06f, -0.45f), new Vector3(0.65f, 0.06f, 0.50f), stakeWood, stakeWood);
+            b.AddBox(new Vector3(px, 0.19f, -0.45f), new Vector3(0.50f, 0.20f, 0.38f), brickRed, brickRed);
+
+            // Two safety cones near the road edge
+            b.AddCylinder(new Vector3(-0.65f, 0.03f, 1.10f), 0.11f, 0.03f, 0.28f, 6, coneOrange, true, coneOrange);
+            b.AddCylinder(new Vector3(0.65f, 0.03f, 1.10f), 0.11f, 0.03f, 0.28f, 6, coneOrange, true, coneOrange);
+        }
+
         private static void BuildResidential(MeshBuilder b, int level, float h, ref CellRng paletteRng, ref CellRng shapeRng)
         {
             Color32 wall = WallPalette[paletteRng.Range(0, WallPalette.Length)];
