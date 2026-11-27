@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -66,6 +67,88 @@ namespace XCity.Tests
                 0x3394BA78B2E9D378UL, 0xBE934DC03F8225F9UL, 0x9AE3CF32875D73B0UL,
                 0xBE934DC03F8225F9UL, 0x3394BA78B2E9D378UL, 0x1E1545788E623FA9UL
             }, states);
+        }
+
+        [Fact]
+        public void LargeCity_TickPathTrafficAndUndo()
+        {
+            CitySimulation city = CreateLargeCity(out int occupied);
+            _output.WriteLine($"Fixture: {occupied:N0} occupied cells");
+            Measure("Tick", city.Tick);
+
+            var route = new List<int>(CitySimulation.GridSize * 2);
+            void FindPath()
+            {
+                if (!city.Roads.TryFindPath(150, 160, 270, 258, route))
+                    throw new InvalidOperationException("Benchmark route must reach its destination.");
+            }
+            Measure("TryFindPath", FindPath);
+            Assert.Equal(218, route.Count);
+
+            CitySimulation trafficCity = CreateLargeCity(out _);
+            var method = typeof(CitySimulation).GetMethod("RefreshTraffic", BindingFlags.Instance | BindingFlags.NonPublic);
+            var refreshTraffic = (Action)method.CreateDelegate(typeof(Action), trafficCity);
+            bool roadBuilt = false;
+            Measure("RefreshTraffic (dirty, utilities current)", refreshTraffic, () =>
+            {
+                Assert.True(roadBuilt ? trafficCity.TryUndoBuild() : trafficCity.TrySetCell(256, 257, CellType.Road));
+                roadBuilt = !roadBuilt;
+                _ = trafficCity.UnpoweredZones;
+            });
+
+            CitySimulation undoCity = CreateLargeCity(out _);
+            Measure("Undo road build (one tile)", () =>
+            {
+                if (!undoCity.TryUndoBuild()) throw new InvalidOperationException("Benchmark undo must succeed.");
+            }, () => Assert.True(undoCity.TrySetCell(256, 257, CellType.Road)));
+        }
+
+        [Fact]
+        public void LargeCity_TicksAndFarRouteMatchReference()
+        {
+            CitySimulation city = CreateLargeCity(out _);
+            var route = new List<int>();
+            Assert.True(city.Roads.TryFindPath(150, 160, 270, 258, route));
+            ulong path = 14695981039346656037UL;
+            foreach (int step in route) path = unchecked((path ^ (uint)step) * 1099511628211UL);
+            Assert.Equal(0xB130B91B09D9AA5BUL, path);
+            Assert.True(city.TrySetCell(256, 257, CellType.Residential));
+            Assert.True(city.TrySetCell(257, 257, CellType.Industrial));
+            // Golden values captured on 2449372 with two newly zoned cells.
+            var expected = new (ulong Fingerprint, int Money, uint RandomState)[]
+            {
+                (0xBA4EEE661275DCCAUL, 2736980, 2647435461),
+                (0x55D2DFE7D933EBBEUL, 4474060, 307599695),
+                (0x55D2DFE7D933EBBEUL, 6211140, 2398689233),
+                (0x55D2DFE7D933EBBEUL, 7948220, 745495504),
+                (0x55D2DFE7D933EBBEUL, 9685300, 632435482)
+            };
+            foreach (var state in expected)
+            {
+                city.Tick();
+                Assert.Equal(state, (Fingerprint(city), city.Money, city.CreateSnapshot().randomState));
+            }
+        }
+
+        private void Measure(string label, Action operation, Action prepare = null)
+        {
+            var elapsed = new double[21];
+            var allocated = new long[elapsed.Length];
+            for (int i = -8; i < elapsed.Length; i++)
+            {
+                prepare?.Invoke();
+                long bytes = GC.GetAllocatedBytesForCurrentThread();
+                long start = Stopwatch.GetTimestamp();
+                operation();
+                double milliseconds = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+                if (i < 0) continue;
+                elapsed[i] = milliseconds;
+                allocated[i] = GC.GetAllocatedBytesForCurrentThread() - bytes;
+            }
+
+            Array.Sort(elapsed);
+            Array.Sort(allocated);
+            _output.WriteLine($"{label}: median {elapsed[10]:F3} ms; p90 {elapsed[18]:F3} ms; median allocated {allocated[10]:N0} bytes.");
         }
 
         private static void ReadDerivedState(CitySimulation city)
