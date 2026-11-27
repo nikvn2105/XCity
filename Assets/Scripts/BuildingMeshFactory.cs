@@ -4,25 +4,25 @@ namespace XCity
 {
     internal static class BuildingMeshFactory
     {
-        private static readonly Color32 LotGrass = new Color32(110, 165, 90, 255);
+        private static readonly Color32 LotGrass = new Color32(105, 137, 92, 255);
         private static readonly Color32 LotPaving = new Color32(185, 185, 180, 255);
         private static readonly Color32 LotAsphalt = new Color32(120, 120, 118, 255);
 
         private static readonly Color32[] WallPalette =
         {
-            new Color32(235, 225, 200, 255), // cream
-            new Color32(240, 200, 170, 255), // peach
-            new Color32(190, 215, 230, 255), // light blue
-            new Color32(240, 240, 235, 255), // white
-            new Color32(200, 215, 185, 255)  // sage
+            new Color32(203, 191, 167, 255), // cream
+            new Color32(172, 124, 101, 255), // peach
+            new Color32(158, 169, 169, 255), // light blue
+            new Color32(210, 208, 196, 255), // white
+            new Color32(165, 171, 151, 255)  // sage
         };
 
         private static readonly Color32[] RoofPalette =
         {
-            new Color32(180, 80, 60, 255),  // terracotta
+            new Color32(144, 88, 68, 255),  // terracotta
             new Color32(80, 85, 95, 255),   // slate
             new Color32(120, 85, 60, 255),  // brown
-            new Color32(60, 120, 125, 255)  // teal
+            new Color32(76, 94, 96, 255)  // teal
         };
 
         private static readonly Color32[] AwningPalette =
@@ -49,7 +49,7 @@ namespace XCity
         };
 
         private static readonly Color32 WindowGlass = new Color32(70, 95, 125, 255);
-        private static readonly Color32 LitWindowGlass = new Color32(255, 215, 140, 255);
+        private static readonly Color32 LitWindowGlass = new Color32(162, 160, 139, 255);
         private static readonly Color32 DoorWood = new Color32(90, 60, 40, 255);
         private static readonly Color32 ConcreteLight = new Color32(200, 200, 195, 255);
         private static readonly Color32 MullionColor = new Color32(220, 226, 232, 255);
@@ -203,11 +203,14 @@ namespace XCity
             {
                 AddWindowBlock(b, new Vector3(0, 0.04f, -0.12f), 2.75f, 2.48f, h - 0.30f,
                     cell.Level + 2, wall, roof);
-                for (int floor = 0; floor < cell.Level + 1; floor++)
-                    b.AddBox(new Vector3(0.69f, 1.0f + floor * 0.78f, 1.20f),
-                        new Vector3(1.14f, 0.10f, 0.42f), ConcreteLight, ConcreteLight);
-                b.AddBox(new Vector3(-0.45f, h - 0.13f, -0.34f),
-                    new Vector3(0.80f, 0.30f, 0.72f), wall, roof);
+                float floorPitch = (h - 0.30f) / (cell.Level + 2);
+                for (int floor = 1; floor < cell.Level + 2; floor++)
+                {
+                    float y = 0.04f + floor * floorPitch;
+                    AddBalcony(b, new Vector3(0.62f, y, 1.30f), 1.20f);
+                }
+                AddRoofPlant(b, new Vector3(-0.45f, h - 0.26f, -0.34f), roof);
+                AddPorch(b, -0.56f, 1.13f, 0.84f, 0.80f);
                 return;
             }
 
@@ -218,6 +221,9 @@ namespace XCity
                     cell.Level, wall, roof);
                 b.AddGableRoof(new Vector3(-0.28f, body + 0.04f, -0.24f),
                     2.05f, 1.9f, h * 0.19f, 0.12f, roof, wall);
+                AddPorch(b, -0.48f, 0.72f, 0.94f, 0.80f);
+                b.AddBox(new Vector3(1.13f, 0.59f, -0.67f), new Vector3(0.78f, 1.10f, 1.42f), wall, roof);
+                b.AddBox(new Vector3(1.13f, 1.18f, -0.67f), new Vector3(0.91f, 0.11f, 1.53f), roof, roof);
                 b.AddBox(new Vector3(1.06f, 0.10f, 0.77f), new Vector3(0.98f, 0.12f, 1.16f),
                     ConcreteLight, new Color32(119, 185, 188, 255));
                 b.AddCylinder(new Vector3(-1.36f, 0.04f, 1.22f), 0.23f, 0.16f, 0.73f,
@@ -232,6 +238,9 @@ namespace XCity
                 Color32 tone = house == 0 ? wall : Darken(wall, house < 0 ? 0.88f : 0.96f);
                 AddWindowBlock(b, new Vector3(x, 0.04f, -0.06f), 0.91f, 2.04f, body,
                     cell.Level, tone, roof);
+                AddPorch(b, x, 0.97f, 0.57f, 0.72f);
+                b.AddBox(new Vector3(x + 0.24f, body + h * 0.13f, -0.36f),
+                    new Vector3(0.16f, h * 0.27f, 0.21f), tone, ConcreteLight);
                 b.AddGableRoof(new Vector3(x, body + 0.04f, -0.06f),
                     0.91f, 2.04f, h * 0.18f, 0.025f, roof, tone);
             }
@@ -362,6 +371,8 @@ namespace XCity
             var center = foot + Vector3.up * (height * 0.5f);
             b.AddBox(center, size, wall, top);
 
+            b.AddBox(new Vector3(foot.x, foot.y + height - 0.025f, foot.z),
+                new Vector3(width + 0.085f, 0.05f, depth + 0.085f), Darken(top, 0.78f), top);
             float floorHeight = height / floors;
             int columns = width > 2.2f ? 3 : width > 1.1f ? 2 : 1;
             float bay = width / columns;
@@ -371,6 +382,10 @@ namespace XCity
                 for (int column = 0; column < columns; column++)
                 {
                     float x = (column + 0.5f) * bay - width * 0.5f;
+                    // Projecting lintels catch sunlight above the glazing and shade the upper reveal.
+                    if (width > 1.4f)
+                        b.AddBox(new Vector3(center.x + x, y + floorHeight * 0.40f, center.z + depth * 0.5f + 0.038f),
+                            new Vector3(bay * 0.68f, 0.045f, 0.095f), Darken(wall, 0.78f), wall);
                     Color32 window = (floor + column) % 5 == 3 ? LitWindowGlass : WindowGlass;
                     b.AddFacadeRect(center, size, 0, x - bay * 0.30f, x + bay * 0.30f,
                         y, y + floorHeight * 0.38f, window);
@@ -384,6 +399,37 @@ namespace XCity
             }
         }
 
+        private static void AddPorch(MeshBuilder b, float x, float facadeZ, float width, float height)
+        {
+            const float depth = 0.34f;
+            float z = facadeZ + depth * 0.5f;
+            var metal = new Color32(70, 77, 78, 255);
+            b.AddBox(new Vector3(x, 0.09f, z), new Vector3(width, 0.10f, depth + 0.13f), ConcreteLight, ConcreteLight);
+            b.AddBox(new Vector3(x, height, z), new Vector3(width + 0.10f, 0.075f, depth + 0.09f), metal, metal);
+            b.AddBox(new Vector3(x - width * 0.39f, height * 0.5f, facadeZ + depth),
+                new Vector3(0.05f, height, 0.05f), metal, metal);
+            b.AddBox(new Vector3(x, height * 0.48f, facadeZ + 0.028f),
+                new Vector3(width * 0.47f, height * 0.83f, 0.06f), DoorWood, DoorWood);
+        }
+
+        private static void AddBalcony(MeshBuilder b, Vector3 center, float width)
+        {
+            var rail = new Color32(102, 120, 121, 255);
+            b.AddBox(center, new Vector3(width, 0.085f, 0.42f), ConcreteLight, ConcreteLight);
+            b.AddBox(center + new Vector3(0, 0.17f, 0.18f), new Vector3(width, 0.27f, 0.05f), rail, ConcreteLight);
+            for (int side = -1; side <= 1; side += 2)
+                b.AddBox(center + new Vector3(side * (width * 0.5f - 0.025f), 0.17f, 0),
+                    new Vector3(0.05f, 0.27f, 0.38f), rail, ConcreteLight);
+        }
+
+        private static void AddRoofPlant(MeshBuilder b, Vector3 foot, Color32 metal)
+        {
+            b.AddBox(foot + Vector3.up * 0.14f, new Vector3(0.84f, 0.28f, 0.58f), metal, ConcreteLight);
+            for (int i = -1; i <= 1; i += 2)
+                b.AddCylinder(foot + new Vector3(i * 0.19f, 0.28f, 0), 0.14f, 0.14f, 0.04f, 8,
+                    metal, true, Darken(metal, 0.62f));
+        }
+
         private static void BuildResidential(MeshBuilder b, int level, float h, ref CellRng paletteRng, ref CellRng shapeRng)
         {
             Color32 wall = WallPalette[paletteRng.Range(0, WallPalette.Length)];
@@ -395,12 +441,14 @@ namespace XCity
                 float w = shapeRng.Range(2.2f, 2.6f);
                 float d = shapeRng.Range(2.0f, 2.4f);
                 float wallH = h * 0.6f;
-                float roofH = h * 0.4f;
+                float roofH = Mathf.Min(h * 0.26f, 0.85f);
 
                 Vector3 bodyCenter = new Vector3(0f, baseY + wallH * 0.5f, 0f);
                 Vector3 bodySize = new Vector3(w, wallH, d);
                 b.AddBox(bodyCenter, bodySize, wall, wall);
                 b.AddGableRoof(new Vector3(0f, baseY + wallH, 0f), w, d, roofH, 0.15f, roof, wall);
+
+                AddPorch(b, 0, d * 0.5f, 0.92f, 0.92f);
 
                 // Front door (+Z)
                 b.AddFacadeRect(bodyCenter, bodySize, 0, -0.225f, 0.225f, baseY, baseY + 0.8f, DoorWood);
