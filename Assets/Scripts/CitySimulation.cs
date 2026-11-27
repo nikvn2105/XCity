@@ -169,7 +169,16 @@ namespace XCity
         private readonly bool[] _watered = new bool[GridSize * GridSize];
         private readonly bool[] _sewered = new bool[GridSize * GridSize];
         private readonly int[] _roadComponent = new int[GridSize * GridSize];
-        private readonly Queue<int> _pendingRoads = new Queue<int>();
+        private readonly int[] _pendingRoads = new int[GridSize * GridSize];
+        private readonly HashSet<int> _utilityRoads = new HashSet<int>();
+        private readonly SortedSet<int> _utilityConsumers = new SortedSet<int>();
+        private readonly List<int> _orderedConsumers = new List<int>();
+        private bool _consumerOrderDirty = true;
+        private readonly HashSet<int> _utilitySources = new HashSet<int>();
+        private int[] _powerCapacity = new int[1];
+        private int[] _waterCapacity = new int[1];
+        private int[] _sewageCapacity = new int[1];
+        private int _componentRoadVersion = -1;
         private bool _powerDirty = true;
         private int _unpoweredZones;
         private uint _randomState;
@@ -218,15 +227,42 @@ namespace XCity
 
         internal static bool IsBuildable(int x, int z) => IsInBounds(x, z) && WorldTerrain.IsLand(x, z);
 
-        private void TrackCell(int x, int z, CellType type)
+        private void TrackCell(int x, int z, CellType type, CityCell previous = default)
         {
             int index = CellIndex(x, z);
             if (type == CellType.Empty) _occupied.Remove(index);
             else _occupied.Add(index);
             if (BuildingCatalog.IsPublicService(type)) _serviceCells.Add(index);
             else _serviceCells.Remove(index);
-            _coverageDirty = true;
-            RoadConnections axis = _cells[x, z].BridgeAxis;
+            CityCell current = _cells[x, z];
+            bool consumes = UsesPower(type);
+            bool usedPower = UsesPower(previous.Type);
+            int source = UtilitySource(current);
+            int previousSource = UtilitySource(previous);
+            if (type == CellType.Road) _utilityRoads.Add(index);
+            else _utilityRoads.Remove(index);
+            if (source != 0) _utilitySources.Add(index);
+            else _utilitySources.Remove(index);
+            bool consumersChanged = consumes ? _utilityConsumers.Add(index) : _utilityConsumers.Remove(index);
+            _consumerOrderDirty |= consumersChanged;
+            if (!consumes)
+            {
+                _powered[index] = _watered[index] = _sewered[index] = false;
+                _cellComponent[index] = 0;
+            }
+
+            if (consumes != usedPower || source != previousSource)
+                _powerDirty = true;
+            _trafficDirty = true;
+            if (_coverageChangedByGrowth ||
+                (previous.Model != current.Model &&
+                 (ServiceCatalog.Get(previous.Model).Coverage != ServiceCoverage.None ||
+                  ServiceCatalog.Get(current.Model).Coverage != ServiceCoverage.None)) ||
+                (previous.Type != type && (previous.Type == CellType.Residential || type == CellType.Residential)) ||
+                (type == CellType.Residential && BuildingCatalog.Residents(previous) != BuildingCatalog.Residents(current)))
+                _coverageDirty = true;
+
+            RoadConnections axis = current.BridgeAxis;
             Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis);
         }
 
@@ -282,12 +318,12 @@ namespace XCity
                 ref CityCell cell = ref _cells[entry.X, entry.Z];
                 if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
                 if (entry.Cell.Type == CellType.Residential) Population += BuildingCatalog.Residents(entry.Cell);
+                CityCell previous = cell;
                 cell = entry.Cell;
-                TrackCell(entry.X, entry.Z, entry.Cell.Type);
+                TrackCell(entry.X, entry.Z, entry.Cell.Type, previous);
             }
 
             Money += step.Spent;
-            _powerDirty = true;
             foreach (var entry in step.Cells)
                 CellChanged?.Invoke(entry.X, entry.Z);
             return true;
@@ -321,7 +357,8 @@ namespace XCity
             };
             if (cost > 0 && Money < cost) return false;
 
-            changed.Add((x, z, cell));
+            CityCell previous = cell;
+            changed.Add((x, z, previous));
             if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
             cell = type switch
             {
@@ -330,9 +367,8 @@ namespace XCity
                     new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
                 _ => new CityCell { Type = type, Model = model }
             };
-            _powerDirty = true;
             Money -= cost;
-            TrackCell(x, z, type);
+            TrackCell(x, z, type, previous);
             CellChanged?.Invoke(x, z);
             return true;
         }
@@ -390,6 +426,7 @@ namespace XCity
                         CellType.Commercial => 4f + NextRandom() * 3.5f,
                         _ => 2.2f + NextRandom() * 1.6f
                     };
+                    if (cell.Type == CellType.Residential) _coverageChangedByGrowth = true;
                     CellChanged?.Invoke(x, z);
                 }
 
@@ -399,6 +436,7 @@ namespace XCity
                 {
                     cell.Level++;
                     cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
+                    _coverageChangedByGrowth = true;
                     CellChanged?.Invoke(x, z);
                 }
 
@@ -550,107 +588,119 @@ namespace XCity
             return cell.Level == 0 ? cell.Height == 0f : UsesPower(cell.Type) && cell.Height >= 2.2f && cell.Height <= 7.5f;
         }
 
+        private static int UtilitySource(CityCell cell) =>
+            cell.Type == CellType.PowerPlant ? 1 : cell.Model == BuildingModel.WaterPump ? 2 :
+            cell.Model == BuildingModel.SewagePlant ? 3 : 0;
+
         private void RefreshPower()
         {
-            if (!_powerDirty) return;
+            bool topologyChanged = _componentRoadVersion != Roads.Version;
+            if (!_powerDirty && !topologyChanged) return;
+            if (topologyChanged) RebuildRoadComponents();
 
-            int[] components = _roadComponent;
+            int networks = _componentRoads.Count;
+            ClearCapacity(ref _powerCapacity, networks);
+            ClearCapacity(ref _waterCapacity, networks);
+            ClearCapacity(ref _sewageCapacity, networks);
+            foreach (int index in _utilitySources)
+                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
+                    _powerCapacity[AdjacentComponent(index)] += PowerPlantCapacity;
+
+            _unpoweredZones = 0;
+            if (_consumerOrderDirty)
+            {
+                _orderedConsumers.Clear();
+                _orderedConsumers.AddRange(_utilityConsumers);
+                _consumerOrderDirty = false;
+            }
+            foreach (int index in _orderedConsumers)
+            {
+                int network = AdjacentComponent(index);
+                _cellComponent[index] = network;
+                bool powered = network != 0 && _powerCapacity[network] > 0;
+                if (network != 0 && !powered) _unpoweredZones++;
+                if (powered) _powerCapacity[network]--;
+
+                if (_powered[index] != powered && _serviceCells.Contains(index))
+                    _coverageDirty = true;
+                _powered[index] = powered;
+            }
+
+            foreach (int index in _utilitySources)
+            {
+                if (!_powered[index]) continue;
+                BuildingModel model = _cells[index / GridSize, index % GridSize].Model;
+                int network = _cellComponent[index];
+                if (model == BuildingModel.WaterPump) _waterCapacity[network] += UtilityCapacity;
+                else if (model == BuildingModel.SewagePlant) _sewageCapacity[network] += UtilityCapacity;
+            }
+
+            foreach (int index in _orderedConsumers)
+            {
+                int network = _cellComponent[index];
+                bool water = _waterCapacity[network] > 0;
+                bool sewage = _sewageCapacity[network] > 0;
+                _watered[index] = water;
+                _sewered[index] = sewage;
+                if (water) _waterCapacity[network]--;
+                if (sewage) _sewageCapacity[network]--;
+            }
+
             _trafficDirty = true;
+            _powerDirty = false;
+        }
+
+        private void RebuildRoadComponents()
+        {
+            _componentRoadVersion = Roads.Version;
+            int[] components = _roadComponent;
+            Array.Clear(components, 0, components.Length);
             _componentRoads.Clear();
             _componentRoads.Add(0);
-            Array.Clear(_cellComponent, 0, _cellComponent.Length);
-            Queue<int> pending = _pendingRoads;
-            Array.Clear(components, 0, components.Length);
-            int component = 0;
-            foreach (int index in _occupied)
+            int[] pending = _pendingRoads;
+
+            foreach (int index in _utilityRoads)
             {
-                int x = index / GridSize;
-                int z = index % GridSize;
-                if (_cells[x, z].Type != CellType.Road || components[index] != 0) continue;
-                component++;
-                _componentRoads.Add(0);
-                Visit(index);
-                while (pending.Count > 0)
+                if (components[index] != 0) continue;
+                int component = _componentRoads.Count;
+                int head = 0;
+                int tail = 1;
+                components[index] = component;
+                pending[0] = index;
+
+                while (head < tail)
                 {
-                    int road = pending.Dequeue();
+                    int road = pending[head++];
                     RoadConnections edges = Roads.GetConnections(road / GridSize, road % GridSize);
                     if ((edges & RoadConnections.West) != 0) Visit(road - GridSize);
                     if ((edges & RoadConnections.East) != 0) Visit(road + GridSize);
                     if ((edges & RoadConnections.South) != 0) Visit(road - 1);
                     if ((edges & RoadConnections.North) != 0) Visit(road + 1);
                 }
-            }
+                _componentRoads.Add(tail);
 
-            var capacity = new int[component + 1];
-            foreach (int index in _occupied)
-                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
-                    capacity[AdjacentComponent(index)] += PowerPlantCapacity;
-
-            _unpoweredZones = 0;
-            Array.Clear(_powered, 0, _powered.Length);
-            foreach (int index in _occupied)
-            {
-                if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
-                int grid = AdjacentComponent(index);
-                if (grid == 0) continue;
-                _cellComponent[index] = grid;
-                if (capacity[grid] == 0)
+                void Visit(int next)
                 {
-                    _unpoweredZones++;
-                    continue;
-                }
-                _powered[index] = true;
-                capacity[grid]--;
-            }
-
-            // Water and sewage share the road network the way power does (pipes run under the roads),
-            // and a pump or treatment plant only runs once it has power itself.
-            var water = new int[component + 1];
-            var sewage = new int[component + 1];
-            foreach (int index in _occupied)
-            {
-                if (!_powered[index]) continue;
-                BuildingModel model = _cells[index / GridSize, index % GridSize].Model;
-                if (model == BuildingModel.WaterPump) water[AdjacentComponent(index)] += UtilityCapacity;
-                else if (model == BuildingModel.SewagePlant) sewage[AdjacentComponent(index)] += UtilityCapacity;
-            }
-
-            Array.Clear(_watered, 0, _watered.Length);
-            Array.Clear(_sewered, 0, _sewered.Length);
-            foreach (int index in _occupied)
-            {
-                if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
-                int grid = AdjacentComponent(index);
-                if (water[grid] > 0)
-                {
-                    _watered[index] = true;
-                    water[grid]--;
-                }
-                if (sewage[grid] > 0)
-                {
-                    _sewered[index] = true;
-                    sewage[grid]--;
+                    if (components[next] != 0) return;
+                    components[next] = component;
+                    pending[tail++] = next;
                 }
             }
+        }
 
-            _powerDirty = false;
+        private int AdjacentComponent(int index)
+        {
+            RoadConnections access = Roads.GetAccess(index / GridSize, index % GridSize);
+            if ((access & RoadConnections.West) != 0) return _roadComponent[index - GridSize];
+            if ((access & RoadConnections.East) != 0) return _roadComponent[index + GridSize];
+            if ((access & RoadConnections.South) != 0) return _roadComponent[index - 1];
+            return (access & RoadConnections.North) != 0 ? _roadComponent[index + 1] : 0;
+        }
 
-            void Visit(int index)
-            {
-                if (components[index] != 0) return;
-                components[index] = component;
-                _componentRoads[component]++;
-                pending.Enqueue(index);
-            }
-
-            int AdjacentComponent(int index)
-            {
-                RoadConnections access = Roads.GetAccess(index / GridSize, index % GridSize);
-                if ((access & RoadConnections.West) != 0) return components[index - GridSize];
-                if ((access & RoadConnections.East) != 0) return components[index + GridSize];
-                if ((access & RoadConnections.South) != 0) return components[index - 1];
-                return (access & RoadConnections.North) != 0 ? components[index + 1] : 0;
-            }
+        private static void ClearCapacity(ref int[] buffer, int count)
+        {
+            if (buffer.Length < count) buffer = new int[Math.Max(count, buffer.Length * 2)];
+            else Array.Clear(buffer, 0, count);
         }
 
         private static bool UsesPower(CellType type) =>
