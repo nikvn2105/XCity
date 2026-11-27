@@ -181,7 +181,7 @@ namespace XCity
                     return true;
 
                 case CityOverlayMode.Services:
-                    if (cell.Model == BuildingModel.FireStation || cell.Model == BuildingModel.Hospital || cell.Model == BuildingModel.PoliceStation)
+                    if (ServiceCatalog.Get(cell.Model).Coverage is ServiceCoverage.Health or ServiceCoverage.Police or ServiceCoverage.Fire)
                     {
                         color = new Color32(58, 174, 252, 0);
                         return true;

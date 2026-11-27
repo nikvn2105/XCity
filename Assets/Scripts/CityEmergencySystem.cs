@@ -129,7 +129,7 @@ namespace XCity
                 {
                     CityCell cell = _city.GetCell(x, z);
                     if (cell.Height <= 0f || cell.Type == CellType.Empty || cell.Type == CellType.Road) continue;
-                    if (cell.Model == BuildingModel.FireStation)
+                    if (cell.Model == BuildingModel.FireStation || cell.Model == BuildingModel.FireStationSmall)
                     {
                         fireStationNearby = true;
                         continue;

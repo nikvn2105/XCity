@@ -38,7 +38,10 @@ namespace XCity
         FireStation,
         Harbor,
         WaterPump,
-        SewagePlant
+        SewagePlant,
+        PolicePost,
+        Clinic,
+        FireStationSmall
     }
 
     internal static class BuildingCatalog
@@ -67,6 +70,9 @@ namespace XCity
                 BuildingModel.Harbor => (CellType.CivicService, "Cảng tàu thuyền", 1450, 2.4f, 0),
                 BuildingModel.WaterPump => (CellType.CivicService, "Trạm bơm nước", 900, 2.6f, 0),
                 BuildingModel.SewagePlant => (CellType.CivicService, "Xử lý nước thải", 1000, 2.2f, 0),
+                BuildingModel.PolicePost => (CellType.CivicService, "Đồn cảnh sát nhỏ", 400, 2.6f, 0),
+                BuildingModel.Clinic => (CellType.CivicService, "Phòng khám", 700, 2.8f, 0),
+                BuildingModel.FireStationSmall => (CellType.CivicService, "Trạm cứu hỏa nhỏ", 500, 2.8f, 0),
                 _ => default
             };
 
@@ -84,6 +90,9 @@ namespace XCity
             BuildingModel.Harbor => 22,
             BuildingModel.WaterPump => 20,
             BuildingModel.SewagePlant => 25,
+            BuildingModel.PolicePost => 8,
+            BuildingModel.Clinic => 14,
+            BuildingModel.FireStationSmall => 10,
             _ => Get(model).Seats / 15
         };
 
@@ -162,7 +171,7 @@ namespace XCity
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 9;
+        internal const int CurrentSchemaVersion = 10;
         public const int UtilityCapacity = 40;
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -579,7 +588,8 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = cell.Model >= BuildingModel.WaterPump ? 8 : cell.Model == BuildingModel.Harbor ? 7 :
+                int modelVersion = cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
+                    cell.Model == BuildingModel.Harbor ? 7 :
                     cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
                 if (BuildingCatalog.IsPublicService(cell.Type))

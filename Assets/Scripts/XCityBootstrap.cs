@@ -357,6 +357,7 @@ namespace XCity
             AddCatalogCategory(root, tabs, font, "Thương mại", BuildTool.Commercial,
                 BuildingModel.Market, BuildingModel.HighStreet, BuildingModel.ShoppingMall);
             AddCatalogCategory(root, tabs, font, "Dịch vụ", BuildTool.CivicService,
+                BuildingModel.PolicePost, BuildingModel.Clinic, BuildingModel.FireStationSmall,
                 BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation, BuildingModel.Harbor);
             AddCatalogCategory(root, tabs, font, "Tiện ích", BuildTool.CivicService,
                 BuildingModel.WaterPump, BuildingModel.SewagePlant);

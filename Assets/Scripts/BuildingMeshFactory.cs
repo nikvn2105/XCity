@@ -217,6 +217,11 @@ namespace XCity
                 case BuildingModel.FireStation:
                     BuildCivicService(b, cell.Model, height);
                     break;
+                case BuildingModel.PolicePost:
+                case BuildingModel.Clinic:
+                case BuildingModel.FireStationSmall:
+                    BuildSmallService(b, cell.Model, height);
+                    break;
                 case BuildingModel.ShoppingMall:
                     BuildMall(b, height);
                     break;
@@ -658,6 +663,32 @@ namespace XCity
                 WindowGlass, cabin, wallSurface: BuildingSurface.Glazing);
             b.AddBox(new Vector3(x, deck + 0.45f, z - 0.42f), new Vector3(0.035f, 0.33f, 0.035f),
                 cabin, cabin);
+        }
+
+        // Starter services: one compact block in the big station's colours, so the family reads at a glance.
+        private static void BuildSmallService(MeshBuilder b, BuildingModel model, float h)
+        {
+            var wall = new Color32(202, 199, 186, 255);
+            var slate = new Color32(84, 98, 105, 255);
+            var plaza = new Color32(157, 159, 149, 255);
+            Color32 accent = model switch
+            {
+                BuildingModel.PolicePost => new Color32(49, 80, 112, 255),
+                BuildingModel.Clinic => new Color32(62, 128, 126, 255),
+                _ => new Color32(155, 65, 54, 255)
+            };
+            b.AddBox(new Vector3(0, 0.067f, 1.05f), new Vector3(2.6f, 0.054f, 1.3f), plaza, plaza);
+            AddWindowBlock(b, new Vector3(0f, 0.04f, -0.45f), 2.1f, 1.6f, h * 0.78f, 2, wall, slate);
+            b.AddBox(new Vector3(0f, h * 0.78f + 0.08f, 0.36f), new Vector3(2.14f, 0.16f, 0.08f), accent, accent);
+            AddCivicEntry(b, model == BuildingModel.FireStationSmall ? 0.45f : 0f, 0.36f, 0.8f, accent);
+            if (model == BuildingModel.Clinic)
+                AddHospitalMark(b, new Vector3(0f, h * 0.78f + 0.05f, -0.45f), 0.5f);
+            else if (model == BuildingModel.FireStationSmall)
+            {
+                var garage = new Color32(72, 86, 88, 255);
+                b.AddBox(new Vector3(-0.55f, 0.55f, 0.37f), new Vector3(0.8f, 0.95f, 0.06f), garage, garage);
+            }
+            AddPlanter(b, new Vector3(0.95f, 0.09f, 1.2f), 0.45f);
         }
 
         private static void BuildCivicService(MeshBuilder b, BuildingModel model, float h)

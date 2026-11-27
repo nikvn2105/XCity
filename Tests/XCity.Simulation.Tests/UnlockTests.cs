@@ -221,7 +221,7 @@ namespace XCity.Tests
         {
             var city = CityWithPeak(2400);
             CitySnapshot saved = city.CreateSnapshot();
-            Assert.Equal(9, saved.schemaVersion);
+            Assert.Equal(CitySimulation.CurrentSchemaVersion, saved.schemaVersion);
             Assert.Equal(2400, saved.peakPopulation);
 
             Assert.True(CitySimulation.TryRestore(saved, out var restored));

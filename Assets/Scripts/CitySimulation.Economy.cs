@@ -24,6 +24,10 @@ namespace XCity
             BuildingModel.PoliceStation => (ServiceCoverage.Police, 14),
             BuildingModel.Hospital => (ServiceCoverage.Health, 18),
             BuildingModel.FireStation => (ServiceCoverage.Fire, 14),
+            // Small starter versions: open from the start, cheaper, with a shorter reach.
+            BuildingModel.PolicePost => (ServiceCoverage.Police, 8),
+            BuildingModel.Clinic => (ServiceCoverage.Health, 10),
+            BuildingModel.FireStationSmall => (ServiceCoverage.Fire, 8),
             _ => (ServiceCoverage.None, 0)
         };
 

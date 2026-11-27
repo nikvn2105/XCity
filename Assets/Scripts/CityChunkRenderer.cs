@@ -971,9 +971,9 @@ namespace XCity
             {
                 Color32 badge = cell.Model switch
                 {
-                    BuildingModel.Hospital => CoverageHealth,
-                    BuildingModel.PoliceStation => CoveragePolice,
-                    BuildingModel.FireStation => CoverageFire,
+                    BuildingModel.Hospital or BuildingModel.Clinic => CoverageHealth,
+                    BuildingModel.PoliceStation or BuildingModel.PolicePost => CoveragePolice,
+                    BuildingModel.FireStation or BuildingModel.FireStationSmall => CoverageFire,
                     _ => CoverageHealth
                 };
                 return Color32.Lerp(NeutralLot, badge, 0.85f);
