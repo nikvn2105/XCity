@@ -82,6 +82,9 @@ namespace XCity
         public const int MaxLoanBalance = 3 * LoanRepaid;
         private readonly ServiceCoverage[] _coverage = new ServiceCoverage[GridSize * GridSize];
         private bool _coverageDirty = true;
+        private bool _coverageChangedByGrowth;
+        private int[] _trafficWorkers = new int[1];
+        private int[] _trafficJobs = new int[1];
 
         /// <summary>Demand for new homes, shops and industry, from -100 (oversupplied) to +100.</summary>
         public int ResidentialDemand { get; private set; }
@@ -128,9 +131,12 @@ namespace XCity
         }
 
         public int GetHappiness(int x, int z) =>
-            BaseHappiness + HappinessPerService * ServiceCatalog.Count(GetCoverage(x, z)) -
-            (HasWater(x, z) ? 0 : MissingUtilityPenalty) - (HasSewage(x, z) ? 0 : MissingUtilityPenalty) -
-            (GetTrafficLoad(x, z) > 100 ? CongestionPenalty : 0);
+            CalculateHappiness(GetCoverage(x, z), HasWater(x, z), HasSewage(x, z), GetTrafficLoad(x, z));
+
+        private static int CalculateHappiness(ServiceCoverage coverage, bool water, bool sewage, int traffic) =>
+            BaseHappiness + HappinessPerService * ServiceCatalog.Count(coverage) -
+            (water ? 0 : MissingUtilityPenalty) - (sewage ? 0 : MissingUtilityPenalty) -
+            (traffic > 100 ? CongestionPenalty : 0);
 
         /// <summary>Students enrolled at the school on this cell (0 for other cells).</summary>
         public int GetSchoolStudents(int x, int z)
@@ -172,16 +178,18 @@ namespace XCity
             if (!_trafficDirty) return;
             _trafficDirty = false;
             int networks = _componentRoads.Count;
-            var workers = new int[networks];
-            var jobs = new int[networks];
-            foreach (int index in _occupied)
+            ClearCapacity(ref _trafficWorkers, networks);
+            ClearCapacity(ref _trafficJobs, networks);
+            int[] workers = _trafficWorkers;
+            int[] jobs = _trafficJobs;
+            foreach (int index in _orderedConsumers)
             {
                 int network = _cellComponent[index];
                 if (network == 0) continue;
                 int x = index / GridSize, z = index % GridSize;
                 CityCell cell = _cells[x, z];
                 if (cell.Type == CellType.Residential) workers[network] += BuildingCatalog.Residents(cell) * WorkforcePercent / 100;
-                else jobs[network] += OperatingJobs(x, z, cell);
+                else if (_powered[index]) jobs[network] += ServiceCatalog.Jobs(cell);
             }
 
             PublishTraffic(workers, jobs);
@@ -189,10 +197,10 @@ namespace XCity
 
         private void PublishTraffic(int[] workers, int[] jobs)
         {
-            int networks = workers.Length;
+            int networks = _componentRoads.Count;
             _trafficDirty = false;
-            _componentEmployment = new int[networks];
-            _componentTraffic = new int[networks];
+            ClearCapacity(ref _componentEmployment, networks);
+            ClearCapacity(ref _componentTraffic, networks);
             for (int n = 1; n < networks; n++)
             {
                 _componentEmployment[n] = jobs[n] == 0 ? 100 : Math.Min(100, workers[n] * 100 / jobs[n]);
@@ -221,18 +229,24 @@ namespace XCity
 
         private void RecalculateEconomy()
         {
+            RefreshCoverage();
+            RefreshTraffic();
             int jobs = 0, commercialJobs = 0;
             long happiness = 0;
-            foreach (int index in _occupied)
+            foreach (int index in _orderedConsumers)
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
                 CityCell cell = _cells[x, z];
-                int cellJobs = OperatingJobs(x, z, cell);
+                int cellJobs = cell.Type != CellType.Residential && _powered[index] ? ServiceCatalog.Jobs(cell) : 0;
                 jobs += cellJobs;
                 if (cell.Type == CellType.Commercial) commercialJobs += cellJobs;
                 if (cell.Type == CellType.Residential)
-                    happiness += (long)GetHappiness(x, z) * BuildingCatalog.Residents(cell);
+                {
+                    int local = CalculateHappiness(_coverage[index], _watered[index], _sewered[index],
+                        _componentTraffic[_cellComponent[index]]);
+                    happiness += (long)local * BuildingCatalog.Residents(cell);
+                }
             }
             UpdateDemand(jobs, commercialJobs, happiness);
         }
@@ -259,8 +273,10 @@ namespace XCity
 
         private void RefreshCoverage()
         {
+            RefreshPower();
             if (!_coverageDirty) return;
             _coverageDirty = false;
+            _coverageChangedByGrowth = false;
             Array.Clear(_coverage, 0, _coverage.Length);
             _schoolStudents.Clear();
             foreach (int index in _serviceCells)
@@ -269,7 +285,7 @@ namespace XCity
                 int z = index % GridSize;
                 BuildingModel model = _cells[x, z].Model;
                 var (coverage, radius) = ServiceCatalog.Get(model);
-                if (coverage == ServiceCoverage.None || GetZoneStatus(x, z) != ZoneStatus.Developed) continue;
+                if (coverage == ServiceCoverage.None || !_powered[index] || _cells[x, z].Level == 0) continue;
                 int minX = Math.Max(0, x - radius), maxX = Math.Min(GridSize - 1, x + radius);
                 int minZ = Math.Max(0, z - radius), maxZ = Math.Min(GridSize - 1, z + radius);
                 bool school = coverage == ServiceCoverage.Education;
