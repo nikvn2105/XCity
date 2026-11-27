@@ -4,12 +4,34 @@ using UnityEngine.Rendering;
 
 namespace XCity
 {
+    internal enum BuildingSurface
+    {
+        Plain,
+        Masonry,
+        Roof,
+        Glazing
+    }
+
     internal sealed class MeshBuilder
     {
         private readonly List<Vector3> _vertices = new List<Vector3>(1024);
         private readonly List<Vector3> _normals = new List<Vector3>(1024);
         private readonly List<Color32> _colors = new List<Color32>(1024);
         private readonly List<int> _triangles = new List<int>(1536);
+
+        private readonly List<Vector2> _surfaceTypes;
+
+        public MeshBuilder(bool buildingSurfaces = false)
+        {
+            if (buildingSurfaces) _surfaceTypes = new List<Vector2>(1024);
+        }
+
+        private void AddSurfaceVertices(BuildingSurface surface, int count)
+        {
+            if (_surfaceTypes == null) return;
+            var uv = new Vector2((int)surface, 0f);
+            for (int i = 0; i < count; i++) _surfaceTypes.Add(uv);
+        }
 
         private Vector3 _origin;
         private int _quarterTurns;
@@ -31,6 +53,7 @@ namespace XCity
             _vertices.Clear();
             _normals.Clear();
             _colors.Clear();
+            _surfaceTypes?.Clear();
             _triangles.Clear();
             _origin = Vector3.zero;
             _quarterTurns = 0;
@@ -42,10 +65,12 @@ namespace XCity
             _quarterTurns = ((quarterTurns % 4) + 4) % 4;
         }
 
-        public void AddQuad(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 outward, Color32 color) =>
-            AddQuadColors(v0, v1, v2, v3, color, color, color, color, outward);
+        public void AddQuad(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 outward, Color32 color,
+            BuildingSurface surface = BuildingSurface.Plain) =>
+            AddQuadColors(v0, v1, v2, v3, color, color, color, color, outward, surface);
 
-        public void AddQuadColors(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color32 c0, Color32 c1, Color32 c2, Color32 c3, Vector3 outward)
+        public void AddQuadColors(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color32 c0, Color32 c1, Color32 c2, Color32 c3, Vector3 outward,
+            BuildingSurface surface = BuildingSurface.Plain)
         {
             Vector3 p0 = TransformPoint(v0);
             Vector3 p1 = TransformPoint(v1);
@@ -79,6 +104,7 @@ namespace XCity
             _colors.Add(c1);
             _colors.Add(c2);
             _colors.Add(c3);
+            AddSurfaceVertices(surface, 4);
             _triangles.Add(index);
             _triangles.Add(index + 1);
             _triangles.Add(index + 2);
@@ -87,7 +113,8 @@ namespace XCity
             _triangles.Add(index + 3);
         }
 
-        public void AddTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 outward, Color32 color)
+        public void AddTriangle(Vector3 a, Vector3 b, Vector3 c, Vector3 outward, Color32 color,
+            BuildingSurface surface = BuildingSurface.Plain)
         {
             Vector3 pa = TransformPoint(a);
             Vector3 pb = TransformPoint(b);
@@ -114,12 +141,14 @@ namespace XCity
             _colors.Add(color);
             _colors.Add(color);
             _colors.Add(color);
+            AddSurfaceVertices(surface, 3);
             _triangles.Add(index);
             _triangles.Add(index + 1);
             _triangles.Add(index + 2);
         }
 
-        public void AddBox(Vector3 center, Vector3 size, Color32 side, Color32 top, bool bottom = false)
+        public void AddBox(Vector3 center, Vector3 size, Color32 side, Color32 top, bool bottom = false,
+            BuildingSurface wallSurface = BuildingSurface.Plain, BuildingSurface topSurface = BuildingSurface.Plain)
         {
             float hx = size.x * 0.5f;
             float hy = size.y * 0.5f;
@@ -133,25 +162,26 @@ namespace XCity
             float z1 = center.z + hz;
 
             // +Z
-            AddQuad(new Vector3(x0, y0, z1), new Vector3(x1, y0, z1), new Vector3(x1, y1, z1), new Vector3(x0, y1, z1), Vector3.forward, side);
+            AddQuad(new Vector3(x0, y0, z1), new Vector3(x1, y0, z1), new Vector3(x1, y1, z1), new Vector3(x0, y1, z1), Vector3.forward, side, wallSurface);
             // -Z
-            AddQuad(new Vector3(x1, y0, z0), new Vector3(x0, y0, z0), new Vector3(x0, y1, z0), new Vector3(x1, y1, z0), Vector3.back, side);
+            AddQuad(new Vector3(x1, y0, z0), new Vector3(x0, y0, z0), new Vector3(x0, y1, z0), new Vector3(x1, y1, z0), Vector3.back, side, wallSurface);
             // +X
-            AddQuad(new Vector3(x1, y0, z1), new Vector3(x1, y0, z0), new Vector3(x1, y1, z0), new Vector3(x1, y1, z1), Vector3.right, side);
+            AddQuad(new Vector3(x1, y0, z1), new Vector3(x1, y0, z0), new Vector3(x1, y1, z0), new Vector3(x1, y1, z1), Vector3.right, side, wallSurface);
             // -X
-            AddQuad(new Vector3(x0, y0, z0), new Vector3(x0, y0, z1), new Vector3(x0, y1, z1), new Vector3(x0, y1, z0), Vector3.left, side);
+            AddQuad(new Vector3(x0, y0, z0), new Vector3(x0, y0, z1), new Vector3(x0, y1, z1), new Vector3(x0, y1, z0), Vector3.left, side, wallSurface);
             // +Y
-            AddQuad(new Vector3(x0, y1, z1), new Vector3(x1, y1, z1), new Vector3(x1, y1, z0), new Vector3(x0, y1, z0), Vector3.up, top);
+            AddQuad(new Vector3(x0, y1, z1), new Vector3(x1, y1, z1), new Vector3(x1, y1, z0), new Vector3(x0, y1, z0), Vector3.up, top, topSurface);
 
             if (bottom)
-                AddQuad(new Vector3(x0, y0, z0), new Vector3(x1, y0, z0), new Vector3(x1, y0, z1), new Vector3(x0, y0, z1), Vector3.down, side);
+                AddQuad(new Vector3(x0, y0, z0), new Vector3(x1, y0, z0), new Vector3(x1, y0, z1), new Vector3(x0, y0, z1), Vector3.down, side, wallSurface);
         }
 
         /// <summary>
         /// Emits a decal quad offset 0.02 units outward on a box face.
         /// sideIndex: 0=+Z, 1=-Z, 2=+X, 3=-X. u0..u1 is relative to boxCenter along the face's horizontal axis; y0..y1 is local Y.
         /// </summary>
-        public void AddFacadeRect(Vector3 boxCenter, Vector3 boxSize, int sideIndex, float u0, float u1, float y0, float y1, Color32 color)
+        public void AddFacadeRect(Vector3 boxCenter, Vector3 boxSize, int sideIndex, float u0, float u1, float y0, float y1, Color32 color,
+            BuildingSurface surface = BuildingSurface.Plain)
         {
             const float offset = 0.02f;
             float hx = boxSize.x * 0.5f;
@@ -167,7 +197,7 @@ namespace XCity
                         new Vector3(boxCenter.x + u1, y0, z),
                         new Vector3(boxCenter.x + u1, y1, z),
                         new Vector3(boxCenter.x + u0, y1, z),
-                        Vector3.forward, color);
+                        Vector3.forward, color, surface);
                     break;
                 }
                 case 1: // -Z
@@ -178,7 +208,7 @@ namespace XCity
                         new Vector3(boxCenter.x + u0, y0, z),
                         new Vector3(boxCenter.x + u0, y1, z),
                         new Vector3(boxCenter.x + u1, y1, z),
-                        Vector3.back, color);
+                        Vector3.back, color, surface);
                     break;
                 }
                 case 2: // +X
@@ -189,7 +219,7 @@ namespace XCity
                         new Vector3(x, y0, boxCenter.z + u0),
                         new Vector3(x, y1, boxCenter.z + u0),
                         new Vector3(x, y1, boxCenter.z + u1),
-                        Vector3.right, color);
+                        Vector3.right, color, surface);
                     break;
                 }
                 default: // -X
@@ -200,7 +230,7 @@ namespace XCity
                         new Vector3(x, y0, boxCenter.z + u1),
                         new Vector3(x, y1, boxCenter.z + u1),
                         new Vector3(x, y1, boxCenter.z + u0),
-                        Vector3.left, color);
+                        Vector3.left, color, surface);
                     break;
                 }
             }
@@ -223,14 +253,14 @@ namespace XCity
                 new Vector3(x1, yBase, z1),
                 new Vector3(x1, yTop, baseCenter.z),
                 new Vector3(x0, yTop, baseCenter.z),
-                new Vector3(0f, 1f, 1f), roof);
+                new Vector3(0f, 1f, 1f), roof, BuildingSurface.Roof);
 
             AddQuad(
                 new Vector3(x1, yBase, z0),
                 new Vector3(x0, yBase, z0),
                 new Vector3(x0, yTop, baseCenter.z),
                 new Vector3(x1, yTop, baseCenter.z),
-                new Vector3(0f, 1f, -1f), roof);
+                new Vector3(0f, 1f, -1f), roof, BuildingSurface.Roof);
 
             // Two gable triangles flush with the wall ends
             float gx0 = baseCenter.x - hx;
@@ -241,12 +271,12 @@ namespace XCity
                 new Vector3(gx1, yBase, gz1),
                 new Vector3(gx1, yBase, gz0),
                 new Vector3(gx1, yTop, baseCenter.z),
-                Vector3.right, gable);
+                Vector3.right, gable, BuildingSurface.Masonry);
             AddTriangle(
                 new Vector3(gx0, yBase, gz0),
                 new Vector3(gx0, yBase, gz1),
                 new Vector3(gx0, yTop, baseCenter.z),
-                Vector3.left, gable);
+                Vector3.left, gable, BuildingSurface.Masonry);
         }
 
         public void AddCylinder(Vector3 baseCenter, float rBottom, float rTop, float height, int segments, Color32 color, bool capTop, Color32 capColor) =>
@@ -325,6 +355,7 @@ namespace XCity
             mesh.SetVertices(_vertices);
             mesh.SetNormals(_normals);
             mesh.SetColors(_colors);
+            if (_surfaceTypes != null) mesh.SetUVs(1, _surfaceTypes);
             mesh.SetTriangles(_triangles, 0);
             mesh.RecalculateBounds();
         }

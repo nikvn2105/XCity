@@ -56,6 +56,7 @@ namespace XCity
         private Material _waterMat;
         private Mesh _waterMarks;
         private Material _vertexColorMat;
+        private Material _buildingMaterial;
 
         private Vector2 _gestureStart;
         private bool _panMoved;
@@ -155,7 +156,9 @@ namespace XCity
             _vertexColorMat = new Material(vc);
             AddWaterMarks(worldSpan);
             _cityRenderer = new CityChunkRenderer(_city, CellSize, _vertexColorMat, transform);
-            _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _vertexColorMat, transform);
+            _buildingMaterial = new Material(vc);
+            _buildingMaterial.EnableKeyword("XCITY_ARCHITECTURE");
+            _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _buildingMaterial, transform);
             _construction = new ConstructionSystem(_city, _buildingRenderer, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
             _citizens = new CitizenSystem(_city, CellSize, _vertexColorMat, transform);
@@ -815,7 +818,7 @@ namespace XCity
             Destroy(_waterMarks);
             Destroy(_roadMat);
             Destroy(_roadPreviewMat);
-            if (_vertexColorMat != null) Destroy(_vertexColorMat);
+            Destroy(_buildingMaterial);
             if (_inspectionMaterial != null) Destroy(_inspectionMaterial);
         }
 

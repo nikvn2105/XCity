@@ -12,7 +12,7 @@ namespace XCity
         private readonly HashSet<Vector2Int> _dirty = new HashSet<Vector2Int>();
         private readonly Mesh[,] _meshes = new Mesh[ChunkCount, ChunkCount];
         private readonly bool[,] _waitingRendered = new bool[CitySimulation.GridSize, CitySimulation.GridSize];
-        private readonly MeshBuilder _builder = new MeshBuilder();
+        private readonly MeshBuilder _builder = new MeshBuilder(buildingSurfaces: true);
         private readonly CitySimulation _city;
         private readonly Material _material;
         private readonly Transform _root;

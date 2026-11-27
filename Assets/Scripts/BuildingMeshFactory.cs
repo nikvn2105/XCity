@@ -369,7 +369,7 @@ namespace XCity
         {
             var size = new Vector3(width, height, depth);
             var center = foot + Vector3.up * (height * 0.5f);
-            b.AddBox(center, size, wall, top);
+            b.AddBox(center, size, wall, top, wallSurface: BuildingSurface.Masonry, topSurface: BuildingSurface.Roof);
 
             b.AddBox(new Vector3(foot.x, foot.y + height - 0.025f, foot.z),
                 new Vector3(width + 0.085f, 0.05f, depth + 0.085f), Darken(top, 0.78f), top);
@@ -388,14 +388,14 @@ namespace XCity
                             new Vector3(bay * 0.68f, 0.045f, 0.095f), Darken(wall, 0.78f), wall);
                     Color32 window = (floor + column) % 5 == 3 ? LitWindowGlass : WindowGlass;
                     b.AddFacadeRect(center, size, 0, x - bay * 0.30f, x + bay * 0.30f,
-                        y, y + floorHeight * 0.38f, window);
+                        y, y + floorHeight * 0.38f, window, BuildingSurface.Glazing);
                     b.AddFacadeRect(center, size, 1, x - bay * 0.30f, x + bay * 0.30f,
-                        y, y + floorHeight * 0.38f, WindowGlass);
+                        y, y + floorHeight * 0.38f, WindowGlass, BuildingSurface.Glazing);
                 }
 
                 for (int side = 2; side < 4; side++)
                     b.AddFacadeRect(center, size, side, -depth * 0.31f, depth * 0.31f,
-                        y, y + floorHeight * 0.34f, WindowGlass);
+                        y, y + floorHeight * 0.34f, WindowGlass, BuildingSurface.Glazing);
             }
         }
 
@@ -445,7 +445,7 @@ namespace XCity
 
                 Vector3 bodyCenter = new Vector3(0f, baseY + wallH * 0.5f, 0f);
                 Vector3 bodySize = new Vector3(w, wallH, d);
-                b.AddBox(bodyCenter, bodySize, wall, wall);
+                b.AddBox(bodyCenter, bodySize, wall, wall, wallSurface: BuildingSurface.Masonry);
                 b.AddGableRoof(new Vector3(0f, baseY + wallH, 0f), w, d, roofH, 0.15f, roof, wall);
 
                 AddPorch(b, 0, d * 0.5f, 0.92f, 0.92f);
@@ -458,13 +458,13 @@ namespace XCity
                 float winY1 = winY0 + 0.4f;
                 if (winY1 < baseY + wallH - 0.1f)
                 {
-                    b.AddFacadeRect(bodyCenter, bodySize, 0, -0.78f, -0.38f, winY0, winY1, PickWindowColor(ref shapeRng));
-                    b.AddFacadeRect(bodyCenter, bodySize, 0, 0.38f, 0.78f, winY0, winY1, PickWindowColor(ref shapeRng));
+                    b.AddFacadeRect(bodyCenter, bodySize, 0, -0.78f, -0.38f, winY0, winY1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
+                    b.AddFacadeRect(bodyCenter, bodySize, 0, 0.38f, 0.78f, winY0, winY1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
 
-                    b.AddFacadeRect(bodyCenter, bodySize, 2, -0.65f, -0.25f, winY0, winY1, PickWindowColor(ref shapeRng));
-                    b.AddFacadeRect(bodyCenter, bodySize, 2, 0.25f, 0.65f, winY0, winY1, PickWindowColor(ref shapeRng));
-                    b.AddFacadeRect(bodyCenter, bodySize, 3, -0.65f, -0.25f, winY0, winY1, PickWindowColor(ref shapeRng));
-                    b.AddFacadeRect(bodyCenter, bodySize, 3, 0.25f, 0.65f, winY0, winY1, PickWindowColor(ref shapeRng));
+                    b.AddFacadeRect(bodyCenter, bodySize, 2, -0.65f, -0.25f, winY0, winY1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
+                    b.AddFacadeRect(bodyCenter, bodySize, 2, 0.25f, 0.65f, winY0, winY1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
+                    b.AddFacadeRect(bodyCenter, bodySize, 3, -0.65f, -0.25f, winY0, winY1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
+                    b.AddFacadeRect(bodyCenter, bodySize, 3, 0.25f, 0.65f, winY0, winY1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
                 }
 
                 // 50% chimney
@@ -521,7 +521,7 @@ namespace XCity
                         {
                             if (f == 0 && side == 0 && winCount == 3 && wi == 1) continue; // keep door clear
                             float u = -faceSpan * 0.5f + step * (wi + 1);
-                            b.AddFacadeRect(bodyCenter, bodySize, side, u - 0.18f, u + 0.18f, fy0, fy1, PickWindowColor(ref shapeRng));
+                            b.AddFacadeRect(bodyCenter, bodySize, side, u - 0.18f, u + 0.18f, fy0, fy1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
                         }
                     }
 
@@ -559,7 +559,7 @@ namespace XCity
                     for (int side = 0; side < 4; side++)
                     {
                         float halfBand = (side < 2 ? w : d) * 0.425f;
-                        b.AddFacadeRect(bodyCenter, bodySize, side, -halfBand, halfBand, fy0, fy1, PickWindowColor(ref shapeRng));
+                        b.AddFacadeRect(bodyCenter, bodySize, side, -halfBand, halfBand, fy0, fy1, PickWindowColor(ref shapeRng), BuildingSurface.Glazing);
                     }
                 }
 
