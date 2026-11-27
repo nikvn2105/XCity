@@ -57,6 +57,23 @@ Shader "XCity/VertexColor"
         {
             float3 position = surface.worldPos;
             float3 normal = normalize(surface.worldNormal);
+
+            // Contact AO near lot pads (y = 0.14), inner corners, and setback junctions.
+            float hAboveGround = max(0.0, position.y - 0.14);
+            float2 tileLocal = frac(position.xz * 0.25) * 4.0 - 2.0;
+            float wallMask = 1.0 - saturate(abs(normal.y));
+            float groundAO = 1.0
+                - 0.30 * (1.0 - smoothstep(0.0, 0.32, hAboveGround))
+                - 0.12 * (1.0 - smoothstep(0.0, 1.35, hAboveGround));
+            float outward = dot(normal.xz, tileLocal);
+            float innerCornerAO = lerp(0.78, 1.0, smoothstep(-0.30, 0.95, outward));
+            float footprintDist = max(abs(tileLocal.x), abs(tileLocal.y));
+            float lotContactAO = 1.0 - 0.24 * (1.0 - smoothstep(0.85, 1.62, footprintDist))
+                * (1.0 - smoothstep(0.02, 0.18, hAboveGround));
+            float podiumCreaseAO = 1.0 - 0.16 * (1.0 - smoothstep(0.60, 1.25, footprintDist))
+                * smoothstep(0.20, 0.60, hAboveGround) * (1.0 - smoothstep(3.8, 4.6, hAboveGround));
+            albedo *= lerp(lotContactAO * podiumCreaseAO, groundAO * innerCornerAO, wallMask);
+
             float wallU = abs(normal.x) > abs(normal.z) ? position.z : position.x;
             float row = position.y * 7.8;
             float course = wallU * 4.4 + fmod(floor(row), 2.0) * 0.5;

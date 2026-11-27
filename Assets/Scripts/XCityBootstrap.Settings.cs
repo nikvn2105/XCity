@@ -59,6 +59,7 @@ namespace XCity
             QualitySettings.shadowDistance = distance;
             QualitySettings.shadowCascades = cascades;
             QualitySettings.antiAliasing = msaa;
+            Shader.SetGlobalFloat("_XCityQuality", _graphicsLevel);
 
             // Rendering fewer pixels is the biggest GPU saving on a 2796x1290 panel. Preview captures keep their size.
             if (_previewOutput == null && !Application.isEditor)

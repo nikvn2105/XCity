@@ -34,7 +34,7 @@ namespace XCity
         {
             Mode = mode;
             if (mode == LightingMode.Day) _timeOfDay = 0.44f;
-            else if (mode == LightingMode.Sunset) _timeOfDay = 0.765f;
+            else if (mode == LightingMode.Sunset) _timeOfDay = 0.737f;
             else if (mode == LightingMode.Night) _timeOfDay = 0.92f;
             ApplyAtmosphere();
         }
@@ -98,7 +98,7 @@ namespace XCity
                 _sun.shadowStrength = Mathf.Lerp(0.42f, 0.64f, dayFrac);
             }
 
-            // Sky, ambient, fog, ocean palette matched cleanly to classic bright day at NightFactor == 0
+            // Sky gradient, ambient, fog and water palette matched so fog equals horizon in every direction.
             Color daySky = new Color(0.65f, 0.73f, 0.81f);
             Color sunsetSky = new Color(0.76f, 0.50f, 0.46f);
             Color nightSky = new Color(0.11f, 0.16f, 0.28f);
@@ -113,20 +113,39 @@ namespace XCity
             Color nightGr = new Color(0.05f, 0.07f, 0.12f);
             RenderSettings.ambientGroundColor = Color.Lerp(nightGr, dayGr, dayFrac);
 
-            Color dayFog = new Color(0.69f, 0.82f, 0.86f);
-            Color sunsetFog = new Color(0.84f, 0.58f, 0.44f);
-            Color nightFog = new Color(0.06f, 0.09f, 0.17f);
-            Color fog = Color.Lerp(nightFog, Color.Lerp(dayFog, sunsetFog, sunsetBand * 0.78f), dayFrac);
-            RenderSettings.fogColor = fog;
-            if (_cam != null) _cam.backgroundColor = fog;
+            Color dayFog = new Color(0.71f, 0.84f, 0.90f);
+            Color sunsetFog = new Color(0.88f, 0.58f, 0.42f);
+            Color nightFog = new Color(0.06f, 0.10f, 0.18f);
+            Color horizon = Color.Lerp(nightFog, Color.Lerp(dayFog, sunsetFog, sunsetBand * 0.82f), dayFrac);
+            RenderSettings.fogColor = horizon;
+            if (_cam != null) _cam.backgroundColor = horizon;
+
+            Color dayZenith = new Color(0.24f, 0.50f, 0.82f);
+            Color sunsetZenith = new Color(0.22f, 0.27f, 0.52f);
+            Color nightZenith = new Color(0.02f, 0.04f, 0.09f);
+            Color zenith = Color.Lerp(nightZenith, Color.Lerp(dayZenith, sunsetZenith, sunsetBand * 0.80f), dayFrac);
+
+            Color sunTint = Color.Lerp(new Color(1.00f, 0.92f, 0.78f), new Color(1.00f, 0.62f, 0.32f), sunsetBand);
+            sunTint.a = dayFrac * (0.12f + sunsetBand * 0.48f);
+            Vector3 sunDir = _sun != null ? -_sun.transform.forward : new Vector3(0.3f, 0.6f, 0.7f);
+
+            Shader.SetGlobalColor("_XCitySkyHorizon", horizon);
+            Shader.SetGlobalColor("_XCitySkyZenith", zenith);
+            Shader.SetGlobalColor("_XCitySkyGlow", sunTint);
+            Shader.SetGlobalVector("_XCitySunDir", new Vector4(sunDir.x, sunDir.y, sunDir.z, 0f));
 
             if (_waterMat != null)
             {
-                Color dayWater = new Color(0.37f, 0.58f, 0.64f);
-                Color sunsetWater = new Color(0.40f, 0.44f, 0.52f);
-                Color nightWater = new Color(0.07f, 0.14f, 0.24f);
+                Color dayWater = new Color(0.14f, 0.34f, 0.48f);
+                Color sunsetWater = new Color(0.24f, 0.29f, 0.40f);
+                Color nightWater = new Color(0.05f, 0.12f, 0.22f);
                 _waterMat.color = Color.Lerp(nightWater, Color.Lerp(dayWater, sunsetWater, sunsetBand * 0.55f), dayFrac);
             }
+
+            Color dayShallow = new Color(0.20f, 0.50f, 0.54f);
+            Color sunsetShallow = new Color(0.36f, 0.40f, 0.46f);
+            Color nightShallow = new Color(0.08f, 0.18f, 0.28f);
+            Shader.SetGlobalColor("_XCityWaterShallow", Color.Lerp(nightShallow, Color.Lerp(dayShallow, sunsetShallow, sunsetBand * 0.55f), dayFrac));
 
             Shader.SetGlobalFloat("_XCityNight", NightFactor);
         }
