@@ -29,6 +29,7 @@ namespace XCity
             _cityRenderer.RebuildDirtyChunks();
             _construction?.SeedPreviewSites();
             _buildingRenderer.RebuildDirtyChunks();
+            _industrialSmoke?.Prewarm(15f);
             _construction?.Update(0.05f);
             _vehicles?.Prewarm(20f);
             _citizens?.Prewarm(18f);
@@ -40,7 +41,7 @@ namespace XCity
                 ("residential", new Vector3(34f, 0f, 34f), 30f, 35f, 30f),
                 ("commercial", new Vector3(85f, 0.6f, 48f), 34f, 48f, 210f),
                 ("public-services", new Vector3(109f, 0.6f, 49f), 40f, 52f, 155f),
-                ("industry", new Vector3(34f, 0f, 96f), 30f, 40f, 135f),
+                ("industry", new Vector3(34f, 0f, 94f), 25f, 36f, 135f),
                 ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f)
             };
 

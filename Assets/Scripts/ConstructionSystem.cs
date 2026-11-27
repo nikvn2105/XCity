@@ -85,6 +85,10 @@ namespace XCity
             _city.CellChanged += OnCellChanged;
         }
 
+        public int ActiveSiteCount => _sites.Count;
+
+        public bool IsSiteActive(int x, int z) => _activeMap[x, z];
+
         private bool IsUnderConstruction(int x, int z) => _activeMap[x, z];
 
         private void OnCellChanged(int x, int z)

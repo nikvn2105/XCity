@@ -31,6 +31,7 @@ namespace XCity
         private CityChunkRenderer _cityRenderer;
         private BuildingChunkRenderer _buildingRenderer;
         private ConstructionSystem _construction;
+        private IndustrialSmokeSystem _industrialSmoke;
         private VehicleSystem _vehicles;
         private CitizenSystem _citizens;
         private BuildTool _activeTool = BuildTool.Road;
@@ -161,6 +162,7 @@ namespace XCity
             _buildingMaterial.EnableKeyword("XCITY_ARCHITECTURE");
             _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _buildingMaterial, transform);
             _construction = new ConstructionSystem(_city, _buildingRenderer, CellSize, _vertexColorMat, transform);
+            _industrialSmoke = new IndustrialSmokeSystem(_city, _construction, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
             _citizens = new CitizenSystem(_city, CellSize, _vertexColorMat, transform);
         }
@@ -805,6 +807,7 @@ namespace XCity
             _cityRenderer.RebuildDirtyChunks();
             _construction.Update(Time.deltaTime);
             _buildingRenderer.RebuildDirtyChunks();
+            _industrialSmoke.Update(Time.deltaTime);
             _vehicles.Update(Time.deltaTime);
             _citizens.Update(Time.deltaTime);
         }
@@ -813,6 +816,7 @@ namespace XCity
         {
             _cityRenderer?.Dispose();
             _construction?.Dispose();
+            _industrialSmoke?.Dispose();
             _buildingRenderer?.Dispose();
             _vehicles?.Dispose();
             _citizens?.Dispose();
