@@ -129,9 +129,9 @@ namespace XCity
                     var center = new Vector3((x - startX + 0.5f) * _cellSize, 0, (z - startZ + 0.5f) * _cellSize);
                     _surface.SetFrame(center, 0);
                     _props.SetFrame(center, 0);
-                    if (cell.IsBridge)
+                    if (_city.TryGetBridgeProfile(x, z, out BridgeProfile bridge))
                     {
-                        AddBridge(center, cell.BridgeAxis, x, z, full);
+                        AddBridge(center, bridge, full);
                         continue;
                     }
                     if (!WorldTerrain.IsLand(x, z)) continue;
@@ -169,39 +169,84 @@ namespace XCity
             builder.ApplyTo(mesh);
         }
 
-        private void AddBridge(Vector3 center, RoadConnections axis, int x, int z, bool full)
+        private void AddBridge(Vector3 center, BridgeProfile bridge, bool full)
         {
-            int turn = axis == CitySimulation.BridgeAlongX ? 1 : 0;
+            int turn = bridge.Axis == CitySimulation.BridgeAlongX ? 1 : 0;
             _surface.SetFrame(center, turn);
             _props.SetFrame(center, turn);
             float half = _cellSize * 0.5f;
             float lane = half * 0.67f;
-            float width = _cellSize * 0.87f;
+            float edge = half * 0.94f;
             var concrete = new Color32(147, 153, 150, 255);
             var steel = new Color32(77, 94, 97, 255);
 
-            _surface.AddBox(new Vector3(0f, -0.095f, 0f), new Vector3(width, 0.24f, _cellSize), concrete, Paving);
-            Rect(_surface, -lane, -half, lane, half, RoadY, Asphalt);
-            if (!full) return;
-            Rect(_surface, -0.041f, -0.30f, 0.041f, 0.30f, PaintY, LanePaint);
+            // Keep the rendered road and its traffic on the same piecewise-linear grade.
+            DeckHalf(-half, 0f);
+            DeckHalf(0f, half);
 
-            int along = turn == 1 ? x : z;
-            if (along % 2 == 0)
+            if (bridge.HasNavigationOpening || (bridge.Index % 2 != 0 && bridge.Index != bridge.Count - 1))
+                return;
+            const float pierBase = BridgeProfile.WaterSurface - 0.30f;
+            float bearing = bridge.Middle + RoadY - BridgeProfile.DeckThickness;
+            MeshBuilder support = full ? _props : _surface;
+            support.AddBox(new Vector3(0f, (pierBase + bearing) * 0.5f, 0f),
+                new Vector3(0.72f, bearing - pierBase, 0.70f), concrete, concrete);
+            support.AddBox(new Vector3(0f, bearing - 0.09f, 0f),
+                new Vector3(edge * 1.55f, 0.18f, 0.57f), concrete, concrete);
+
+            float Grade(float z) => bridge.HeightAt((z + half) / _cellSize);
+
+            void DeckHalf(float from, float to)
             {
-                _props.AddBox(new Vector3(0f, -0.64f, 0f), new Vector3(0.74f, 1.25f, 0.61f),
-                    concrete, concrete);
-                _props.AddBox(new Vector3(0f, -0.28f, 0f), new Vector3(width * 0.83f, 0.20f, 0.52f),
-                    concrete, concrete);
+                Strip(-lane, lane, from, to, RoadY, Asphalt);
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float curb = side * lane;
+                    float rim = side * edge;
+                    Strip(Mathf.Min(curb, rim), Mathf.Max(curb, rim), from, to, CurbY, Paving);
+                    float low = RoadY - BridgeProfile.DeckThickness;
+                    Side(rim, from, to, low, CurbY, side * Vector3.right, concrete);
+                    Side(curb, from, to, RoadY, CurbY, -side * Vector3.right, Curb);
+                    if (full)
+                    {
+                        float rail = rim - side * 0.065f;
+                        Side(rail, from, to, 0.27f, 0.33f, Vector3.right, steel);
+                        Side(rail, from, to, 0.27f, 0.33f, Vector3.left, steel);
+                        float post = (from + to) * 0.5f;
+                        _props.AddBox(new Vector3(rail, Grade(post) + 0.21f, post),
+                            new Vector3(0.061f, 0.22f, 0.065f), steel, steel);
+                    }
+                }
+
+                float bottom = RoadY - BridgeProfile.DeckThickness;
+                _surface.AddQuad(new Vector3(-edge, Grade(from) + bottom, from), new Vector3(-edge, Grade(to) + bottom, to),
+                    new Vector3(edge, Grade(to) + bottom, to), new Vector3(edge, Grade(from) + bottom, from),
+                    Vector3.down, concrete);
+                if (full)
+                    Strip(-0.041f, 0.041f, Mathf.Max(from, -0.31f), Mathf.Min(to, 0.31f), PaintY, LanePaint);
             }
-            for (int side = -1; side <= 1; side += 2)
+
+            void Strip(float left, float right, float from, float to, float y, Color32 color)
             {
-                float edge = side * (width * 0.5f - 0.08f);
-                _props.AddBox(new Vector3(edge, 0.31f, 0f), new Vector3(0.06f, 0.055f, _cellSize),
-                    steel, steel);
-                for (int post = -1; post <= 1; post += 2)
-                    _props.AddBox(new Vector3(edge, 0.168f, post * half * 0.65f),
-                        new Vector3(0.063f, 0.286f, 0.06f), steel, steel);
+                _surface.AddQuad(new Vector3(left, Grade(from) + y, from), new Vector3(left, Grade(to) + y, to),
+                    new Vector3(right, Grade(to) + y, to), new Vector3(right, Grade(from) + y, from), Vector3.up, color);
             }
+
+            void Side(float x, float from, float to, float bottom, float top, Vector3 normal, Color32 color)
+            {
+                _surface.AddQuad(new Vector3(x, Grade(from) + bottom, from), new Vector3(x, Grade(to) + bottom, to),
+                    new Vector3(x, Grade(to) + top, to), new Vector3(x, Grade(from) + top, from), normal, color);
+            }
+        }
+
+        internal static void ApplyBridgeGrade(CitySimulation city, Vector2Int cell, float cellSize,
+            ref Vector3 position, ref Vector3 tangent)
+        {
+            if (!city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile bridge)) return;
+            bool xAxis = bridge.Axis == CitySimulation.BridgeAlongX;
+            float progress = Mathf.Clamp01(xAxis ? position.x / cellSize - cell.x : position.z / cellSize - cell.y);
+            position.y += bridge.HeightAt(progress);
+            tangent.y += (xAxis ? tangent.x : tangent.z) * bridge.SlopeAt(progress) / cellSize;
         }
 
         private void AddCoast(int x, int z)

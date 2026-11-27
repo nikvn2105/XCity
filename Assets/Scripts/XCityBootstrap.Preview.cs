@@ -50,6 +50,7 @@ namespace XCity
                 ("industry", new Vector3(34f, 0f, 94f), 25f, 36f, 135f),
                 ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f),
                 ("waterfront", new Vector3(842f, 0.2f, 511f), 54f, 49f, 210f),
+                ("bridge-clearance", new Vector3(850f, 0.45f, 518f), 29f, 14f, 90f),
                 ("coast", new Vector3(-708f, 0f, -566f), 139f, 57f, 225f)
             };
 
@@ -59,6 +60,14 @@ namespace XCity
             var tex = new Texture2D(width, height, TextureFormat.RGB24, false);
             RenderTexture prevActive = RenderTexture.active;
             RenderTexture prevCamTarget = _cam.targetTexture;
+            var clearanceBoat = new GameObject("Bridge clearance preview");
+            clearanceBoat.transform.SetParent(transform, false);
+            var builder = new MeshBuilder();
+            BuildingMeshFactory.BuildPreviewWatercraft(builder, new Vector3(1807.7f, 0f, 1478f), 1);
+            var boatMesh = new Mesh { name = "Bridge clearance boat" };
+            builder.ApplyTo(boatMesh);
+            clearanceBoat.AddComponent<MeshFilter>().sharedMesh = boatMesh;
+            clearanceBoat.AddComponent<MeshRenderer>().sharedMaterial = _vertexColorMat;
 
             try
             {
@@ -90,6 +99,8 @@ namespace XCity
             {
                 _cam.targetTexture = prevCamTarget;
                 RenderTexture.active = prevActive;
+                Destroy(clearanceBoat);
+                Destroy(boatMesh);
                 Destroy(rt);
                 Destroy(tex);
             }

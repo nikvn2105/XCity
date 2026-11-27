@@ -92,7 +92,7 @@ namespace XCity
             _cellSize = cellSize;
 
             float span = CitySimulation.GridSize * cellSize;
-            _mapBounds = new Bounds(new Vector3(span * 0.5f, 2.5f, span * 0.5f), new Vector3(span, 5f, span));
+            _mapBounds = new Bounds(new Vector3(span * 0.5f, (5f + BridgeProfile.MaxRise) * 0.5f, span * 0.5f), new Vector3(span, 5f + BridgeProfile.MaxRise, span));
 
             _mesh = new Mesh { name = "CityVehicles" };
             _mesh.MarkDynamic();
@@ -486,6 +486,7 @@ namespace XCity
                 Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
                 Vector3 tangent = 2f * u * (p1 - p0) + 2f * v.T * (p2 - p1);
                 if (tangent.sqrMagnitude < 1e-6f) tangent = p2 - p0;
+                CityChunkRenderer.ApplyBridgeGrade(_city, v.Cell, _cellSize, ref pos, ref tangent);
                 Quaternion pathRot = tangent.sqrMagnitude > 1e-6f
                     ? Quaternion.LookRotation(tangent.normalized, Vector3.up)
                     : Quaternion.identity;

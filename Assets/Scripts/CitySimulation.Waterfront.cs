@@ -13,12 +13,80 @@ namespace XCity
         InsufficientFunds
     }
 
+    internal readonly struct BridgeProfile
+    {
+        internal const float MaxRise = 3.0f;
+        internal const float DeckThickness = 0.25f;
+        internal const float WaterSurface = -1.05f;
+        private const float RisePerTile = 0.85f;
+
+        public BridgeProfile(RoadConnections axis, int index, int count)
+        {
+            Axis = axis;
+            Index = index;
+            Count = count;
+        }
+
+        public RoadConnections Axis { get; }
+        public int Index { get; }
+        public int Count { get; }
+        public bool HasNavigationOpening => Math.Abs(Index + 0.5f - Count * 0.5f) <= 1.5f;
+        public float Start => Rise(Index, Count);
+        public float Middle => Rise(Index + 0.5f, Count);
+        public float End => Rise(Index + 1f, Count);
+
+        internal static float Rise(float offset, int count) =>
+            Math.Max(0f, Math.Min(MaxRise, Math.Min(offset, count - offset) * RisePerTile));
+
+        public float HeightAt(float progress) => progress <= 0.5f
+            ? Start + (Middle - Start) * (progress * 2f)
+            : Middle + (End - Middle) * (progress * 2f - 1f);
+
+        public float SlopeAt(float progress) => progress <= 0.5f
+            ? (Middle - Start) * 2f : (End - Middle) * 2f;
+    }
+
     public sealed partial class CitySimulation
     {
         internal const int MaxBridgeWaterTiles = 96;
         internal const int BridgeTileCost = 180;
         internal const RoadConnections BridgeAlongX = RoadConnections.West | RoadConnections.East;
         internal const RoadConnections BridgeAlongZ = RoadConnections.South | RoadConnections.North;
+        private readonly Dictionary<int, BridgeProfile> _bridgeProfiles = new Dictionary<int, BridgeProfile>();
+        private int _bridgeProfilesRoadVersion = -1;
+
+        internal bool TryGetBridgeProfile(int x, int z, out BridgeProfile profile)
+        {
+            RoadConnections axis = _cells[x, z].BridgeAxis;
+            profile = default;
+            if (axis == RoadConnections.None) return false;
+
+            if (_bridgeProfilesRoadVersion != Roads.Version)
+            {
+                _bridgeProfilesRoadVersion = Roads.Version;
+                _bridgeProfiles.Clear();
+            }
+            int index = CellIndex(x, z);
+            if (_bridgeProfiles.TryGetValue(index, out profile)) return true;
+
+            int dx = axis == BridgeAlongX ? 1 : 0;
+            int dz = axis == BridgeAlongZ ? 1 : 0;
+            while (IsInBounds(x - dx, z - dz) && _cells[x - dx, z - dz].BridgeAxis == axis)
+            {
+                x -= dx;
+                z -= dz;
+            }
+
+            int count = 1;
+            while (IsInBounds(x + dx * count, z + dz * count) &&
+                _cells[x + dx * count, z + dz * count].BridgeAxis == axis)
+                count++;
+            for (int i = 0; i < count; i++)
+                _bridgeProfiles[CellIndex(x + dx * i, z + dz * i)] = new BridgeProfile(axis, i, count);
+
+            profile = _bridgeProfiles[index];
+            return true;
+        }
 
         internal BridgeQuote QuoteBridge(int x, int z, int endX, int endZ, out int cost)
         {

@@ -606,6 +606,12 @@ namespace XCity
             AddMooredBoat(b, 0.91f, 2.95f, new Color32(143, 76, 61, 255), siding);
         }
 
+        internal static void BuildPreviewWatercraft(MeshBuilder builder, Vector3 worldPosition, int quarterTurns)
+        {
+            builder.SetFrame(worldPosition, quarterTurns);
+            AddMooredBoat(builder, 0f, 0f, new Color32(182, 193, 179, 255), new Color32(55, 113, 116, 255));
+        }
+
         private static void AddMooredBoat(MeshBuilder b, float x, float z, Color32 hull, Color32 cabin)
         {
             const float water = -1.12f;

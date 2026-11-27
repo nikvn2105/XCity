@@ -681,6 +681,12 @@ namespace XCity
                 }
             }
 
+            if (TryPickBridge(ray, planeDistance, out var bridge, out float bridgeDistance) &&
+                bridgeDistance < closest)
+            {
+                point = bridge;
+                return true;
+            }
             return !float.IsPositiveInfinity(closest) || TryGetCell(position, out point);
         }
 
@@ -690,12 +696,46 @@ namespace XCity
             Ray ray = _cam.ScreenPointToRay(position);
             Plane ground = new Plane(Vector3.up, Vector3.zero);
             if (!ground.Raycast(ray, out float distance)) return false;
+            if (_activeTool == BuildTool.Bulldoze && TryPickBridge(ray, distance, out cell, out _))
+                return true;
             Vector3 hit = ray.GetPoint(distance);
             cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
             if (cell.x < 0 || cell.y < 0 || cell.x >= GridSize || cell.y >= GridSize) return false;
             return _activeTool == BuildTool.Bridge || CitySimulation.IsBuildable(cell.x, cell.y) ||
                 (_activeTool == BuildTool.Bulldoze || _activeTool == BuildTool.Pan) &&
                 _city.GetCell(cell.x, cell.y).IsBridge;
+        }
+
+        private bool TryPickBridge(Ray ray, float planeDistance, out Vector2Int tile, out float nearest)
+        {
+            tile = default;
+            nearest = float.PositiveInfinity;
+            Vector3 low = ray.GetPoint(planeDistance);
+            Vector3 high = ray.GetPoint(Mathf.Max(0f, planeDistance -
+                (BridgeProfile.MaxRise + 0.40f) / Mathf.Max(0.001f, -ray.direction.y)));
+            int x0 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(low.x, high.x) / CellSize) - 1, 0, GridSize - 1);
+            int x1 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(low.x, high.x) / CellSize) + 1, 0, GridSize - 1);
+            int z0 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(low.z, high.z) / CellSize) - 1, 0, GridSize - 1);
+            int z1 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(low.z, high.z) / CellSize) + 1, 0, GridSize - 1);
+            for (int x = x0; x <= x1; x++)
+            {
+                for (int z = z0; z <= z1; z++)
+                {
+                    if (!_city.TryGetBridgeProfile(x, z, out BridgeProfile bridge)) continue;
+                    bool alongX = bridge.Axis == CitySimulation.BridgeAlongX;
+                    var size = new Vector3(alongX ? CellSize : CellSize * 0.94f, 0f,
+                        alongX ? CellSize * 0.94f : CellSize);
+                    float lower = Mathf.Min(bridge.Start, bridge.End) - BridgeProfile.DeckThickness;
+                    float upper = Mathf.Max(bridge.Middle, Mathf.Max(bridge.Start, bridge.End)) + 0.30f;
+                    size.y = upper - lower;
+                    var bounds = new Bounds(new Vector3((x + 0.5f) * CellSize, (lower + upper) * 0.5f,
+                        (z + 0.5f) * CellSize), size);
+                    if (!bounds.IntersectRay(ray, out float distance) || distance >= nearest) continue;
+                    nearest = distance;
+                    tile = new Vector2Int(x, z);
+                }
+            }
+            return !float.IsPositiveInfinity(nearest);
         }
 
         private void AddStrokeSample(Vector2Int destination)
@@ -759,7 +799,9 @@ namespace XCity
             {
                 Vector2Int tile = start + step * i;
                 _stroke.Add(tile);
-                ShowStreetPreview(i, tile);
+                float rise = i > 0 && i < Mathf.Abs(span)
+                    ? BridgeProfile.Rise(i - 0.5f, Mathf.Abs(span) - 1) : 0f;
+                ShowStreetPreview(i, tile, rise);
             }
             RefreshHUD();
         }
@@ -770,7 +812,7 @@ namespace XCity
                 _roadMarkers[i].gameObject.SetActive(false);
         }
 
-        private void ShowStreetPreview(int index, Vector2Int cell)
+        private void ShowStreetPreview(int index, Vector2Int cell, float rise = 0f)
         {
             if (index == _roadMarkers.Count)
             {
@@ -786,7 +828,7 @@ namespace XCity
             }
 
             Transform preview = _roadMarkers[index];
-            preview.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f, (cell.y + 0.5f) * CellSize);
+            preview.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f + rise, (cell.y + 0.5f) * CellSize);
             preview.gameObject.SetActive(true);
         }
 
@@ -927,11 +969,19 @@ namespace XCity
             float x = point.x * CellSize;
             float z = point.y * CellSize;
             const float inset = 0.12f;
-            const float height = 0.18f;
-            _inspectionOutline.SetPosition(0, new Vector3(x + inset, height, z + inset));
-            _inspectionOutline.SetPosition(1, new Vector3(x + CellSize - inset, height, z + inset));
-            _inspectionOutline.SetPosition(2, new Vector3(x + CellSize - inset, height, z + CellSize - inset));
-            _inspectionOutline.SetPosition(3, new Vector3(x + inset, height, z + CellSize - inset));
+            bool raised = _city.TryGetBridgeProfile(point.x, point.y, out BridgeProfile profile);
+            float near = inset / CellSize;
+            float far = 1f - near;
+            SetCorner(0, near, near);
+            SetCorner(1, far, near);
+            SetCorner(2, far, far);
+            SetCorner(3, near, far);
+
+            void SetCorner(int index, float u, float v)
+            {
+                float grade = raised ? profile.HeightAt(profile.Axis == CitySimulation.BridgeAlongX ? u : v) : 0f;
+                _inspectionOutline.SetPosition(index, new Vector3(x + u * CellSize, grade + 0.18f, z + v * CellSize));
+            }
             _inspectionOutline.enabled = true;
             _inspectionMaterial.color = status switch
             {
