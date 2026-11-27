@@ -25,6 +25,33 @@ namespace XCity
         public const string DebtWarning = "Ngân sách âm: vay tiền hoặc cắt giảm chi phí trước khi phá sản";
         public const string DroppedOnLoad = "Đã gỡ {0} công trình không còn hợp lệ trên bản đồ";
 
+        // Main menu and saves.
+        public const string GameTitle = "XCity";
+        public const string ContinueCity = "Tiếp tục";
+        public const string NewCity = "Thành phố mới";
+        public const string LoadCity = "Tải";
+        public const string Settings = "Cài đặt";
+        public const string ReturnToMenu = "Về menu chính";
+        public const string Back = "Quay lại";
+        public const string Cancel = "Hủy";
+        public const string DeleteCity = "Xóa";
+        public const string CreateCity = "Tạo thành phố";
+        public const string OverwriteCity = "Ghi đè";
+        public const string CityName = "Tên thành phố";
+        public const string EmptySlot = "Ô lưu trống";
+        public const string SummaryUnavailable = "Chưa đọc được thông tin bản lưu";
+        public const string SaveFailed = "Lưu thất bại. Thành phố vẫn đang mở.";
+        public const string CreateFailed = "Không thể tạo bản lưu.";
+        public const string LoadFailed = "Không thể tải bản lưu hoặc bản dự phòng.";
+        public const string DeleteFailed = "Không thể xóa hết các tệp của ô lưu.";
+        public const string MigrationFailed = "Chưa thể chuyển bản lưu cũ.";
+        public static string DefaultCityName(int slot) => $"Thành phố {slot}";
+        public static string SlotLabel(int slot) => $"Ô lưu {slot}";
+        public static string ConfirmDeleteCity(string name) => $"Xóa bản lưu và bản dự phòng của {name}?";
+        public static string ConfirmOverwriteCity(string name) => $"Ghi đè bản lưu của {name}?";
+        public static string CitySummary(int population, int money, int day, System.DateTime lastSaved) =>
+            $"Dân số: {population:N0}\nNgân sách: ${money:N0}\nNgày {day}\nLần lưu cuối: {lastSaved:dd/MM/yyyy HH:mm}";
+
         // Build bar.
         public const string View = "Xem";
         public const string Road = "Đường";
