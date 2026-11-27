@@ -60,6 +60,11 @@ namespace XCity
         private bool _powerDirty = true;
         private int _unpoweredZones;
         private uint _randomState;
+        private List<(int X, int Z, CityCell Cell)> _undoCells;
+        private int _undoMoney;
+        private int _undoPopulation;
+
+        public bool CanUndoBuild => _undoCells != null;
 
         public int UnpoweredZones
         {
@@ -98,7 +103,45 @@ namespace XCity
             return cell.Level == 0 ? ZoneStatus.WaitingForDevelopment : ZoneStatus.Developed;
         }
 
-        public bool TrySetCell(int x, int z, CellType type)
+        public bool TrySetCell(int x, int z, CellType type) =>
+            TryApplyBuild(new[] { (x, z) }, type);
+
+        public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type)
+        {
+            int moneyBefore = Money;
+            int populationBefore = Population;
+            var changed = new List<(int X, int Z, CityCell Cell)>();
+            foreach (var point in points)
+                TrySetCell(point.X, point.Z, type, changed);
+
+            if (changed.Count == 0) return false;
+            _undoCells = changed;
+            _undoMoney = moneyBefore;
+            _undoPopulation = populationBefore;
+            return true;
+        }
+
+        public bool TryUndoBuild()
+        {
+            if (_undoCells == null) return false;
+
+            var cells = _undoCells;
+            _undoCells = null;
+            foreach (var entry in cells)
+            {
+                _cells[entry.X, entry.Z] = entry.Cell;
+                Roads.SetRoad(entry.X, entry.Z, entry.Cell.Type == CellType.Road);
+            }
+
+            Money = _undoMoney;
+            Population = _undoPopulation;
+            _powerDirty = true;
+            foreach (var entry in cells)
+                CellChanged?.Invoke(entry.X, entry.Z);
+            return true;
+        }
+
+        private bool TrySetCell(int x, int z, CellType type, List<(int X, int Z, CityCell Cell)> changed)
         {
             if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.PowerPlant) return false;
             ref CityCell cell = ref _cells[x, z];
@@ -113,6 +156,7 @@ namespace XCity
             };
             if (type != CellType.Empty && Money < cost) return false;
 
+            changed.Add((x, z, cell));
             if (cell.Type == CellType.Residential) Population -= ResidentsPerLevel * cell.Level;
             cell = type == CellType.PowerPlant
                 ? new CityCell { Type = type, Level = 1, Height = PowerPlantHeight }
@@ -126,6 +170,7 @@ namespace XCity
 
         public void Tick()
         {
+            _undoCells = null;
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;

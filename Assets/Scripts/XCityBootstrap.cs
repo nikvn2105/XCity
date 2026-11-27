@@ -37,6 +37,7 @@ namespace XCity
         private float _simTimer;
 
         private Text _hudStatusText;
+        private Button _undoButton;
         private readonly Dictionary<BuildTool, Image> _toolButtons = new Dictionary<BuildTool, Image>();
 
         private Material _groundMat;
@@ -190,12 +191,20 @@ namespace XCity
             statusRect.anchorMin = Vector2.zero;
             statusRect.anchorMax = Vector2.one;
             statusRect.offsetMin = new Vector2(20, 0);
-            statusRect.offsetMax = new Vector2(-20, 0);
+            statusRect.offsetMax = new Vector2(-188, 0);
             _hudStatusText = statusObj.AddComponent<Text>();
             _hudStatusText.font = font;
             _hudStatusText.fontSize = 21;
             _hudStatusText.color = Color.white;
             _hudStatusText.alignment = TextAnchor.MiddleLeft;
+
+            _undoButton = CreateHudButton(topBar.transform, font, "Hoàn tác", "UndoBuild");
+            var undoRect = (RectTransform)_undoButton.transform;
+            undoRect.anchorMin = new Vector2(1, 0);
+            undoRect.anchorMax = Vector2.one;
+            undoRect.offsetMin = new Vector2(-172, 8);
+            undoRect.offsetMax = new Vector2(-12, -8);
+            _undoButton.onClick.AddListener(UndoBuild);
 
             var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), new Color(0.08f, 0.10f, 0.14f, 0.88f));
             var layout = bottomBar.AddComponent<HorizontalLayoutGroup>();
@@ -232,12 +241,19 @@ namespace XCity
 
         private void AddToolButton(Transform parent, Font font, string label, BuildTool tool)
         {
-            var btnObj = new GameObject("Btn_" + tool);
+            Button button = CreateHudButton(parent, font, label, "Btn_" + tool);
+            button.onClick.AddListener(() => SelectTool(tool));
+            _toolButtons[tool] = button.image;
+        }
+
+        private static Button CreateHudButton(Transform parent, Font font, string label, string name)
+        {
+            var btnObj = new GameObject(name);
             btnObj.transform.SetParent(parent, false);
             var img = btnObj.AddComponent<Image>();
             img.color = new Color(0.20f, 0.24f, 0.30f, 1f);
             var btn = btnObj.AddComponent<Button>();
-            btn.onClick.AddListener(() => SelectTool(tool));
+            btn.targetGraphic = img;
 
             var txtObj = new GameObject("Label");
             txtObj.transform.SetParent(btnObj.transform, false);
@@ -253,7 +269,7 @@ namespace XCity
             txt.color = Color.white;
             txt.alignment = TextAnchor.MiddleCenter;
 
-            _toolButtons[tool] = img;
+            return btn;
         }
 
         private void SelectTool(BuildTool tool)
@@ -273,8 +289,8 @@ namespace XCity
         private void Update()
         {
             UpdateSafeArea();
-            HandleInput();
             RunSimulationTick();
+            HandleInput();
             if (_cityDirty && Time.unscaledTime >= _nextAutosave)
                 SaveCity();
         }
@@ -428,15 +444,15 @@ namespace XCity
             {
                 if (_activeTool == BuildTool.PowerPlant)
                 {
-                    if (!IsPanMovement(position)) ApplyCellTool(cell.x, cell.y);
+                    if (!IsPanMovement(position))
+                        _cityDirty |= _city.TrySetCell(cell.x, cell.y, CellType.PowerPlant);
                     RefreshHUD();
                 }
                 else
                 {
                     AddStrokeSample(cell);
                     if (_activeTool != BuildTool.Road || _roadStrokeCost <= _city.Money)
-                        foreach (Vector2Int point in _stroke)
-                            ApplyCellTool(point.x, point.y);
+                        ApplyBuildStroke();
                 }
             }
             CancelGesture();
@@ -555,7 +571,7 @@ namespace XCity
             preview.gameObject.SetActive(true);
         }
 
-        private void ApplyCellTool(int gx, int gz)
+        private void ApplyBuildStroke()
         {
             CellType type = _activeTool switch
             {
@@ -563,10 +579,22 @@ namespace XCity
                 BuildTool.Residential => CellType.Residential,
                 BuildTool.Commercial => CellType.Commercial,
                 BuildTool.Industrial => CellType.Industrial,
-                BuildTool.PowerPlant => CellType.PowerPlant,
                 _ => CellType.Empty
             };
-            _cityDirty |= _city.TrySetCell(gx, gz, type);
+            _cityDirty |= _city.TryApplyBuild(GetStrokeCells(), type);
+        }
+
+        private IEnumerable<(int X, int Z)> GetStrokeCells()
+        {
+            foreach (Vector2Int point in _stroke)
+                yield return (point.x, point.y);
+        }
+
+        private void UndoBuild()
+        {
+            CancelGesture();
+            _cityDirty |= _city.TryUndoBuild();
+            RefreshHUD();
         }
 
         private void RunSimulationTick()
@@ -681,6 +709,7 @@ namespace XCity
 
         private void RefreshHUD()
         {
+            if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_hudStatusText != null)
             {
                 if (_activeTool != BuildTool.Pan && _inspectionOutline != null)
