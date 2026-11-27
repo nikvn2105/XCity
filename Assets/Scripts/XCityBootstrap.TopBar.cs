@@ -81,10 +81,10 @@ namespace XCity
 
             _toastRoot = new GameObject("Toasts", typeof(RectTransform)).GetComponent<RectTransform>();
             _toastRoot.SetParent(_safeAreaRoot, false);
-            // Top centre: the right edge belongs to the building info panel.
+            // Top centre under the hint pill: the right edge belongs to the building info panel.
             _toastRoot.anchorMin = _toastRoot.anchorMax = _toastRoot.pivot = new Vector2(0.5f, 1f);
-            _toastRoot.anchoredPosition = new Vector2(0f, -118f);
-            _toastRoot.sizeDelta = new Vector2(380f, 0f);
+            _toastRoot.anchoredPosition = new Vector2(0f, -172f);
+            _toastRoot.sizeDelta = new Vector2(460f, 0f);
             var column = _toastRoot.gameObject.AddComponent<VerticalLayoutGroup>();
             column.spacing = 6;
             column.childControlWidth = true;
@@ -179,7 +179,7 @@ namespace XCity
             if (_toasts.Count >= MaxToasts) DismissToast(_toasts[0]);
 
             var root = CreatePanel(_toastRoot, "Toast", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, UiTheme.PanelSolid);
-            root.AddComponent<LayoutElement>().preferredHeight = UiTheme.MinTouch + 4f;
+            root.AddComponent<LayoutElement>().preferredHeight = UiTheme.MinTouch + 8f;
             var toast = new Toast
             {
                 Root = root,
@@ -205,24 +205,31 @@ namespace XCity
             text.raycastTarget = false;
             text.resizeTextForBestFit = true;
             text.resizeTextMinSize = UiTheme.TinySize;
-            text.resizeTextMaxSize = UiTheme.SmallSize + 1;
+            text.resizeTextMaxSize = UiTheme.BodySize;
 
             var button = root.AddComponent<Button>();
             button.targetGraphic = root.GetComponent<Image>();
             button.onClick.AddListener(() =>
             {
-                if (focus.HasValue)
-                {
-                    CancelGesture();
-                    ClearFollow();
-                    StopCameraInertia();
-                    _camTarget = new Vector3(focus.Value.x, 0f, focus.Value.z);
-                    UpdateCameraTransform();
-                }
+                if (focus.HasValue) FocusCamera(focus.Value);
                 DismissToast(toast);
             });
 
             _toasts.Add(toast);
+        }
+
+        private void FocusCamera(Vector3 point)
+        {
+            CancelGesture();
+            ClearFollow();
+            StopCameraInertia();
+            _camTarget = new Vector3(point.x, 0f, point.z);
+            UpdateCameraTransform();
+        }
+
+        private void FocusActiveFire()
+        {
+            if (_emergencies != null && _emergencies.HasActiveFire) FocusCamera(_emergencies.FireWorldPos);
         }
 
         private void DismissToast(Toast toast)
