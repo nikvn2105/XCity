@@ -12,7 +12,8 @@ namespace XCity
         Residential,
         Commercial,
         Industrial,
-        Bulldoze
+        Bulldoze,
+        PowerPlant
     }
 
     public class XCityBootstrap : MonoBehaviour
@@ -46,6 +47,7 @@ namespace XCity
         private Material _bldgResMat;
         private Material _bldgComMat;
         private Material _bldgIndMat;
+        private Material _powerPlantMat;
 
         private Vector2 _gestureStart;
         private bool _panMoved;
@@ -103,6 +105,7 @@ namespace XCity
             _bldgResMat = MakeMat(shader, new Color(0.88f, 0.84f, 0.76f));
             _bldgComMat = MakeMat(shader, new Color(0.62f, 0.78f, 0.92f));
             _bldgIndMat = MakeMat(shader, new Color(0.65f, 0.56f, 0.45f));
+            _powerPlantMat = MakeMat(shader, new Color(0.66f, 0.42f, 0.90f));
         }
 
         private static Material MakeMat(Shader shader, Color color)
@@ -128,7 +131,7 @@ namespace XCity
             ground.transform.position = new Vector3(worldSpan * 0.5f, -0.5f, worldSpan * 0.5f);
             ground.transform.localScale = new Vector3(worldSpan, 1f, worldSpan);
             ground.GetComponent<Renderer>().sharedMaterial = _groundMat;
-            var materials = new[] { _roadMat, _resMat, _comMat, _indMat, _bldgResMat, _bldgComMat, _bldgIndMat };
+            var materials = new[] { _roadMat, _resMat, _comMat, _indMat, _bldgResMat, _bldgComMat, _bldgIndMat, _powerPlantMat };
             _cityRenderer = new CityChunkRenderer(_city, CellSize, materials, transform);
         }
 
@@ -206,6 +209,7 @@ namespace XCity
             AddToolButton(bottomBar.transform, font, "Nhà ở (R)", BuildTool.Residential);
             AddToolButton(bottomBar.transform, font, "Thương mại (C)", BuildTool.Commercial);
             AddToolButton(bottomBar.transform, font, "Công nghiệp (I)", BuildTool.Industrial);
+            AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
             AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
 
             SelectTool(BuildTool.Road);
@@ -375,7 +379,7 @@ namespace XCity
             _gestureStart = position;
             _panMoved = false;
             _lastPointerPos = position;
-            if (_activeTool != BuildTool.Pan && TryGetCell(position, out var cell))
+            if (_activeTool != BuildTool.Pan && _activeTool != BuildTool.PowerPlant && TryGetCell(position, out var cell))
                 AddStrokeSample(cell);
         }
 
@@ -397,7 +401,7 @@ namespace XCity
                 _camTarget.z = Mathf.Clamp(_camTarget.z, 0f, maxBound);
                 UpdateCameraTransform();
             }
-            else if (TryGetCell(position, out var cell))
+            else if (_activeTool != BuildTool.PowerPlant && TryGetCell(position, out var cell))
             {
                 AddStrokeSample(cell);
             }
@@ -415,17 +419,25 @@ namespace XCity
             if (_isDragging && _activeTool == BuildTool.Pan && !_panMoved &&
                 !IsPanMovement(position) && !IsPointerOverUI(position))
             {
-                _inspectedCell = TryGetCell(position, out var inspected) ? inspected : (Vector2Int?)null;
+                _inspectedCell = TryInspectCell(position, out var inspected) ? inspected : (Vector2Int?)null;
                 RefreshHUD();
             }
 
             if (_isDragging && _activeTool != BuildTool.Pan &&
                 !IsPointerOverUI(position) && TryGetCell(position, out var cell))
             {
-                AddStrokeSample(cell);
-                if (_activeTool != BuildTool.Road || _roadStrokeCost <= _city.Money)
-                    foreach (Vector2Int point in _stroke)
-                        ApplyCellTool(point.x, point.y);
+                if (_activeTool == BuildTool.PowerPlant)
+                {
+                    if (!IsPanMovement(position)) ApplyCellTool(cell.x, cell.y);
+                    RefreshHUD();
+                }
+                else
+                {
+                    AddStrokeSample(cell);
+                    if (_activeTool != BuildTool.Road || _roadStrokeCost <= _city.Money)
+                        foreach (Vector2Int point in _stroke)
+                            ApplyCellTool(point.x, point.y);
+                }
             }
             CancelGesture();
         }
@@ -450,6 +462,30 @@ namespace XCity
             _hudHits.Clear();
             _hudRaycaster.Raycast(_hudPointer, _hudHits);
             return _hudHits.Count > 0;
+        }
+
+        private bool TryInspectCell(Vector2 position, out Vector2Int point)
+        {
+            Ray ray = _cam.ScreenPointToRay(position);
+            float closest = float.PositiveInfinity;
+            point = default;
+            float width = CellSize * CityChunkRenderer.BuildingWidthRatio;
+            for (int x = 0; x < GridSize; x++)
+            {
+                for (int z = 0; z < GridSize; z++)
+                {
+                    float height = _city.GetCell(x, z).Height;
+                    if (height <= 0f) continue;
+                    var center = new Vector3((x + 0.5f) * CellSize,
+                        CityChunkRenderer.BuildingBase + height * 0.5f, (z + 0.5f) * CellSize);
+                    var bounds = new Bounds(center, new Vector3(width, height, width));
+                    if (!bounds.IntersectRay(ray, out float distance) || distance >= closest) continue;
+                    closest = distance;
+                    point = new Vector2Int(x, z);
+                }
+            }
+
+            return !float.IsPositiveInfinity(closest) || TryGetCell(position, out point);
         }
 
         private bool TryGetCell(Vector2 position, out Vector2Int cell)
@@ -527,6 +563,7 @@ namespace XCity
                 BuildTool.Residential => CellType.Residential,
                 BuildTool.Commercial => CellType.Commercial,
                 BuildTool.Industrial => CellType.Industrial,
+                BuildTool.PowerPlant => CellType.PowerPlant,
                 _ => CellType.Empty
             };
             _cityDirty |= _city.TrySetCell(gx, gz, type);
@@ -604,6 +641,7 @@ namespace XCity
             _inspectionMaterial.color = status switch
             {
                 ZoneStatus.NeedsRoad or ZoneStatus.DevelopedWithoutRoad => new Color(1f, 0.38f, 0.20f),
+                ZoneStatus.NeedsPower or ZoneStatus.DevelopedWithoutPower => new Color(0.77f, 0.48f, 1f),
                 ZoneStatus.WaitingForDevelopment => new Color(1f, 0.82f, 0.25f),
                 ZoneStatus.Developed => new Color(0.25f, 1f, 0.48f),
                 _ => Color.white
@@ -615,6 +653,7 @@ namespace XCity
                 CellType.Residential => "Nhà ở",
                 CellType.Commercial => "Thương mại",
                 CellType.Industrial => "Công nghiệp",
+                CellType.PowerPlant => "Nhà máy điện",
                 _ => "Ô trống"
             };
             return status switch
@@ -622,8 +661,12 @@ namespace XCity
                 ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",
                 ZoneStatus.WaitingForDevelopment => label + " · Đang chờ phát triển",
                 ZoneStatus.DevelopedWithoutRoad => label + " · Mất kết nối đường",
+                ZoneStatus.NeedsPower or ZoneStatus.DevelopedWithoutPower => label + " · Thiếu điện",
                 ZoneStatus.Developed => label + " · Đã phát triển",
-                _ => label
+                _ => type == CellType.PowerPlant
+                    ? label + (_city.Roads.HasRoadAccess(point.x, point.y)
+                        ? $" · Cấp {CitySimulation.PowerPlantCapacity} ô" : " · Cần đường liền kề")
+                    : label
             };
         }
 
@@ -642,6 +685,7 @@ namespace XCity
                 {
                     BuildTool.Pan => GetInspectionHint(),
                     BuildTool.Road => "Kéo để vẽ đường · Thả để đặt",
+                    BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
                     _ => "Chạm hoặc kéo để phân khu"
                 };
@@ -651,6 +695,8 @@ namespace XCity
                     _roadPreviewMat.color = affordable ? Color.green : Color.red;
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
+                int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
+                if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population)
                     return;
                 _lastHudHint = hint;

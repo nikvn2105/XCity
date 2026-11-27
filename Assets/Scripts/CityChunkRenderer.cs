@@ -6,6 +6,8 @@ namespace XCity
 {
     internal sealed class CityChunkRenderer : IDisposable
     {
+        internal const float BuildingWidthRatio = 0.72f;
+        internal const float BuildingBase = 0.1f;
         private const int ChunkSize = 8;
         private const int ChunkCount = CitySimulation.GridSize / ChunkSize;
         private readonly HashSet<Vector2Int> _dirty = new HashSet<Vector2Int>();
@@ -80,13 +82,13 @@ namespace XCity
                 {
                     CityCell cell = _city.GetCell(x, z);
                     if (cell.Type == CellType.Empty) continue;
-                    bool tile = material == (int)cell.Type - 1;
+                    bool tile = cell.Type != CellType.PowerPlant && material == (int)cell.Type - 1;
                     bool building = cell.Level > 0 && material == (int)cell.Type + 2;
                     if (!tile && !building) continue;
 
                     float height = tile ? 0.1f : cell.Height;
-                    float elevation = tile ? 0f : 0.1f;
-                    float width = _cellSize * (tile ? 0.96f : 0.72f);
+                    float elevation = tile ? 0f : BuildingBase;
+                    float width = _cellSize * (tile ? 0.96f : BuildingWidthRatio);
                     var position = new Vector3((x - startX + 0.5f) * _cellSize,
                         elevation + height * 0.5f, (z - startZ + 0.5f) * _cellSize);
                     _instances.Add(new CombineInstance
