@@ -19,12 +19,12 @@ namespace XCity
             RoadConnections.North, RoadConnections.East, RoadConnections.South, RoadConnections.West
         };
         private static readonly Color32 Asphalt = new Color32(62, 73, 84, 255);
-        private static readonly Color32 Paving = new Color32(192, 185, 167, 255);
+        private static readonly Color32 Paving = new Color32(167, 163, 151, 255);
         private static readonly Color32 Curb = new Color32(135, 135, 127, 255);
         private static readonly Color32 Paint = new Color32(240, 231, 200, 255);
         private static readonly Color32 LanePaint = new Color32(236, 189, 98, 255);
-        private static readonly Color32 GrassLight = new Color32(125, 160, 94, 255);
-        private static readonly Color32 GrassDark = new Color32(89, 132, 83, 255);
+        private static readonly Color32 GrassLight = new Color32(111, 144, 92, 255);
+        private static readonly Color32 GrassDark = new Color32(79, 115, 77, 255);
         private static readonly Color32 Bark = new Color32(103, 79, 58, 255);
         private static readonly Color32 Broadleaf = new Color32(76, 139, 102, 255);
         private static readonly Color32 Pine = new Color32(52, 112, 100, 255);
@@ -232,7 +232,7 @@ namespace XCity
 
             uint seed = BuildingMeshFactory.Hash(x, z, 921);
             float grove = Mathf.PerlinNoise(x * 0.18f + 42f, z * 0.18f + 52f);
-            float threshold = _city.Roads.HasRoadAccess(x, z) ? 0.65f : 0.50f;
+            float threshold = _city.Roads.HasRoadAccess(x, z) ? 0.53f : 0.39f;
             if (grove > threshold && seed % 5u < 3u)
             {
                 float dx = ((seed >> 8 & 255u) / 255f - 0.5f) * half * 0.85f;

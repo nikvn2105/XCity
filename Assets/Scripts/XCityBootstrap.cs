@@ -46,6 +46,7 @@ namespace XCity
         private Material _roadMat;
         private Material _shoreMat;
         private Material _waterMat;
+        private Mesh _waterMarks;
         private Material _vertexColorMat;
 
         private Vector2 _gestureStart;
@@ -116,10 +117,10 @@ namespace XCity
             var lightObj = new GameObject("SunLight");
             var light = lightObj.AddComponent<Light>();
             light.type = LightType.Directional;
-            light.intensity = 1.08f;
+            light.intensity = 0.96f;
             light.color = new Color(1f, 0.96f, 0.88f);
             light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.72f;
+            light.shadowStrength = 0.64f;
             lightObj.transform.SetParent(transform);
             lightObj.transform.rotation = Quaternion.Euler(56f, -34f, 0f);
 
@@ -144,6 +145,7 @@ namespace XCity
                 vc = Resources.Load<Shader>("XCityWorld");
             }
             _vertexColorMat = new Material(vc);
+            AddWaterMarks(worldSpan);
             _cityRenderer = new CityChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
@@ -161,6 +163,36 @@ namespace XCity
             Destroy(collider);
             var renderer = block.GetComponent<Renderer>();
             renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        private void AddWaterMarks(float worldSpan)
+        {
+            var builder = new MeshBuilder();
+            var center = new Vector3(worldSpan * 0.5f, -1.035f, worldSpan * 0.5f);
+            for (int side = 0; side < 4; side++)
+            {
+                builder.SetFrame(center, side);
+                for (int i = 0; i < 48; i++)
+                {
+                    uint seed = BuildingMeshFactory.Hash(side, i, 480);
+                    float x = (seed & 255u) / 255f * (worldSpan + 28f) - (worldSpan * 0.5f + 14f);
+                    float z = worldSpan * 0.5f + 1.4f + (seed >> 8 & 255u) / 255f * 23f;
+                    float width = 0.65f + (seed >> 16 & 255u) / 255f * 2.1f;
+                    var tint = new Color32(109, 163, 170, 255);
+                    builder.AddQuad(new Vector3(x, 0, z), new Vector3(x + 0.18f, 0, z + 0.10f),
+                        new Vector3(x + width, 0, z + 0.08f), new Vector3(x + width - 0.19f, 0, z),
+                        Vector3.up, tint);
+                }
+            }
+
+            _waterMarks = new Mesh { name = "Shoreline ripples" };
+            builder.ApplyTo(_waterMarks);
+            var waterDetails = new GameObject("Shoreline ripples");
+            waterDetails.transform.SetParent(transform, false);
+            waterDetails.AddComponent<MeshFilter>().sharedMesh = _waterMarks;
+            var renderer = waterDetails.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = _vertexColorMat;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         }
 
@@ -670,6 +702,7 @@ namespace XCity
             Destroy(_groundMat);
             Destroy(_shoreMat);
             Destroy(_waterMat);
+            Destroy(_waterMarks);
             Destroy(_roadMat);
             Destroy(_roadPreviewMat);
             if (_vertexColorMat != null) Destroy(_vertexColorMat);
