@@ -36,6 +36,7 @@ namespace XCity
     {
         private const int GridSize = 32;
         private const float CellSize = 4f;
+        private const int RoadCost = 100;
 
         private CityCell[,] _grid;
         private BuildTool _activeTool = BuildTool.Road;
@@ -64,6 +65,22 @@ namespace XCity
 
         private Vector2 _lastPointerPos;
         private bool _isDragging;
+        private bool _waitForTouchRelease;
+        private int _activeFingerId = -1;
+        private int _pinchFirstId = -1;
+        private int _pinchSecondId = -1;
+        private RectTransform _safeAreaRoot;
+        private Rect _lastSafeArea;
+        private Vector2Int _lastScreenSize;
+        private GraphicRaycaster _hudRaycaster;
+        private PointerEventData _hudPointer;
+        private readonly List<RaycastResult> _hudHits = new List<RaycastResult>();
+        private readonly List<Vector2Int> _stroke = new List<Vector2Int>();
+        private readonly HashSet<Vector2Int> _strokeCells = new HashSet<Vector2Int>();
+        private readonly List<Transform> _roadMarkers = new List<Transform>();
+        private Material _roadPreviewMat;
+        private int _roadStrokeCost;
+        private Vector2Int _lastStrokeSample;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void AutoStart()
@@ -161,11 +178,16 @@ namespace XCity
             var scaler = canvasObj.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1280, 720);
-            canvasObj.AddComponent<GraphicRaycaster>();
+            _hudRaycaster = canvasObj.AddComponent<GraphicRaycaster>();
+            _hudPointer = new PointerEventData(EventSystem.current);
+            _safeAreaRoot = new GameObject("SafeArea", typeof(RectTransform)).GetComponent<RectTransform>();
+            _safeAreaRoot.SetParent(canvas.transform, false);
+            UpdateSafeArea();
+            _roadPreviewMat = MakeMat(_roadMat.shader, Color.green);
 
             Font font = Resources.Load<Font>("NotoSans-Regular");
 
-            var topBar = CreatePanel(canvasObj.transform, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), new Color(0.08f, 0.10f, 0.14f, 0.85f));
+            var topBar = CreatePanel(_safeAreaRoot, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), new Color(0.08f, 0.10f, 0.14f, 0.85f));
             var statusObj = new GameObject("StatusText");
             statusObj.transform.SetParent(topBar.transform, false);
             var statusRect = statusObj.AddComponent<RectTransform>();
@@ -179,7 +201,7 @@ namespace XCity
             _hudStatusText.color = Color.white;
             _hudStatusText.alignment = TextAnchor.MiddleLeft;
 
-            var bottomBar = CreatePanel(canvasObj.transform, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), new Color(0.08f, 0.10f, 0.14f, 0.88f));
+            var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), new Color(0.08f, 0.10f, 0.14f, 0.88f));
             var layout = bottomBar.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 10;
             layout.padding = new RectOffset(12, 12, 10, 10);
@@ -239,6 +261,7 @@ namespace XCity
 
         private void SelectTool(BuildTool tool)
         {
+            CancelGesture();
             _activeTool = tool;
             foreach (var kv in _toolButtons)
             {
@@ -250,74 +273,45 @@ namespace XCity
 
         private void Update()
         {
+            UpdateSafeArea();
             HandleInput();
             RunSimulationTick();
         }
 
+        private void UpdateSafeArea()
+        {
+            var size = new Vector2Int(Screen.width, Screen.height);
+            Rect area = Screen.safeArea;
+            if (size == _lastScreenSize && area == _lastSafeArea) return;
+
+            _lastScreenSize = size;
+            _lastSafeArea = area;
+            _safeAreaRoot.anchorMin = new Vector2(area.xMin / size.x, area.yMin / size.y);
+            _safeAreaRoot.anchorMax = new Vector2(area.xMax / size.x, area.yMax / size.y);
+            _safeAreaRoot.offsetMin = Vector2.zero;
+            _safeAreaRoot.offsetMax = Vector2.zero;
+        }
+
         private void HandleInput()
         {
-            if (Input.touchCount == 2)
+            if (Input.touchCount > 0)
             {
-                Touch t0 = Input.GetTouch(0);
-                Touch t1 = Input.GetTouch(1);
-
-                Vector2 prev0 = t0.position - t0.deltaPosition;
-                Vector2 prev1 = t1.position - t1.deltaPosition;
-
-                float prevDist = Vector2.Distance(prev0, prev1);
-                float currDist = Vector2.Distance(t0.position, t1.position);
-                float deltaZoom = (prevDist - currDist) * 0.08f;
-                _camDistance = Mathf.Clamp(_camDistance + deltaZoom, 14f, 110f);
-
-                float prevAngle = Mathf.Atan2(prev1.y - prev0.y, prev1.x - prev0.x) * Mathf.Rad2Deg;
-                float currAngle = Mathf.Atan2(t1.y - t0.y, t1.x - t0.x) * Mathf.Rad2Deg;
-                _camYaw -= Mathf.DeltaAngle(prevAngle, currAngle);
-
-                UpdateCameraTransform();
+                HandleTouch();
                 return;
             }
 
-            bool pointerDown = Input.GetMouseButtonDown(0);
-            bool pointerHeld = Input.GetMouseButton(0);
-            bool pointerUp = Input.GetMouseButtonUp(0);
-
-            if (pointerDown && IsPointerOverUI()) return;
-
-            if (pointerDown)
+            if (_waitForTouchRelease || _activeFingerId >= 0)
             {
-                _isDragging = true;
-                _lastPointerPos = Input.mousePosition;
-                if (_activeTool != BuildTool.Pan)
-                {
-                    TryApplyToolAtScreenPos(Input.mousePosition);
-                }
+                CancelGesture();
+                _waitForTouchRelease = false;
+                _pinchFirstId = -1;
+                _pinchSecondId = -1;
+                return;
             }
-            else if (pointerHeld && _isDragging)
-            {
-                Vector2 curr = Input.mousePosition;
-                Vector2 delta = curr - _lastPointerPos;
-                _lastPointerPos = curr;
 
-                if (_activeTool == BuildTool.Pan)
-                {
-                    Vector3 right = Vector3.ProjectOnPlane(_cam.transform.right, Vector3.up).normalized;
-                    Vector3 forward = Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up).normalized;
-                    float panSpeed = _camDistance * 0.0022f;
-                    _camTarget -= (right * delta.x + forward * delta.y) * panSpeed;
-                    float maxBound = GridSize * CellSize;
-                    _camTarget.x = Mathf.Clamp(_camTarget.x, 0f, maxBound);
-                    _camTarget.z = Mathf.Clamp(_camTarget.z, 0f, maxBound);
-                    UpdateCameraTransform();
-                }
-                else if (!IsPointerOverUI())
-                {
-                    TryApplyToolAtScreenPos(curr);
-                }
-            }
-            else if (pointerUp)
-            {
-                _isDragging = false;
-            }
+            if (Input.GetMouseButtonDown(0)) BeginGesture(Input.mousePosition);
+            else if (Input.GetMouseButtonUp(0)) EndGesture(Input.mousePosition);
+            else if (Input.GetMouseButton(0)) ContinueGesture(Input.mousePosition);
 
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) > 0.01f)
@@ -327,26 +321,188 @@ namespace XCity
             }
         }
 
-        private static bool IsPointerOverUI()
+        private void HandleTouch()
         {
-            if (EventSystem.current == null) return false;
-            if (Input.touchCount > 0)
-                return EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
-            return EventSystem.current.IsPointerOverGameObject();
+            if (Input.touchCount >= 2)
+            {
+                CancelGesture();
+                _waitForTouchRelease = true;
+                Touch first = Input.GetTouch(0);
+                Touch second = Input.GetTouch(1);
+                if (Input.touchCount != 2 || first.phase == TouchPhase.Ended ||
+                    second.phase == TouchPhase.Ended || first.phase == TouchPhase.Canceled ||
+                    second.phase == TouchPhase.Canceled || IsPointerOverUI(first.position) ||
+                    IsPointerOverUI(second.position))
+                {
+                    _pinchFirstId = -1;
+                    _pinchSecondId = -1;
+                    return;
+                }
+
+                if (first.fingerId == _pinchFirstId && second.fingerId == _pinchSecondId)
+                {
+                    Vector2 current = second.position - first.position;
+                    Vector2 previous = current - second.deltaPosition + first.deltaPosition;
+                    if (current.sqrMagnitude > 1f && previous.sqrMagnitude > 1f)
+                    {
+                        _camDistance = Mathf.Clamp(_camDistance * previous.magnitude / current.magnitude, 14f, 110f);
+                        _camYaw -= Vector2.SignedAngle(previous, current);
+                        UpdateCameraTransform();
+                    }
+                }
+
+                _pinchFirstId = first.fingerId;
+                _pinchSecondId = second.fingerId;
+                return;
+            }
+
+            if (_waitForTouchRelease) return;
+            Touch touch = Input.GetTouch(0);
+            if (touch.phase == TouchPhase.Began)
+            {
+                _activeFingerId = touch.fingerId;
+                BeginGesture(touch.position);
+            }
+            else if (touch.fingerId == _activeFingerId)
+            {
+                if (touch.phase == TouchPhase.Canceled) CancelGesture();
+                else if (touch.phase == TouchPhase.Ended) EndGesture(touch.position);
+                else if (touch.phase == TouchPhase.Moved) ContinueGesture(touch.position);
+            }
         }
 
-        private void TryApplyToolAtScreenPos(Vector2 screenPos)
+        private void BeginGesture(Vector2 position)
         {
-            Ray ray = _cam.ScreenPointToRay(screenPos);
-            Plane groundPlane = new Plane(Vector3.up, Vector3.zero);
-            if (!groundPlane.Raycast(ray, out float enter)) return;
+            if (IsPointerOverUI(position)) return;
+            _isDragging = true;
+            _lastPointerPos = position;
+            if (_activeTool != BuildTool.Pan && TryGetCell(position, out var cell))
+                AddStrokeSample(cell);
+        }
 
-            Vector3 hit = ray.GetPoint(enter);
-            int gx = Mathf.FloorToInt(hit.x / CellSize);
-            int gz = Mathf.FloorToInt(hit.z / CellSize);
-            if (gx < 0 || gx >= GridSize || gz < 0 || gz >= GridSize) return;
+        private void ContinueGesture(Vector2 position)
+        {
+            if (!_isDragging || IsPointerOverUI(position)) return;
 
-            ApplyCellTool(gx, gz);
+            if (_activeTool == BuildTool.Pan)
+            {
+                Vector2 delta = position - _lastPointerPos;
+                Vector3 right = Vector3.ProjectOnPlane(_cam.transform.right, Vector3.up).normalized;
+                Vector3 forward = Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up).normalized;
+                float panSpeed = _camDistance * 1.6f / Screen.height;
+                _camTarget -= (right * delta.x + forward * delta.y) * panSpeed;
+                float maxBound = GridSize * CellSize;
+                _camTarget.x = Mathf.Clamp(_camTarget.x, 0f, maxBound);
+                _camTarget.z = Mathf.Clamp(_camTarget.z, 0f, maxBound);
+                UpdateCameraTransform();
+            }
+            else if (TryGetCell(position, out var cell))
+            {
+                AddStrokeSample(cell);
+            }
+            _lastPointerPos = position;
+        }
+
+        private void EndGesture(Vector2 position)
+        {
+            if (_isDragging && _activeTool != BuildTool.Pan &&
+                !IsPointerOverUI(position) && TryGetCell(position, out var cell))
+            {
+                AddStrokeSample(cell);
+                if (_activeTool != BuildTool.Road || _roadStrokeCost <= _money)
+                    foreach (Vector2Int point in _stroke)
+                        ApplyCellTool(point.x, point.y);
+            }
+            CancelGesture();
+        }
+
+        private void CancelGesture()
+        {
+            _isDragging = false;
+            _activeFingerId = -1;
+            if (_stroke.Count == 0) return;
+            if (_activeTool == BuildTool.Road)
+                for (int i = 0; i < _stroke.Count; i++)
+                    _roadMarkers[i].gameObject.SetActive(false);
+            _stroke.Clear();
+            _strokeCells.Clear();
+            _roadStrokeCost = 0;
+            RefreshHUD();
+        }
+
+        private bool IsPointerOverUI(Vector2 position)
+        {
+            _hudPointer.position = position;
+            _hudHits.Clear();
+            _hudRaycaster.Raycast(_hudPointer, _hudHits);
+            return _hudHits.Count > 0;
+        }
+
+        private bool TryGetCell(Vector2 position, out Vector2Int cell)
+        {
+            cell = default;
+            Ray ray = _cam.ScreenPointToRay(position);
+            Plane ground = new Plane(Vector3.up, Vector3.zero);
+            if (!ground.Raycast(ray, out float distance)) return false;
+            Vector3 hit = ray.GetPoint(distance);
+            cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
+            return cell.x >= 0 && cell.x < GridSize && cell.y >= 0 && cell.y < GridSize;
+        }
+
+        private void AddStrokeSample(Vector2Int destination)
+        {
+            if (_stroke.Count > 0 && destination == _lastStrokeSample) return;
+            Vector2Int cursor = _stroke.Count == 0 ? destination : _lastStrokeSample;
+            int stepsX = Mathf.Abs(destination.x - cursor.x);
+            int stepsY = Mathf.Abs(destination.y - cursor.y);
+            int directionX = System.Math.Sign(destination.x - cursor.x);
+            int directionY = System.Math.Sign(destination.y - cursor.y);
+            int movedX = 0;
+            int movedY = 0;
+            AddStrokeCell(cursor);
+
+            while (cursor != destination)
+            {
+                if (movedY == stepsY || (movedX < stepsX && (2 * movedX + 1) * stepsY <= (2 * movedY + 1) * stepsX))
+                {
+                    cursor.x += directionX;
+                    movedX++;
+                }
+                else
+                {
+                    cursor.y += directionY;
+                    movedY++;
+                }
+                AddStrokeCell(cursor);
+            }
+            _lastStrokeSample = destination;
+            RefreshHUD();
+        }
+
+        private void AddStrokeCell(Vector2Int cell)
+        {
+            if (!_strokeCells.Add(cell)) return;
+
+            int index = _stroke.Count;
+            _stroke.Add(cell);
+            if (_activeTool != BuildTool.Road) return;
+            if (_grid[cell.x, cell.y].Type != CellType.Road) _roadStrokeCost += RoadCost;
+            if (index == _roadMarkers.Count)
+            {
+                var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                marker.name = "RoadPreview";
+                marker.GetComponent<Collider>().enabled = false;
+                Destroy(marker.GetComponent<Collider>());
+                var renderer = marker.GetComponent<Renderer>();
+                renderer.sharedMaterial = _roadPreviewMat;
+                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                marker.transform.localScale = new Vector3(CellSize * 0.9f, 0.06f, CellSize * 0.9f);
+                _roadMarkers.Add(marker.transform);
+            }
+
+            Transform preview = _roadMarkers[index];
+            preview.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f, (cell.y + 0.5f) * CellSize);
+            preview.gameObject.SetActive(true);
         }
 
         private void ApplyCellTool(int gx, int gz)
@@ -375,7 +531,7 @@ namespace XCity
 
             if (targetType == CellType.Empty || cell.Type == targetType) return;
 
-            int cost = targetType == CellType.Road ? 100 : 50;
+            int cost = targetType == CellType.Road ? RoadCost : 50;
             if (_money < cost) return;
 
             if (cell.Visual != null) Destroy(cell.Visual);
@@ -491,7 +647,14 @@ namespace XCity
         {
             if (_hudStatusText != null)
             {
-                _hudStatusText.text = $"XCity  |  Ngân sách: ${_money:N0}  |  Dân số: {_population:N0}  |  Chạm để đặt đường & phân khu cạnh đường";
+                string hint = "Kéo để vẽ đường · Thả để đặt";
+                if (_activeTool == BuildTool.Road && _stroke.Count > 0)
+                {
+                    bool affordable = _roadStrokeCost <= _money;
+                    _roadPreviewMat.color = affordable ? Color.green : Color.red;
+                    hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
+                }
+                _hudStatusText.text = $"XCity  |  Ngân sách: ${_money:N0}  |  Dân số: {_population:N0}  |  {hint}";
             }
         }
     }
