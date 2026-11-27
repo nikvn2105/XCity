@@ -106,8 +106,8 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$plist")" = 14.0
           test -x "$app/$executable"
           test -x "$app/Frameworks/UnityFramework.framework/UnityFramework"
-          lipo -verify_arch arm64 "$app/$executable"
-          lipo -verify_arch arm64 "$app/Frameworks/UnityFramework.framework/UnityFramework"
+          lipo "$app/$executable" -verify_arch arm64
+          lipo "$app/Frameworks/UnityFramework.framework/UnityFramework" -verify_arch arm64
 
           mkdir -p ipa-out/Payload
           ditto "$app" "ipa-out/Payload/$(basename "$app")"
