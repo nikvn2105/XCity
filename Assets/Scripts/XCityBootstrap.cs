@@ -40,6 +40,7 @@ namespace XCity
         private WatercraftSystem _watercraft;
         private CitizenSystem _citizens;
         private DayNightSystem _dayNight;
+        private Material _skyMat;
         private Light _sunLight;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
@@ -198,7 +199,8 @@ namespace XCity
             Shader skyShader = Resources.Load<Shader>("XCitySky");
             if (skyShader != null)
             {
-                RenderSettings.skybox = new Material(skyShader) { hideFlags = HideFlags.DontSave };
+                _skyMat = new Material(skyShader) { hideFlags = HideFlags.DontSave };
+                RenderSettings.skybox = _skyMat;
                 _cam.clearFlags = CameraClearFlags.Skybox;
             }
             else
@@ -1076,6 +1078,8 @@ namespace XCity
             Destroy(_roadPreviewMat);
             Destroy(_buildingMaterial);
             if (_inspectionMaterial != null) Destroy(_inspectionMaterial);
+            // DontSave survives the "new city" scene reload, so it must be freed by hand.
+            if (_skyMat != null) Destroy(_skyMat);
         }
 
         private string GetInspectionHint()
