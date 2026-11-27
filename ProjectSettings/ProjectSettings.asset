@@ -6,7 +6,7 @@ PlayerSettings:
   serializedVersion: 26
   companyName: nikstudiovn
   productName: XCity
-  defaultScreenOrientation: 3
+  defaultScreenOrientation: 5
   allowedAutorotateToPortrait: 0
   allowedAutorotateToPortraitUpsideDown: 0
   allowedAutorotateToLandscapeRight: 1
@@ -19,8 +19,9 @@ PlayerSettings:
     iPhone: 1
   scriptingBackend:
     iPhone: 1
-  iPhoneTargetOSVersionString: 14.0
+  iOSTargetOSVersionString: 14.0
   iPhoneSdkVersion: 988
-  iPhoneTargetDevice: 2
+  targetDevice: 2
   useOnDemandResources: 0
-  accelerateAccelerometer: 0
+  activeInputHandler: 0
+  accelerometerFrequency: 0

@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-unity-ios:
     name: Build Unity Xcode Project
@@ -19,32 +22,42 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          key: Library-2022.3.47f1-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
           restore-keys: |
-            Library-iOS-
+            Library-2022.3.47f1-iOS-
 
       - name: Build Unity project for iOS
         uses: game-ci/unity-builder@v4
         env:
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
           targetPlatform: iOS
           unityVersion: 2022.3.47f1
           buildName: XCity
+          buildsPath: build
+          versioning: None
+
+      - name: Archive Xcode project with file modes and symlinks
+        shell: bash
+        run: |
+          test -f build/iOS/XCity/Unity-iPhone.xcodeproj/project.pbxproj
+          tar -cf XCity-XcodeProject.tar -C build/iOS XCity
 
       - name: Upload Xcode project artifact
         uses: actions/upload-artifact@v4
         with:
           name: XCity-XcodeProject
-          path: build/iOS
+          path: XCity-XcodeProject.tar
+          if-no-files-found: error
           retention-days: 3
 
   package-unsigned-ipa:
     name: Compile & Package Unsigned IPA
     needs: build-unity-ios
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Download Xcode project
         uses: actions/download-artifact@v4
@@ -52,16 +65,24 @@ jobs:
           name: XCity-XcodeProject
           path: ios-build
 
-      - name: Locate Xcode project & build unsigned .app
+      - name: Extract Xcode project
+        shell: bash
+        run: tar -xf ios-build/XCity-XcodeProject.tar -C ios-build
+
+      - name: Build unsigned .app with Xcode 16.4
+        shell: bash
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
         run: |
-          XCODE_PROJ=$(find ios-build -name "Unity-iPhone.xcodeproj" | head -n 1)
-          PROJ_DIR=$(dirname "$XCODE_PROJ")
-          cd "$PROJ_DIR"
+          xcodebuild -version
+          cd ios-build/XCity
           xcodebuild \
             -project Unity-iPhone.xcodeproj \
             -scheme Unity-iPhone \
             -configuration Release \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            ARCHS=arm64 \
             -derivedDataPath "$GITHUB_WORKSPACE/DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -69,17 +90,34 @@ jobs:
             DEVELOPMENT_TEAM="" \
             build
 
-      - name: Package Unsigned .ipa
+      - name: Verify and package unsigned IPA
+        shell: bash
         run: |
-          APP_PATH=$(find "$GITHUB_WORKSPACE/DerivedData/Build/Products/Release-iphoneos" -name "*.app" -maxdepth 2 | head -n 1)
-          mkdir -p "$GITHUB_WORKSPACE/ipa-out/Payload"
-          cp -R "$APP_PATH" "$GITHUB_WORKSPACE/ipa-out/Payload/"
-          cd "$GITHUB_WORKSPACE/ipa-out"
-          zip -r "$GITHUB_WORKSPACE/XCity-unsigned.ipa" Payload
+          shopt -s nullglob
+          apps=("$GITHUB_WORKSPACE"/DerivedData/Build/Products/Release-iphoneos/*.app)
+          if [[ ${#apps[@]} -ne 1 ]]; then
+            echo "::error::Expected exactly one Release-iphoneos app"
+            exit 1
+          fi
+          app="${apps[0]}"
+          plist="$app/Info.plist"
+          executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$plist")"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$plist")" = com.nikstudiovn.xcity
+          test "$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$plist")" = 14.0
+          test -x "$app/$executable"
+          test -x "$app/Frameworks/UnityFramework.framework/UnityFramework"
+          lipo -verify_arch arm64 "$app/$executable"
+          lipo -verify_arch arm64 "$app/Frameworks/UnityFramework.framework/UnityFramework"
+
+          mkdir -p ipa-out/Payload
+          ditto "$app" "ipa-out/Payload/$(basename "$app")"
+          ditto -c -k --keepParent ipa-out/Payload XCity-unsigned.ipa
+          unzip -tq XCity-unsigned.ipa
 
       - name: Upload Unsigned IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: XCity-unsigned-ipa
           path: XCity-unsigned.ipa
+          if-no-files-found: error
           retention-days: 14

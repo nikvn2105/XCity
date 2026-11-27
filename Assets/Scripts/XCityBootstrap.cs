@@ -86,15 +86,15 @@ namespace XCity
 
         private void CreateMaterials()
         {
-            Shader std = Shader.Find("Standard") ?? Shader.Find("Unlit/Color");
-            _groundMat = MakeMat(std, new Color(0.36f, 0.58f, 0.32f));
-            _roadMat = MakeMat(std, new Color(0.18f, 0.20f, 0.23f));
-            _resMat = MakeMat(std, new Color(0.24f, 0.72f, 0.36f));
-            _comMat = MakeMat(std, new Color(0.20f, 0.52f, 0.88f));
-            _indMat = MakeMat(std, new Color(0.88f, 0.68f, 0.20f));
-            _bldgResMat = MakeMat(std, new Color(0.88f, 0.84f, 0.76f));
-            _bldgComMat = MakeMat(std, new Color(0.62f, 0.78f, 0.92f));
-            _bldgIndMat = MakeMat(std, new Color(0.65f, 0.56f, 0.45f));
+            Shader shader = Resources.Load<Shader>("XCityWorld");
+            _groundMat = MakeMat(shader, new Color(0.36f, 0.58f, 0.32f));
+            _roadMat = MakeMat(shader, new Color(0.18f, 0.20f, 0.23f));
+            _resMat = MakeMat(shader, new Color(0.24f, 0.72f, 0.36f));
+            _comMat = MakeMat(shader, new Color(0.20f, 0.52f, 0.88f));
+            _indMat = MakeMat(shader, new Color(0.88f, 0.68f, 0.20f));
+            _bldgResMat = MakeMat(shader, new Color(0.88f, 0.84f, 0.76f));
+            _bldgComMat = MakeMat(shader, new Color(0.62f, 0.78f, 0.92f));
+            _bldgIndMat = MakeMat(shader, new Color(0.65f, 0.56f, 0.45f));
         }
 
         private static Material MakeMat(Shader shader, Color color)
@@ -163,8 +163,7 @@ namespace XCity
             scaler.referenceResolution = new Vector2(1280, 720);
             canvasObj.AddComponent<GraphicRaycaster>();
 
-            Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            if (font == null) font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            Font font = Resources.Load<Font>("NotoSans-Regular");
 
             var topBar = CreatePanel(canvasObj.transform, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), new Color(0.08f, 0.10f, 0.14f, 0.85f));
             var statusObj = new GameObject("StatusText");
