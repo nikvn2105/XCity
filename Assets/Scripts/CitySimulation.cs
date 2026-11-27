@@ -11,11 +11,22 @@ namespace XCity
         Industrial
     }
 
+    [Serializable]
     public struct CityCell
     {
         public CellType Type;
         public int Level;
         public float Height;
+    }
+
+    [Serializable]
+    internal sealed class CitySnapshot
+    {
+        public int schemaVersion;
+        public int money;
+        public long tick;
+        public long randomState;
+        public CityCell[] cells;
     }
 
     public sealed class CitySimulation
@@ -35,6 +46,7 @@ namespace XCity
         public int Population { get; private set; }
         public long TickCount { get; private set; }
         public event Action<int, int> CellChanged;
+        public RoadGraph Roads { get; } = new RoadGraph(GridSize);
 
         public CityCell GetCell(int x, int z) => _cells[x, z];
 
@@ -50,6 +62,7 @@ namespace XCity
             if (cell.Type == CellType.Residential) Population -= 12 * cell.Level;
             cell = new CityCell { Type = type };
             Money -= cost;
+            Roads.SetRoad(x, z, type == CellType.Road);
             CellChanged?.Invoke(x, z);
             return true;
         }
@@ -70,7 +83,7 @@ namespace XCity
                         continue;
                     }
 
-                    if (cell.Level == 0 && HasAdjacentRoad(x, z) && NextRandom() < 0.35f)
+                    if (cell.Level == 0 && Roads.HasRoadAccess(x, z) && NextRandom() < 0.35f)
                     {
                         cell.Level = 1;
                         cell.Height = cell.Type switch
@@ -92,10 +105,55 @@ namespace XCity
             TickCount++;
         }
 
-        private bool HasAdjacentRoad(int x, int z) =>
-            IsRoad(x - 1, z) || IsRoad(x + 1, z) || IsRoad(x, z - 1) || IsRoad(x, z + 1);
+        internal CitySnapshot CreateSnapshot()
+        {
+            var snapshot = new CitySnapshot
+            {
+                schemaVersion = 1,
+                money = Money,
+                tick = TickCount,
+                randomState = _randomState,
+                cells = new CityCell[GridSize * GridSize]
+            };
+            for (int x = 0; x < GridSize; x++)
+                for (int z = 0; z < GridSize; z++)
+                    snapshot.cells[x * GridSize + z] = _cells[x, z];
+            return snapshot;
+        }
 
-        private bool IsRoad(int x, int z) => IsInBounds(x, z) && _cells[x, z].Type == CellType.Road;
+        internal static bool TryRestore(CitySnapshot snapshot, out CitySimulation city)
+        {
+            city = null;
+            if (snapshot == null || snapshot.schemaVersion != 1 || snapshot.tick < 0 ||
+                snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
+                snapshot.cells == null || snapshot.cells.Length != GridSize * GridSize)
+                return false;
+
+            var restored = new CitySimulation((uint)snapshot.randomState)
+            {
+                Money = snapshot.money,
+                TickCount = snapshot.tick
+            };
+            for (int x = 0; x < GridSize; x++)
+            {
+                for (int z = 0; z < GridSize; z++)
+                {
+                    CityCell cell = snapshot.cells[x * GridSize + z];
+                    if (cell.Type < CellType.Empty || cell.Type > CellType.Industrial ||
+                        cell.Level < 0 || cell.Level > 1 ||
+                        (cell.Level == 0 && cell.Height != 0f) ||
+                        (cell.Level > 0 && (cell.Type < CellType.Residential || !(cell.Height >= 2.2f && cell.Height <= 7.5f))))
+                        return false;
+
+                    restored._cells[x, z] = cell;
+                    restored.Roads.SetRoad(x, z, cell.Type == CellType.Road);
+                    if (cell.Type == CellType.Residential) restored.Population += 12 * cell.Level;
+                }
+            }
+
+            city = restored;
+            return true;
+        }
 
         private static bool IsInBounds(int x, int z) =>
             x >= 0 && x < GridSize && z >= 0 && z < GridSize;

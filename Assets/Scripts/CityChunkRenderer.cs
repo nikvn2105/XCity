@@ -27,6 +27,9 @@ namespace XCity
             _root = new GameObject("CityChunks").transform;
             _root.SetParent(parent, false);
             _city.CellChanged += MarkDirty;
+            for (int x = 0; x < CitySimulation.GridSize; x++)
+                for (int z = 0; z < CitySimulation.GridSize; z++)
+                    if (_city.GetCell(x, z).Type != CellType.Empty) MarkDirty(x, z);
         }
 
         private static Mesh CreateCubeMesh()

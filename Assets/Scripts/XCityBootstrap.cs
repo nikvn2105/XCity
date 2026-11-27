@@ -22,6 +22,9 @@ namespace XCity
         private const float TickInterval = 1.5f;
 
         private CitySimulation _city;
+        private CitySave _save;
+        private bool _cityDirty;
+        private float _nextAutosave;
         private CityChunkRenderer _cityRenderer;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
@@ -75,7 +78,9 @@ namespace XCity
         private void Awake()
         {
             Application.targetFrameRate = 30;
-            _city = new CitySimulation();
+            _save = new CitySave(Application.persistentDataPath);
+            _city = _save.Load();
+            _nextAutosave = Time.unscaledTime + 15f;
             CreateMaterials();
             SetupEnvironment();
             SetupCamera();
@@ -259,6 +264,8 @@ namespace XCity
             UpdateSafeArea();
             HandleInput();
             RunSimulationTick();
+            if (_cityDirty && Time.unscaledTime >= _nextAutosave)
+                SaveCity();
         }
 
         private void UpdateSafeArea()
@@ -498,7 +505,7 @@ namespace XCity
                 BuildTool.Industrial => CellType.Industrial,
                 _ => CellType.Empty
             };
-            _city.TrySetCell(gx, gz, type);
+            _cityDirty |= _city.TrySetCell(gx, gz, type);
         }
 
         private void RunSimulationTick()
@@ -507,7 +514,25 @@ namespace XCity
             if (_simTimer < TickInterval) return;
             _simTimer -= TickInterval;
             _city.Tick();
+            _cityDirty = true;
             RefreshHUD();
+        }
+
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused)
+            {
+                CancelGesture();
+                SaveCity();
+            }
+        }
+
+        private void OnApplicationQuit() => SaveCity();
+
+        private void SaveCity()
+        {
+            _nextAutosave = Time.unscaledTime + 15f;
+            if (_cityDirty && _save.Write(_city)) _cityDirty = false;
         }
 
         private void LateUpdate() => _cityRenderer.RebuildDirtyChunks();
