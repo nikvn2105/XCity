@@ -12,22 +12,18 @@ namespace XCity
         private Color32[] _worldMapTerrain;
         private Color32[] _worldMapPixels;
 
-        private void SetupWorldMap(Transform toolbar, Font font)
+        private void SetupWorldMap()
         {
-            Button open = CreateHudButton(toolbar, font, "Bản đồ", "OpenWorldMap");
-            open.onClick.AddListener(OpenWorldMap);
-
             var frame = CreatePanel(_safeAreaRoot, "WorldMap", Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero, new Color(0.035f, 0.06f, 0.09f, 0.82f));
+                Vector2.zero, Vector2.zero, UiTheme.Panel);
             _worldMapPanel = frame;
             var body = CreatePanel(frame.transform, "MapPanel", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-235, -244), new Vector2(235, 244), new Color(0.08f, 0.12f, 0.16f, 1f));
+                new Vector2(-235, -244), new Vector2(235, 244), UiTheme.PanelSolid);
 
-            Button close = CreateHudButton(body.transform, font, "Đóng", "CloseWorldMap");
-            var closeRect = (RectTransform)close.transform;
-            closeRect.anchorMin = closeRect.anchorMax = new Vector2(1, 1);
-            closeRect.offsetMin = new Vector2(-88, -47);
-            closeRect.offsetMax = new Vector2(-12, -10);
+            Button close = BuildButton(body.transform, "CloseWorldMap", Vector2.one, Vector2.one,
+                new Vector2(-88, -UiTheme.MinTouch - 8), new Vector2(-12, -8));
+            BuildLabel(close.transform, UiText.Close, UiTheme.SmallSize, Vector2.zero, Vector2.one,
+                Vector2.zero, Vector2.zero);
             close.onClick.AddListener(() => frame.SetActive(false));
 
             var title = new GameObject("MapTitle", typeof(RectTransform));
@@ -38,12 +34,12 @@ namespace XCity
             titleRect.offsetMin = new Vector2(18, -48);
             titleRect.offsetMax = new Vector2(-100, -10);
             Text label = title.AddComponent<Text>();
-            label.font = font;
-            label.fontSize = 19;
-            label.color = Color.white;
+            label.font = UiTheme.Font;
+            label.fontSize = UiTheme.BodySize;
+            label.color = UiTheme.Text;
             label.alignment = TextAnchor.MiddleLeft;
             label.raycastTarget = false;
-            label.text = $"Thế giới {GridSize} × {GridSize} ô · Chạm để đến";
+            label.text = UiText.WorldMapTitle(GridSize);
 
             var picture = new GameObject("WorldMapImage", typeof(RectTransform));
             picture.transform.SetParent(body.transform, false);
@@ -80,8 +76,9 @@ namespace XCity
         private void OpenWorldMap()
         {
             CancelGesture();
-            _catalog.SetActive(false);
+            CloseBuildPicker();
             RefreshWorldMap();
+            _worldMapPanel.transform.SetAsLastSibling();
             _worldMapPanel.SetActive(true);
         }
 

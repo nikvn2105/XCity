@@ -4,8 +4,8 @@ using UnityEngine.UI;
 
 namespace XCity
 {
-    // Top bar stats (money, people, R/C/I demand, day and clock, speed) and toasts that slide in
-    // under it on the right, separate from the tool hint above the bottom bar.
+    // Top bar stats (money, people, R/C/I demand, day and clock, speed) and toasts that appear
+    // under it in the centre, separate from the tool hint above the bottom bar.
     public partial class XCityBootstrap
     {
         private const int MaxToasts = 3;
@@ -81,8 +81,9 @@ namespace XCity
 
             _toastRoot = new GameObject("Toasts", typeof(RectTransform)).GetComponent<RectTransform>();
             _toastRoot.SetParent(_safeAreaRoot, false);
-            _toastRoot.anchorMin = _toastRoot.anchorMax = _toastRoot.pivot = Vector2.one;
-            _toastRoot.anchoredPosition = new Vector2(-12f, -118f);
+            // Top centre: the right edge belongs to the building info panel.
+            _toastRoot.anchorMin = _toastRoot.anchorMax = _toastRoot.pivot = new Vector2(0.5f, 1f);
+            _toastRoot.anchoredPosition = new Vector2(0f, -118f);
             _toastRoot.sizeDelta = new Vector2(380f, 0f);
             var column = _toastRoot.gameObject.AddComponent<VerticalLayoutGroup>();
             column.spacing = 6;
@@ -126,7 +127,7 @@ namespace XCity
             string money = _city.Money < 0 ? $"<color=#ff7a7a>${_city.Money:N0}</color>" : $"${_city.Money:N0}";
             _moneyText.text = $"<size={UiTheme.BodySize}><b>{money}</b></size>\n<color={netColor}>{net}</color>{UiText.PerTick}{debt}";
 
-            string happiness = _city.Population > 0 ? $"{UiText.Happiness}{_city.AverageHappiness}%" : "";
+            string happiness = _city.Population > 0 ? $"{UiText.HappinessLabel}{_city.AverageHappiness}%" : "";
             _peopleText.text = $"<size={UiTheme.BodySize}><b>{UiText.Population}{_city.Population:N0}</b></size>\n{happiness}";
 
             for (int i = 0; i < SpeedSteps.Length; i++)
