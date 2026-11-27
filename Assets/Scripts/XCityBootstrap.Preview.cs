@@ -27,6 +27,7 @@ namespace XCity
 
             _cityRenderer.RebuildDirtyChunks();
             _buildingRenderer.RebuildDirtyChunks();
+            _vehicles?.Prewarm(20f);
 
             var shots = new (string Name, Vector3 Target, float Distance, float Pitch, float Yaw)[]
             {
@@ -64,7 +65,6 @@ namespace XCity
                     string path = Path.Combine(_previewOutput, $"{i:00}-{shot.Name}.png");
                     File.WriteAllBytes(path, tex.EncodeToPNG());
                     Debug.Log($"XCITY_PREVIEW_SHOT {path}");
-                    yield return null;
                 }
             }
             finally
@@ -77,6 +77,7 @@ namespace XCity
 
             Debug.Log("XCITY_PREVIEW_DONE");
             Application.Quit();
+            yield break;
         }
     }
 }
