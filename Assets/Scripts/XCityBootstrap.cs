@@ -116,9 +116,8 @@ namespace XCity
 
         private void Awake()
         {
-            _save = new CitySave(Application.persistentDataPath);
             _previewOutput = GetPreviewOutputArg();
-            _city = _previewOutput != null ? XCityPreviewCity.Create() : _save.Load();
+            _city = OpenStartupCity();
             _nextAutosave = Time.unscaledTime + 15f;
             CreateMaterials();
             SetupEnvironment();
@@ -128,6 +127,7 @@ namespace XCity
             if (_city.DroppedCellsOnLoad > 0)
                 ShowToast(string.Format(UiText.DroppedOnLoad, _city.DroppedCellsOnLoad), UiTheme.Warning, UiIcon.Info);
             RestoreFpsCounter();
+            if (_previewOutput == null && _activeSaveSlot == 0) ShowMainMenu();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
 
@@ -360,6 +360,11 @@ namespace XCity
         private void Update()
         {
             UpdateSafeArea();
+            if (MainMenuOpen)
+            {
+                UpdateFpsCounter();
+                return;
+            }
             RunSimulationTick();
             HandleInput();
             UpdateCameraInertia();
@@ -371,8 +376,7 @@ namespace XCity
                 RefreshHUD();
             }
             UpdateTutorial();
-            if (_cityDirty && Time.unscaledTime >= _nextAutosave)
-                SaveCity(background: true);
+            if (_activeSaveSlot != 0 && Time.unscaledTime >= _nextAutosave) SaveCity(background: true);
         }
 
         private void UpdateSafeArea()
@@ -928,12 +932,17 @@ namespace XCity
         private void OnApplicationQuit() => SaveCity();
 
         // Autosaves run in the background; pausing or quitting saves synchronously so iOS cannot suspend mid-write.
-        private void SaveCity(bool background = false)
+        private bool SaveCity(bool background = false, bool force = false)
         {
-            if (_previewOutput != null) return;
+            if (_previewOutput != null || _activeSaveSlot == 0) return true;
             _nextAutosave = Time.unscaledTime + 15f;
-            if (!_cityDirty) return;
-            if (background ? _save.TryWriteInBackground(_city) : _save.Write(_city)) _cityDirty = false;
+            _cityDirty |= background ? _save.HasFailedWrite(_activeSaveSlot) : !_save.WaitForWrite(_activeSaveSlot);
+            if (!_cityDirty && !force) return true;
+            bool saved = background
+                ? _save.TryWriteInBackground(_activeSaveSlot, _activeCityName, _city)
+                : _save.Write(_activeSaveSlot, _activeCityName, _city);
+            _cityDirty = !saved;
+            return saved;
         }
 
         private WorldView LocalView => new WorldView(Mathf.FloorToInt(_camTarget.x / CellSize), Mathf.FloorToInt(_camTarget.z / CellSize));
@@ -963,6 +972,12 @@ namespace XCity
         {
             RefreshSceneDetail(2);
             _cityRenderer.RebuildDirtyChunks(1);
+            if (MainMenuOpen)
+            {
+                _buildingRenderer.RebuildDirtyChunks(1);
+                _dayNight?.SyncClock(GameDays);
+                return;
+            }
             bool visible = _chunkScheduler.ShowEffects;
             float simDt = Time.deltaTime * _simSpeed;
             _construction.Update(simDt, visible, LocalView);
@@ -1164,21 +1179,11 @@ namespace XCity
             text.alignment = TextAnchor.MiddleCenter;
             text.text = $"Thành phố đã phá sản\n<size=22>Ngân sách âm suốt {CitySimulation.BankruptcyTicks} lượt liên tiếp. " +
                 $"Dân số cuối cùng: {_city.Population:N0}</size>";
-            Button restart = CreateHudButton(_bankruptPanel.transform, font, "Xây thành phố mới", "NewCity");
+            Button restart = CreateHudButton(_bankruptPanel.transform, font, UiText.NewCity, "NewCity");
             var buttonRect = (RectTransform)restart.transform;
             buttonRect.anchorMin = buttonRect.anchorMax = new Vector2(0.5f, 0.35f);
             buttonRect.sizeDelta = new Vector2(320, 72);
-            restart.onClick.AddListener(StartNewCity);
-        }
-
-        // Saving a fresh city first moves the bankrupt one to the .bak file, then the scene reload rebuilds everything.
-        private void StartNewCity()
-        {
-            if (!_save.Write(new CitySimulation())) return;
-            _cityDirty = false;
-            SceneManager.sceneLoaded += RestartAfterLoad;
-            Destroy(gameObject);
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            restart.onClick.AddListener(OpenNewCityFromBankruptcy);
         }
 
         private static void RestartAfterLoad(Scene scene, LoadSceneMode mode)

@@ -19,6 +19,7 @@ namespace XCity
         private int _graphicsLevel = DefaultGraphics;
         private int _frameRate = DefaultFrameRate;
         private GameObject _settingsPanel;
+        private Button _returnToMenuButton;
         private readonly Image[] _graphicsButtons = new Image[GraphicsLabels.Length];
         private readonly Image[] _frameRateButtons = new Image[FrameRates.Length];
 
@@ -95,6 +96,9 @@ namespace XCity
             CancelGesture();
             if (_settingsPanel == null) BuildSettingsPanel();
             else _settingsPanel.SetActive(!_settingsPanel.activeSelf);
+            _returnToMenuButton.gameObject.SetActive(!MainMenuOpen && _activeSaveSlot != 0);
+            if (SettingsOpen) _settingsPanel.transform.SetAsLastSibling();
+            if (MainMenuOpen) _menuControls.interactable = !SettingsOpen;
             RefreshSettingsButtons();
         }
 
@@ -133,7 +137,9 @@ namespace XCity
             KeepTall(_fpsCounterButton.transform);
             _fpsCounterButton.onClick.AddListener(() => SetFpsCounter(_fpsText == null || !_fpsText.gameObject.activeSelf));
 
-            Button close = CreateHudButton(_settingsPanel.transform, font, "Đóng", "CloseSettings");
+            _returnToMenuButton = AddMenuButton(_settingsPanel.transform, UiText.ReturnToMenu, UiIcon.Home,
+                () => ReturnToMainMenu(), UiTheme.Button);
+            Button close = CreateHudButton(_settingsPanel.transform, font, UiText.Close, "CloseSettings");
             KeepTall(close.transform);
             close.onClick.AddListener(ToggleSettings);
 
