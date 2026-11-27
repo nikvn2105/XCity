@@ -528,6 +528,7 @@ namespace XCity
         private void SelectTool(BuildTool tool)
         {
             CancelGesture();
+            ClearRoadAnchor();
             if (tool != BuildTool.Pan) ClearFollow();
             if (_activeBuildingModel != BuildingModel.Default &&
                 BuildingCatalog.UnlockPopulation(_activeBuildingModel) > _city.PeakPopulation)
@@ -769,10 +770,15 @@ namespace XCity
                     }
                     RefreshHUD();
                 }
+                else if (_activeTool == BuildTool.Road && !IsPanMovement(position))
+                {
+                    HandleRoadTap(cell);
+                }
                 else
                 {
                     AddStrokeSample(cell);
                     ApplyBuildStroke();
+                    ClearRoadAnchor();
                 }
             }
             CancelGesture();
@@ -1074,16 +1080,15 @@ namespace XCity
             preview.gameObject.SetActive(true);
         }
 
-        private void ApplyBuildStroke()
+        private bool ApplyBuildStroke()
         {
-            if (_activeTool == BuildTool.Road && _strokeOverBudget) return;
+            if (_activeTool == BuildTool.Road && _strokeOverBudget) return false;
             CellType type = StrokeType;
-            if (_city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel))
-            {
-                _cityDirty = true;
-                if (_activeTool == BuildTool.Bulldoze) _audio?.PlayBulldoze();
-                else _audio?.PlayBuild();
-            }
+            if (!_city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel)) return false;
+            _cityDirty = true;
+            if (_activeTool == BuildTool.Bulldoze) _audio?.PlayBulldoze();
+            else _audio?.PlayBuild();
+            return true;
         }
 
         private IEnumerable<(int X, int Z)> GetStrokeCells()
@@ -1095,6 +1100,7 @@ namespace XCity
         private void UndoBuild()
         {
             CancelGesture();
+            ClearRoadAnchor();
             if (_city.TryUndoBuild())
             {
                 _cityDirty = true;
@@ -1490,7 +1496,7 @@ namespace XCity
                 string hint = _activeTool switch
                 {
                     BuildTool.Pan => GetInspectionHint(),
-                    BuildTool.Road => "Kéo để vẽ đường · Thả để đặt",
+                    BuildTool.Road => RoadHint,
                     BuildTool.Bridge => GetBridgeHint(),
                     BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",

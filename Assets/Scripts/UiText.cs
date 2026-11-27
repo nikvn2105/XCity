@@ -6,6 +6,10 @@ namespace XCity
         public const string StrokeCost = "Chi phí: $";
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";
 
+        // Road tool.
+        public const string RoadTapStart = "Chạm điểm đầu rồi điểm cuối, hoặc kéo để vẽ đường";
+        public const string RoadTapEnd = "Chạm điểm cuối để xây · Chạm lại điểm đầu để dừng";
+
         // Top bar.
         public const string PerTick = "/lượt";
         public const string Debt = "Nợ ";
