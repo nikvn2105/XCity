@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace XCity
 {
@@ -16,7 +17,7 @@ namespace XCity
             Pan
         }
 
-        private const float RotateLockDegrees = 10f;
+        private const float RotateLockDegrees = 6f;
         private const float ZoomLockLogRatio = 0.095f; // about a 10% change in finger spread
         private const float MoveLockScreenFraction = 0.03f;
         private const float MinCamPitch = 25f;
@@ -30,6 +31,31 @@ namespace XCity
         private Vector2 _panVelocity;
         private float _yawVelocity;
         private float _zoomVelocity;
+
+        // Inertia glides v / InertiaDamping degrees, so this start speed turns the camera about 45°.
+        private const float RotateStepSpeed = 45f * InertiaDamping;
+
+        // Two buttons on the right edge, above the build bar: each tap glides the camera 45°.
+        private void SetupRotateButtons()
+        {
+            var panel = CreatePanel(_safeAreaRoot, "Rotate", new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-16f - 2 * UiTheme.MinTouch - 18f, BuildBarTop + 20f),
+                new Vector2(-16f, BuildBarTop + 20f + UiTheme.MinTouch + 12f), UiTheme.Panel);
+            UiTheme.Float(panel.GetComponent<Image>());
+            var row = panel.AddComponent<HorizontalLayoutGroup>();
+            row.padding = new RectOffset(6, 6, 6, 6);
+            row.spacing = 6;
+            row.childControlWidth = row.childControlHeight = true;
+            row.childForceExpandWidth = row.childForceExpandHeight = true;
+            CreateIconButton(panel.transform, UiIcon.RotateLeft, "RotateLeft").onClick.AddListener(() => RotateStep(-1f));
+            CreateIconButton(panel.transform, UiIcon.RotateRight, "RotateRight").onClick.AddListener(() => RotateStep(1f));
+        }
+
+        private void RotateStep(float direction)
+        {
+            ClearFollow();
+            _yawVelocity = direction * RotateStepSpeed;
+        }
 
         private void BeginTwoFingerGesture(Touch first, Touch second)
         {

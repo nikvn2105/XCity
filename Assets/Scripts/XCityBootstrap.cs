@@ -308,6 +308,7 @@ namespace XCity
             SetupBuildBar();
             SetupWorldMap();
             SetupUXToolbar(_topButtons);
+            SetupRotateButtons();
             SetupInfoView();
 
             SelectTool(BuildTool.Road);
