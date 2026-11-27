@@ -31,6 +31,7 @@ namespace XCity
         private BuildingChunkRenderer _buildingRenderer;
         private ConstructionSystem _construction;
         private VehicleSystem _vehicles;
+        private CitizenSystem _citizens;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
         private Vector3 _camTarget;
@@ -157,6 +158,7 @@ namespace XCity
             _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _construction = new ConstructionSystem(_city, _buildingRenderer, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
+            _citizens = new CitizenSystem(_city, CellSize, _vertexColorMat, transform);
         }
 
         private void AddLandscapeBase(string name, float worldSpan, float size, float top, float depth, Material material)
@@ -796,6 +798,7 @@ namespace XCity
             _construction.Update(Time.deltaTime);
             _buildingRenderer.RebuildDirtyChunks();
             _vehicles.Update(Time.deltaTime);
+            _citizens.Update(Time.deltaTime);
         }
 
         private void OnDestroy()
@@ -804,6 +807,7 @@ namespace XCity
             _construction?.Dispose();
             _buildingRenderer?.Dispose();
             _vehicles?.Dispose();
+            _citizens?.Dispose();
             Destroy(_vertexColorMat);
             Destroy(_groundMat);
             Destroy(_shoreMat);

@@ -25,9 +25,13 @@ namespace XCity
             Debug.Log("XCITY_PREVIEW_START");
             Directory.CreateDirectory(_previewOutput);
 
+            Shader.SetGlobalFloat("_XCityTime", 12.5f);
             _cityRenderer.RebuildDirtyChunks();
+            _construction?.SeedPreviewSites();
             _buildingRenderer.RebuildDirtyChunks();
+            _construction?.Update(0.05f);
             _vehicles?.Prewarm(20f);
+            _citizens?.Prewarm(18f);
 
             var shots = new (string Name, Vector3 Target, float Distance, float Pitch, float Yaw)[]
             {
@@ -36,7 +40,7 @@ namespace XCity
                 ("residential", new Vector3(34f, 0f, 34f), 30f, 35f, 30f),
                 ("commercial", new Vector3(96f, 0f, 34f), 32f, 30f, 210f),
                 ("industry", new Vector3(34f, 0f, 96f), 30f, 40f, 135f),
-                ("street", new Vector3(26f, 0f, 30f), 18f, 26f, 0f)
+                ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f)
             };
 
             const int width = 1280;
