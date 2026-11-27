@@ -140,3 +140,4 @@ crashlytics-build.properties
 # .NET simulation test build output
 /Tests/**/[Bb]in/
 /Tests/**/[Oo]bj/
+!/Tests/**/*.csproj
