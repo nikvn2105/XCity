@@ -53,6 +53,19 @@
 - "Xây thành phố mới" sau phá sản: chạy đúng, không lỗi, không nhân đôi bootstrap. Đã sửa rò vật liệu bầu trời.
 - Thành phố chỉ dùng công trình mốc 0 vượt được 500 dân.
 
+## Cập nhật cuối phiên (23:13)
+- **Lỗi văng game khi mở trên iPhone (iOS 27.2) đã tìm ra:**
+  - `defaultScreenOrientation: 5` không hợp lệ (Unity 2022.3 chỉ nhận 0–4), nên Info.plist không có hướng màn hình nào. Unity dừng bằng SIGABRT tại `AllocUnitySingleOrientationViewController`.
+  - Đã sửa thành `4` ở commit `8986e7f` trên `main`. **Chưa thử trên iPhone.**
+  - Lúc kiểm tra IPA mới, xác nhận Info.plist có `UIInterfaceOrientationLandscapeLeft` và `UIInterfaceOrientationLandscapeRight`.
+- **Build GitHub `46030372497`** cho bản sửa: bước Unity đã đạt, bước đóng gói trên Mac đang chạy.
+  - 2 lần build trước lỗi ở bước Mac sau khoảng 15 phút, chưa đọc log.
+  - Nếu lần này lại lỗi: đọc log job "Compile & Package Unsigned IPA".
+- **Codemagic:** build #2 lỗi 401 vì token GitHub sai.
+  - Cần tạo lại token fine-grained (`github_pat_…`, chỉ repo XCity, Actions: Read).
+  - Thay biến `GITHUB_TOKEN` trong nhóm `github` rồi chạy lại.
+- Cấu trúc IPA cũ đã kiểm tra và đúng chuẩn. Chứng chỉ và xsign đều ổn (app khác chạy bình thường).
+
 ## Còn mở / rủi ro
 1. **Chưa ai chạy trên iPhone.** Đây là rủi ro lớn nhất. Cần đo:
    - FPS ở 4 mức đồ họa, mỗi mức đo khi zoom gần và zoom xa.
