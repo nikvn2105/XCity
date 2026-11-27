@@ -27,8 +27,8 @@ jobs:
           REPO="${{ github.repository }}"
           CURRENT_RUN_ID="${{ github.run_id }}"
 
-          RUN_IDS=$(gh api --paginate --slurp "repos/${REPO}/actions/runs?per_page=100" \
-            --jq "[.[].workflow_runs[] | select(.status == \"completed\")] | group_by(.workflow_id)[] | sort_by(.created_at) | reverse | .[${KEEP_COUNT}:] | .[].id")
+          RUN_IDS=$(gh api --paginate --slurp "repos/${REPO}/actions/runs?per_page=100"| \
+           jq -r --argjson keep "${KEEP_COUNT}" '[.[].workflow_runs[] | select(.status == "completed")] | group_by(.workflow_id)[] | sort_by(.created_at) | reverse | .[$keep:] | .[].id')
 
           DELETED=0
           for RUN_ID in $RUN_IDS; do
