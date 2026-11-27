@@ -83,14 +83,12 @@ namespace XCity
                     CityCell cell = _city.GetCell(x, z);
                     if (cell.Type == CellType.Empty) continue;
                     bool tile = cell.Type != CellType.PowerPlant && material == (int)cell.Type - 1;
-                    bool building = cell.Level > 0 && material == (int)cell.Type + 2;
-                    if (!tile && !building) continue;
+                    if (!tile) continue;
 
-                    float height = tile ? 0.1f : cell.Height;
-                    float elevation = tile ? 0f : BuildingBase;
-                    float width = _cellSize * (tile ? 0.96f : BuildingWidthRatio);
+                    const float height = 0.1f;
+                    float width = _cellSize * 0.96f;
                     var position = new Vector3((x - startX + 0.5f) * _cellSize,
-                        elevation + height * 0.5f, (z - startZ + 0.5f) * _cellSize);
+                        height * 0.5f, (z - startZ + 0.5f) * _cellSize);
                     _instances.Add(new CombineInstance
                     {
                         mesh = _cube,

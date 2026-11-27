@@ -27,6 +27,7 @@ namespace XCity
         private bool _cityDirty;
         private float _nextAutosave;
         private CityChunkRenderer _cityRenderer;
+        private BuildingChunkRenderer _buildingRenderer;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
         private Vector3 _camTarget;
@@ -45,10 +46,7 @@ namespace XCity
         private Material _resMat;
         private Material _comMat;
         private Material _indMat;
-        private Material _bldgResMat;
-        private Material _bldgComMat;
-        private Material _bldgIndMat;
-        private Material _powerPlantMat;
+        private Material _vertexColorMat;
 
         private Vector2 _gestureStart;
         private bool _panMoved;
@@ -103,10 +101,6 @@ namespace XCity
             _resMat = MakeMat(shader, new Color(0.24f, 0.72f, 0.36f));
             _comMat = MakeMat(shader, new Color(0.20f, 0.52f, 0.88f));
             _indMat = MakeMat(shader, new Color(0.88f, 0.68f, 0.20f));
-            _bldgResMat = MakeMat(shader, new Color(0.88f, 0.84f, 0.76f));
-            _bldgComMat = MakeMat(shader, new Color(0.62f, 0.78f, 0.92f));
-            _bldgIndMat = MakeMat(shader, new Color(0.65f, 0.56f, 0.45f));
-            _powerPlantMat = MakeMat(shader, new Color(0.66f, 0.42f, 0.90f));
         }
 
         private static Material MakeMat(Shader shader, Color color)
@@ -132,8 +126,16 @@ namespace XCity
             ground.transform.position = new Vector3(worldSpan * 0.5f, -0.5f, worldSpan * 0.5f);
             ground.transform.localScale = new Vector3(worldSpan, 1f, worldSpan);
             ground.GetComponent<Renderer>().sharedMaterial = _groundMat;
-            var materials = new[] { _roadMat, _resMat, _comMat, _indMat, _bldgResMat, _bldgComMat, _bldgIndMat, _powerPlantMat };
+            var materials = new[] { _roadMat, _resMat, _comMat, _indMat };
             _cityRenderer = new CityChunkRenderer(_city, CellSize, materials, transform);
+            Shader vc = Resources.Load<Shader>("XCityVertexColor");
+            if (vc == null)
+            {
+                Debug.LogError("Could not load XCityVertexColor shader; falling back to XCityWorld.");
+                vc = Resources.Load<Shader>("XCityWorld");
+            }
+            _vertexColorMat = new Material(vc);
+            _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _vertexColorMat, transform);
         }
 
         private void SetupCamera()
@@ -624,11 +626,17 @@ namespace XCity
             if (_cityDirty && _save.Write(_city)) _cityDirty = false;
         }
 
-        private void LateUpdate() => _cityRenderer.RebuildDirtyChunks();
+        private void LateUpdate()
+        {
+            _cityRenderer.RebuildDirtyChunks();
+            _buildingRenderer.RebuildDirtyChunks();
+        }
 
         private void OnDestroy()
         {
             _cityRenderer?.Dispose();
+            _buildingRenderer?.Dispose();
+            if (_vertexColorMat != null) Destroy(_vertexColorMat);
             if (_inspectionMaterial != null) Destroy(_inspectionMaterial);
         }
 
