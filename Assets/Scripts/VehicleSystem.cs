@@ -57,6 +57,8 @@ namespace XCity
             public float TrailerYaw;
             public float Phase;
             public VehicleTemplate Template;
+            public List<int> Route; // directions to the destination; null while wandering
+            public int RouteStep;
         }
 
         private readonly CitySimulation _city;
@@ -251,7 +253,14 @@ namespace XCity
                         continue;
                     }
 
-                    v.OutDir = ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir);
+                    if (v.Route != null && ++v.RouteStep >= v.Route.Count)
+                    {
+                        // Arrived: the car parks at its destination and frees a slot for a new trip.
+                        _vehicles.RemoveAt(i);
+                        _topologyDirty = true;
+                        continue;
+                    }
+                    v.OutDir = v.Route != null ? v.Route[v.RouteStep] : ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir);
                 }
             }
 
@@ -346,10 +355,12 @@ namespace XCity
                 }
                 if (count == 0) continue;
 
-                int outDir = _dirScratch[_rng.Next(count)];
+                List<int> route = PlanTrip(cell);
+                int outDir = route != null ? route[0] : _dirScratch[_rng.Next(count)];
                 VehicleTemplate tpl = VehicleMeshFactory.PickForDistrict(_rng, cand.District);
                 _vehicles.Add(new Vehicle
                 {
+                    Route = route,
                     Cell = cell,
                     InDir = outDir,
                     OutDir = outDir,
@@ -366,6 +377,22 @@ namespace XCity
             return false;
         }
 
+        // Commute from the spawn road to a road beside jobs (shops, industry, services) when one is reachable.
+        private List<int> PlanTrip(Vector2Int origin)
+        {
+            Vector2Int goal = origin;
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                RoadCandidate cand = _candidates[_rng.Next(_candidates.Count)];
+                if (cand.Cell == origin) continue;
+                goal = cand.Cell;
+                if (cand.District != VehicleCategory.Residential && cand.District != VehicleCategory.Any) break;
+            }
+            var route = new List<int>();
+            return goal != origin && _city.Roads.TryFindPath(origin.x, origin.y, goal.x, goal.y, route) && route.Count > 0
+                ? route : null;
+        }
+
         private void ValidateRoadVehicles()
         {
             for (int i = _vehicles.Count - 1; i >= 0; i--)
@@ -379,6 +406,7 @@ namespace XCity
                 }
 
                 RoadConnections conns = _city.Roads.GetConnections(v.Cell.x, v.Cell.y);
+                v.Route = null; // the road network changed, so the planned route may be cut; wander instead
                 if (((int)conns & (1 << v.OutDir)) == 0)
                     v.OutDir = ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir);
             }
