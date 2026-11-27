@@ -34,6 +34,7 @@ namespace XCity
             _industrialSmoke?.Prewarm(15f);
             _construction?.Update(0.05f, true, LocalView);
             _vehicles?.Prewarm(20f);
+            _helicopters?.Prewarm(14f);
             _citizens?.Prewarm(18f);
             RefreshWorldMap();
             File.WriteAllBytes(Path.Combine(_previewOutput, "world-map.png"), _worldMapTexture.EncodeToPNG());

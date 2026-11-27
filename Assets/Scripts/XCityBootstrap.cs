@@ -34,6 +34,7 @@ namespace XCity
         private ConstructionSystem _construction;
         private IndustrialSmokeSystem _industrialSmoke;
         private VehicleSystem _vehicles;
+        private HelicopterSystem _helicopters;
         private CitizenSystem _citizens;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
@@ -158,6 +159,7 @@ namespace XCity
             _construction = new ConstructionSystem(_city, _buildingRenderer, CellSize, _vertexColorMat, transform);
             _industrialSmoke = new IndustrialSmokeSystem(_city, _construction, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
+            _helicopters = new HelicopterSystem(_city, CellSize, _vertexColorMat, transform);
             _citizens = new CitizenSystem(_city, CellSize, _vertexColorMat, transform);
         }
 
@@ -791,11 +793,13 @@ namespace XCity
             _construction.SetVisible(visible);
             _industrialSmoke.SetVisible(visible);
             _vehicles.SetVisible(visible);
+            _helicopters.SetVisible(visible);
             _citizens.SetVisible(visible);
             if (!visible) return;
             var view = LocalView;
             _industrialSmoke.SetView(view);
             _vehicles.SetView(view);
+            _helicopters.SetView(view);
             _citizens.SetView(view);
         }
 
@@ -811,6 +815,7 @@ namespace XCity
             Shader.SetGlobalFloat("_XCityTime", Time.time);
             _industrialSmoke.Update(Time.deltaTime);
             _vehicles.Update(Time.deltaTime);
+            _helicopters.Update(Time.deltaTime);
             _citizens.Update(Time.deltaTime);
         }
 
@@ -821,6 +826,7 @@ namespace XCity
             _industrialSmoke?.Dispose();
             _buildingRenderer?.Dispose();
             _vehicles?.Dispose();
+            _helicopters?.Dispose();
             _citizens?.Dispose();
             Destroy(_vertexColorMat);
             Destroy(_waterMat);
