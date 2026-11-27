@@ -82,7 +82,12 @@ namespace XCity
         public int AverageHappiness { get; private set; }
         /// <summary>What the city still owes; repaid automatically each tick.</summary>
         public int LoanBalance { get; private set; }
-        public bool CanTakeLoan => LoanBalance + LoanRepaid <= MaxLoanBalance;
+        public bool CanTakeLoan => !IsBankrupt && LoanBalance + LoanRepaid <= MaxLoanBalance;
+
+        /// <summary>Ticks in a row the treasury has ended below zero; reaching BankruptcyTicks ends the city.</summary>
+        public const int BankruptcyTicks = 40;
+        public int TicksInDebt { get; private set; }
+        public bool IsBankrupt => TicksInDebt >= BankruptcyTicks;
 
         public bool TryTakeLoan()
         {

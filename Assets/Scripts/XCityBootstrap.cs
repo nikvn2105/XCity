@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace XCity
@@ -504,7 +505,7 @@ namespace XCity
 
         private void HandleInput()
         {
-            if (_worldMapPanel.activeSelf) return;
+            if (_worldMapPanel.activeSelf || _bankruptPanel != null) return;
             if (Input.touchCount > 0)
             {
                 HandleTouch();
@@ -1118,6 +1119,51 @@ namespace XCity
             };
         }
 
+        private GameObject _bankruptPanel;
+
+        private void ShowBankruptcy()
+        {
+            if (_bankruptPanel != null) return;
+            CancelGesture();
+            Font font = Resources.Load<Font>("NotoSans-Regular");
+            _bankruptPanel = CreatePanel(_safeAreaRoot, "Bankruptcy", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
+                new Color(0.05f, 0.06f, 0.09f, 0.92f));
+            var message = new GameObject("Message", typeof(RectTransform));
+            message.transform.SetParent(_bankruptPanel.transform, false);
+            var rect = (RectTransform)message.transform;
+            rect.anchorMin = new Vector2(0.15f, 0.45f);
+            rect.anchorMax = new Vector2(0.85f, 0.80f);
+            rect.offsetMin = rect.offsetMax = Vector2.zero;
+            var text = message.AddComponent<Text>();
+            text.font = font;
+            text.fontSize = 30;
+            text.color = Color.white;
+            text.alignment = TextAnchor.MiddleCenter;
+            text.text = $"Thành phố đã phá sản\n<size=22>Ngân sách âm suốt {CitySimulation.BankruptcyTicks} lượt liên tiếp. " +
+                $"Dân số cuối cùng: {_city.Population:N0}</size>";
+            Button restart = CreateHudButton(_bankruptPanel.transform, font, "Xây thành phố mới", "NewCity");
+            var buttonRect = (RectTransform)restart.transform;
+            buttonRect.anchorMin = buttonRect.anchorMax = new Vector2(0.5f, 0.35f);
+            buttonRect.sizeDelta = new Vector2(320, 72);
+            restart.onClick.AddListener(StartNewCity);
+        }
+
+        // Saving a fresh city first moves the bankrupt one to the .bak file, then the scene reload rebuilds everything.
+        private void StartNewCity()
+        {
+            if (!_save.Write(new CitySimulation())) return;
+            _cityDirty = false;
+            SceneManager.sceneLoaded += RestartAfterLoad;
+            Destroy(gameObject);
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        private static void RestartAfterLoad(Scene scene, LoadSceneMode mode)
+        {
+            SceneManager.sceneLoaded -= RestartAfterLoad;
+            AutoStart();
+        }
+
         private static string Signed(int value) => value.ToString("+0;-0;0");
 
         private void RefreshHUD()
@@ -1152,11 +1198,16 @@ namespace XCity
                     _roadPreviewMat.color = affordable ? Color.green : Color.red;
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
-                if (_activeBuildingModel == BuildingModel.Harbor && _city.Money >= BuildingCatalog.Get(BuildingModel.Harbor).Cost)
-                    hint = "Chạm vào ô đất sát mặt nước để đặt cảng";
+                if (BuildingCatalog.NeedsShore(_activeBuildingModel) && _city.Money >= BuildingCatalog.Get(_activeBuildingModel).Cost)
+                    hint = _activeBuildingModel == BuildingModel.Harbor
+                        ? "Chạm vào ô đất sát mặt nước để đặt cảng"
+                        : "Chạm vào ô đất sát mặt nước, cạnh đường có điện";
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 if (_speed == 0) hint = $"Đang tạm dừng  |  {hint}";
+                if (_city.TicksInDebt > 0 && !_city.IsBankrupt)
+                    hint = $"Cảnh báo phá sản: còn {CitySimulation.BankruptcyTicks - _city.TicksInDebt} lượt · Vay hoặc cắt giảm chi phí  |  {hint}";
+                if (_city.IsBankrupt) ShowBankruptcy();
                 string debt = _city.LoanBalance > 0 ? $" · Nợ ${_city.LoanBalance:N0}" : "";
                 string text = $"${_city.Money:N0} ({_city.LastNetIncome:+#,##0;-#,##0;0}){debt}  |  Dân: {_city.Population:N0}" +
                     $"  |  Việc làm: {_city.Jobs:N0}  |  Nhu cầu  Ở {Signed(_city.ResidentialDemand)}" +

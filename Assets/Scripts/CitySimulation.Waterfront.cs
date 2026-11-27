@@ -117,7 +117,7 @@ namespace XCity
 
         internal bool TryBuildBridge(int x, int z, int endX, int endZ)
         {
-            if (QuoteBridge(x, z, endX, endZ, out int cost) != BridgeQuote.Ready) return false;
+            if (IsBankrupt || QuoteBridge(x, z, endX, endZ, out int cost) != BridgeQuote.Ready) return false;
 
             int dx = Math.Sign(endX - x);
             int dz = Math.Sign(endZ - z);

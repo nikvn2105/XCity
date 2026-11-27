@@ -25,6 +25,30 @@ namespace XCity.Tests
             throw new InvalidOperationException("No land found");
         }
 
+        // Land in columns x-1..x+1 for `depth` rows, with water just east of column x+1 on the given rows,
+        // so pumps and treatment plants placed at (x+1, z+row) sit on the shore.
+        private static (int X, int Z) FindShore(int depth, params int[] waterRows)
+        {
+            for (int x = 1; x < CitySimulation.GridSize - 2; x++)
+            for (int z = 0; z < CitySimulation.GridSize - depth; z++)
+            {
+                bool fits = waterRows.All(r => !WorldTerrain.IsLand(x + 2, z + r));
+                for (int dx = -1; dx <= 1 && fits; dx++)
+                for (int dz = 0; dz < depth && fits; dz++)
+                    fits = CitySimulation.IsBuildable(x + dx, z + dz);
+                if (fits) return (x, z);
+            }
+            throw new InvalidOperationException("No shore found");
+        }
+
+        private static CitySimulation WithMoney(CitySimulation city, int money)
+        {
+            CitySnapshot snapshot = city.CreateSnapshot();
+            snapshot.money = money;
+            Assert.True(CitySimulation.TryRestore(snapshot, out var restored));
+            return restored;
+        }
+
         // A road along z at column x, with a power plant at its south end on the east side.
         private static CitySimulation PoweredStreet(int x, int z, int length, uint seed = 3)
         {
@@ -106,7 +130,7 @@ namespace XCity.Tests
         [Fact]
         public void Homes_NeedServicesToReachHigherLevels()
         {
-            var (x, z) = FindLand(3, 12);
+            var (x, z) = FindShore(12, 10, 11);
             var bare = BuildMixedStreet(x, z, withServices: false);
             var served = BuildMixedStreet(x, z, withServices: true);
             for (int i = 0; i < 300; i++)
@@ -184,40 +208,49 @@ namespace XCity.Tests
         }
 
         [Fact]
-        public void WaterAndSewage_FlowAlongRoadsUpToCapacity()
+        public void WaterAndSewage_FlowAlongRoadsOnlyFromPoweredPlants()
         {
-            var (x, z) = FindLand(3, 20);
+            var (x, z) = FindShore(20, 0, 1);
             var city = new CitySimulation();
             Assert.True(city.TryApplyBuild(Enumerable.Range(z, 20).Select(dz => (x, dz)), CellType.Road));
-            Assert.True(city.TrySetCell(x + 1, z + 1, CellType.Residential));
-            Assert.False(city.HasWater(x + 1, z + 1));
-
+            Assert.True(city.TrySetCell(x + 1, z + 5, CellType.Residential));
             Assert.True(city.TrySetCell(x + 1, z, CellType.CivicService, BuildingModel.WaterPump));
-            Assert.True(city.HasWater(x + 1, z + 1));
-            Assert.False(city.HasSewage(x + 1, z + 1));
-            Assert.True(city.TrySetCell(x - 1, z, CellType.CivicService, BuildingModel.SewagePlant));
-            Assert.True(city.HasSewage(x + 1, z + 1));
+            Assert.True(city.TrySetCell(x + 1, z + 1, CellType.CivicService, BuildingModel.SewagePlant));
+            Assert.False(city.HasWater(x + 1, z + 5));
+            Assert.False(city.HasSewage(x + 1, z + 5));
 
+            Assert.True(city.TrySetCell(x - 1, z, CellType.PowerPlant));
+            Assert.True(city.HasWater(x + 1, z + 5));
+            Assert.True(city.HasSewage(x + 1, z + 5));
             // A second, unconnected street gets nothing from the first street's pump.
             Assert.False(city.HasWater(x + 1 + 50, z + 1));
         }
 
         [Fact]
+        public void WaterBuildings_MustBeBuiltOnTheShore()
+        {
+            var (x, z) = FindLand(3, 4);
+            Assert.False(CitySimulation.TryHarborFacing(x + 1, z + 1, out _, out _, out _));
+            var city = new CitySimulation();
+            Assert.False(city.TrySetCell(x + 1, z + 1, CellType.CivicService, BuildingModel.WaterPump));
+            Assert.False(city.TrySetCell(x + 1, z + 1, CellType.CivicService, BuildingModel.SewagePlant));
+        }
+
+        [Fact]
         public void WaterPump_ServesAtMostItsCapacity()
         {
-            var (x, z) = FindLand(3, 30);
+            var (x, z) = FindShore(30, 0);
             var city = new CitySimulation();
             Assert.True(city.TryApplyBuild(Enumerable.Range(z, 30).Select(dz => (x, dz)), CellType.Road));
             Assert.True(city.TrySetCell(x + 1, z, CellType.CivicService, BuildingModel.WaterPump));
-            for (int dz = 1; dz < 30; dz++)
-            {
-                Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
-                Assert.True(city.TrySetCell(x - 1, z + dz, CellType.Residential));
-            }
+            Assert.True(city.TrySetCell(x - 1, z, CellType.PowerPlant));
+            Assert.True(city.TrySetCell(x + 1, z + 29, CellType.PowerPlant));
+            for (int dz = 1; dz < 29; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
+            for (int dz = 1; dz < 30; dz++) Assert.True(city.TrySetCell(x - 1, z + dz, CellType.Residential));
 
             // Every building on the network draws water, the pump included.
-            int served = (city.HasWater(x + 1, z) ? 1 : 0) + Enumerable.Range(1, 29).Count(dz => city.HasWater(x + 1, z + dz)) +
-                Enumerable.Range(1, 29).Count(dz => city.HasWater(x - 1, z + dz));
+            int served = Enumerable.Range(0, 30).Count(dz => city.HasWater(x + 1, z + dz)) +
+                Enumerable.Range(0, 30).Count(dz => city.HasWater(x - 1, z + dz));
             Assert.Equal(CitySimulation.UtilityCapacity, served);
         }
 
@@ -256,7 +289,7 @@ namespace XCity.Tests
         [Fact]
         public void OldSaves_LoadWithoutLoansButCannotContainNewBuildings()
         {
-            var (x, z) = FindLand(3, 4);
+            var (x, z) = FindShore(1, 0);
             var city = new CitySimulation();
             Assert.True(city.TrySetCell(x, z, CellType.Road));
             CitySnapshot old = city.CreateSnapshot();
@@ -268,6 +301,45 @@ namespace XCity.Tests
             CitySnapshot forged = city.CreateSnapshot();
             forged.schemaVersion = 7;
             Assert.False(CitySimulation.TryRestore(forged, out _));
+        }
+
+        [Fact]
+        public void City_GoesBankruptAfterStayingInDebt()
+        {
+            var (x, z) = FindLand(3, 4);
+            var built = new CitySimulation();
+            Assert.True(built.TrySetCell(x, z, CellType.Road));
+            var city = WithMoney(built, -1);
+
+            for (int i = 1; i < CitySimulation.BankruptcyTicks; i++) city.Tick();
+            Assert.False(city.IsBankrupt);
+            city.Tick();
+            Assert.True(city.IsBankrupt);
+
+            long ticks = city.TickCount;
+            city.Tick();
+            Assert.Equal(ticks, city.TickCount);
+            Assert.False(city.CanTakeLoan);
+            Assert.False(city.TrySetCell(x, z, CellType.Empty));
+            Assert.False(city.TryUndoBuild());
+
+            Assert.True(CitySimulation.TryRestore(city.CreateSnapshot(), out var restored));
+            Assert.True(restored.IsBankrupt);
+        }
+
+        [Fact]
+        public void Debt_CounterResetsOnceMoneyIsPositiveAgain()
+        {
+            var (x, z) = FindLand(3, 4);
+            var built = new CitySimulation();
+            Assert.True(built.TrySetCell(x, z, CellType.Road));
+            var city = WithMoney(built, -1);
+            for (int i = 0; i < 10; i++) city.Tick();
+            Assert.Equal(10, city.TicksInDebt);
+
+            Assert.True(city.TryTakeLoan());
+            city.Tick();
+            Assert.Equal(0, city.TicksInDebt);
         }
     }
 }

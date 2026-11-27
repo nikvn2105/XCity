@@ -70,6 +70,10 @@ namespace XCity
                 _ => default
             };
 
+        // Harbors dock boats; pumps draw from and treatment plants drain into the water beside them.
+        public static bool NeedsShore(BuildingModel model) =>
+            model == BuildingModel.Harbor || model == BuildingModel.WaterPump || model == BuildingModel.SewagePlant;
+
         public static bool IsPublicService(CellType type) => type == CellType.School || type == CellType.CivicService;
 
         public static int ServiceUpkeep(BuildingModel model) => model switch
@@ -127,6 +131,7 @@ namespace XCity
         public int lastTaxIncome;
         public int lastNetIncome;
         public int loanBalance;
+        public int ticksInDebt;
         public CityCell[] cells;
         public int[] cellIndices;
     }
@@ -231,6 +236,7 @@ namespace XCity
 
         public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type, BuildingModel model = BuildingModel.Default)
         {
+            if (IsBankrupt) return false;
             int moneyBefore = Money;
             var changed = new List<(int X, int Z, CityCell Cell)>();
             foreach (var point in points)
@@ -251,7 +257,7 @@ namespace XCity
         // Growth from later ticks is discarded with it; the money spent on the step is refunded in full.
         public bool TryUndoBuild()
         {
-            if (_undoSteps.Count == 0) return false;
+            if (_undoSteps.Count == 0 || IsBankrupt) return false;
 
             UndoStep step = _undoSteps[_undoSteps.Count - 1];
             _undoSteps.RemoveAt(_undoSteps.Count - 1);
@@ -282,7 +288,7 @@ namespace XCity
             if (_cells[x, z].IsBridge)
                 return type == CellType.Empty && RemoveBridge(x, z, changed);
             if (!IsBuildable(x, z)) return false;
-            if (model == BuildingModel.Harbor && !CanPlaceHarbor(x, z)) return false;
+            if (BuildingCatalog.NeedsShore(model) && !CanPlaceHarbor(x, z)) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;
@@ -316,6 +322,7 @@ namespace XCity
 
         public void Tick()
         {
+            if (IsBankrupt) return;
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
@@ -393,6 +400,7 @@ namespace XCity
             LoanBalance -= repayment;
             LastNetIncome = taxIncome + netIncome - repayment;
             Money += LastNetIncome;
+            TicksInDebt = Money < 0 ? TicksInDebt + 1 : 0;
             TickCount++;
         }
 
@@ -407,6 +415,7 @@ namespace XCity
                 lastTaxIncome = LastTaxIncome,
                 lastNetIncome = LastNetIncome,
                 loanBalance = LoanBalance,
+                ticksInDebt = TicksInDebt,
                 cells = new CityCell[_occupied.Count],
                 cellIndices = new int[_occupied.Count]
             };
@@ -424,7 +433,8 @@ namespace XCity
             city = null;
             if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > CurrentSchemaVersion) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
-                snapshot.cells == null || snapshot.loanBalance < 0 || snapshot.loanBalance > MaxLoanBalance)
+                snapshot.cells == null || snapshot.loanBalance < 0 || snapshot.loanBalance > MaxLoanBalance ||
+                snapshot.ticksInDebt < 0 || snapshot.ticksInDebt > BankruptcyTicks)
                 return false;
 
             bool legacy = snapshot.schemaVersion < 6;
@@ -438,6 +448,7 @@ namespace XCity
                 LastTaxIncome = snapshot.schemaVersion >= 3 ? snapshot.lastTaxIncome : 0,
                 LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
                 LoanBalance = snapshot.loanBalance,
+                TicksInDebt = snapshot.ticksInDebt,
                 TickCount = snapshot.tick
             };
             int previous = -1;
@@ -468,7 +479,7 @@ namespace XCity
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (restored._cells[x, z].Model == BuildingModel.Harbor && !restored.CanPlaceHarbor(x, z))
+                if (BuildingCatalog.NeedsShore(restored._cells[x, z].Model) && !restored.CanPlaceHarbor(x, z))
                     strandedHarbors.Add(index);
             }
             foreach (int index in strandedHarbors)
@@ -534,26 +545,44 @@ namespace XCity
             }
 
             var capacity = new int[component + 1];
-            // Water and sewage share the road network the way power does (pipes run under the roads).
+            foreach (int index in _occupied)
+                if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
+                    capacity[AdjacentComponent(index)] += PowerPlantCapacity;
+
+            _unpoweredZones = 0;
+            Array.Clear(_powered, 0, _powered.Length);
+            foreach (int index in _occupied)
+            {
+                if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
+                int grid = AdjacentComponent(index);
+                if (grid == 0) continue;
+                if (capacity[grid] == 0)
+                {
+                    _unpoweredZones++;
+                    continue;
+                }
+                _powered[index] = true;
+                capacity[grid]--;
+            }
+
+            // Water and sewage share the road network the way power does (pipes run under the roads),
+            // and a pump or treatment plant only runs once it has power itself.
             var water = new int[component + 1];
             var sewage = new int[component + 1];
             foreach (int index in _occupied)
             {
-                CityCell source = _cells[index / GridSize, index % GridSize];
-                if (source.Type == CellType.PowerPlant) capacity[AdjacentComponent(index)] += PowerPlantCapacity;
-                else if (source.Model == BuildingModel.WaterPump) water[AdjacentComponent(index)] += UtilityCapacity;
-                else if (source.Model == BuildingModel.SewagePlant) sewage[AdjacentComponent(index)] += UtilityCapacity;
+                if (!_powered[index]) continue;
+                BuildingModel model = _cells[index / GridSize, index % GridSize].Model;
+                if (model == BuildingModel.WaterPump) water[AdjacentComponent(index)] += UtilityCapacity;
+                else if (model == BuildingModel.SewagePlant) sewage[AdjacentComponent(index)] += UtilityCapacity;
             }
 
-            _unpoweredZones = 0;
-            Array.Clear(_powered, 0, _powered.Length);
             Array.Clear(_watered, 0, _watered.Length);
             Array.Clear(_sewered, 0, _sewered.Length);
             foreach (int index in _occupied)
             {
                 if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
                 int grid = AdjacentComponent(index);
-                if (grid == 0) continue;
                 if (water[grid] > 0)
                 {
                     _watered[index] = true;
@@ -564,13 +593,6 @@ namespace XCity
                     _sewered[index] = true;
                     sewage[grid]--;
                 }
-                if (capacity[grid] == 0)
-                {
-                    _unpoweredZones++;
-                    continue;
-                }
-                _powered[index] = true;
-                capacity[grid]--;
             }
 
             _powerDirty = false;
