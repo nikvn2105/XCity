@@ -737,11 +737,6 @@ namespace XCity
                             _cityDirty = true;
                             _audio?.PlayBuild();
                         }
-                        else if (BuildingCatalog.NeedsShore(_activeBuildingModel) && !_city.CanPlaceHarbor(cell.x, cell.y))
-                        {
-                            _unlockBanner = "Không giáp nước — chọn ô đất sát bờ";
-                            _unlockBannerUntil = Time.unscaledTime + 3f;
-                        }
                     }
                     RefreshHUD();
                 }
