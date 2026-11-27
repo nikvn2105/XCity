@@ -1,0 +1,70 @@
+name: XCity Preview Screenshots
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview-screenshots:
+    name: Build & Capture Linux Preview Screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-2022.3.47f1-Linux64-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-2022.3.47f1-Linux64-
+
+      - name: Build Unity Linux64 player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneLinux64
+          unityVersion: 2022.3.47f1
+          buildName: XCity
+          buildsPath: build
+          versioning: None
+
+      - name: Install Xvfb and Mesa GL
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libglu1-mesa
+
+      - name: Capture preview screenshots
+        shell: bash
+        run: |
+          exe="$(find build/StandaloneLinux64 -maxdepth 2 -type f -name XCity | head -n1)"
+          test -n "$exe"
+          chmod +x "$exe" || sudo chmod +x "$exe"
+          mkdir -p preview
+          LIBGL_ALWAYS_SOFTWARE=1 timeout 300 xvfb-run -a -s "-screen 0 1280x720x24" "$exe" -screen-fullscreen 0 -screen-width 1280 -screen-height 720 -force-glcore -logFile "$PWD/preview/player.log" -xcityPreview "$PWD/preview" || true
+          ls -la preview
+          tail -n 80 preview/player.log || true
+          compgen -G "preview/*.png" > /dev/null
+
+      - name: Upload preview screenshots artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: XCity-preview-screenshots
+          path: preview/
+          retention-days: 7

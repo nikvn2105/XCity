@@ -16,7 +16,7 @@ namespace XCity
         PowerPlant
     }
 
-    public class XCityBootstrap : MonoBehaviour
+    public partial class XCityBootstrap : MonoBehaviour
     {
         private const int GridSize = CitySimulation.GridSize;
         private const float CellSize = 4f;
@@ -85,12 +85,14 @@ namespace XCity
         {
             Application.targetFrameRate = 30;
             _save = new CitySave(Application.persistentDataPath);
-            _city = _save.Load();
+            _previewOutput = GetPreviewOutputArg();
+            _city = _previewOutput != null ? XCityPreviewCity.Create() : _save.Load();
             _nextAutosave = Time.unscaledTime + 15f;
             CreateMaterials();
             SetupEnvironment();
             SetupCamera();
             SetupHUD();
+            if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
 
         private void CreateMaterials()
@@ -601,6 +603,7 @@ namespace XCity
 
         private void RunSimulationTick()
         {
+            if (_previewOutput != null) return;
             _simTimer += Time.deltaTime;
             if (_simTimer < TickInterval) return;
             _simTimer -= TickInterval;
@@ -622,6 +625,7 @@ namespace XCity
 
         private void SaveCity()
         {
+            if (_previewOutput != null) return;
             _nextAutosave = Time.unscaledTime + 15f;
             if (_cityDirty && _save.Write(_city)) _cityDirty = false;
         }
