@@ -41,8 +41,11 @@ namespace XCity
             float southeast = Island(nx, nz, 0.82f, 0.17f, 0.11f, 0.093f);
             float land = Math.Max(Math.Max(Math.Max(mainland, west), south), Math.Max(east, Math.Max(northwest, southeast)));
             float shape = 0.36f * (Noise(x, z, 51) - 0.5f) + 0.16f * (Noise(x + 27, z + 63, 15) - 0.5f);
+            float outerWest = Island(nx, nz, 0.097f, 0.18f, 0.052f, 0.066f);
+            float outerEast = Island(nx, nz, 0.89f, 0.81f, 0.057f, 0.076f);
+            float offshore = Math.Max(outerWest, outerEast) + shape * 1.4f;
             float edge = Math.Min(Math.Min(nx, 1f - nx), Math.Min(nz, 1f - nz));
-            return Math.Min(land + shape, (edge - 0.022f) * 12f);
+            return Math.Min(Math.Max(land + shape, offshore), (edge - 0.022f) * 12f);
         }
 
         public static float Vegetation(int x, int z) =>

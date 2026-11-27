@@ -49,7 +49,7 @@ namespace XCity
                 ("public-services", new Vector3(109f, 0.6f, 49f), 40f, 52f, 155f),
                 ("industry", new Vector3(34f, 0f, 94f), 25f, 36f, 135f),
                 ("street", new Vector3(50f, 0.8f, 38f), 13.5f, 20f, 0f),
-                ("coast", new Vector3(742f, 0f, 250f), 145f, 57f, 30f)
+                ("coast", new Vector3(-708f, 0f, -566f), 139f, 57f, 225f)
             };
 
             const int width = 1280;
