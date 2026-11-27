@@ -276,8 +276,8 @@ namespace XCity
             var topBar = CreatePanel(_safeAreaRoot, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), UiTheme.Panel);
             SetupTopBarStats(topBar.transform, font);
             // Top centre, under the utility row. While a fire burns, tapping it flies the camera there.
-            var hintPill = CreatePanel(_safeAreaRoot, "HintPill", new Vector2(0.22f, 1), new Vector2(0.78f, 1),
-                new Vector2(0, -164), new Vector2(0, -118), UiTheme.Panel);
+            var hintPill = CreatePanel(_safeAreaRoot, "HintPill", new Vector2(0.3f, 1), new Vector2(0.7f, 1),
+                new Vector2(0, -152), new Vector2(0, -118), UiTheme.Panel);
             hintPill.AddComponent<Button>().onClick.AddListener(FocusActiveFire);
             var statusObj = new GameObject("StatusText");
             statusObj.transform.SetParent(hintPill.transform, false);
@@ -288,13 +288,13 @@ namespace XCity
             statusRect.offsetMax = new Vector2(-14, 0);
             _hudStatusText = statusObj.AddComponent<Text>();
             _hudStatusText.font = font;
-            _hudStatusText.fontSize = UiTheme.BodySize;
+            _hudStatusText.fontSize = UiTheme.SmallSize;
             _hudStatusText.color = UiTheme.Text;
             _hudStatusText.alignment = TextAnchor.MiddleCenter;
             _hudStatusText.raycastTarget = false;
             _hudStatusText.resizeTextForBestFit = true;
             _hudStatusText.resizeTextMinSize = UiTheme.TinySize;
-            _hudStatusText.resizeTextMaxSize = UiTheme.BodySize;
+            _hudStatusText.resizeTextMaxSize = UiTheme.SmallSize;
             SetupStrokeCost(statusRect, font);
 
             _undoButton = CreateHudButton(topBar.transform, font, "Hoàn tác", "UndoBuild");

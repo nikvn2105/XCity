@@ -83,7 +83,7 @@ namespace XCity
             _toastRoot.SetParent(_safeAreaRoot, false);
             // Top centre under the hint pill: the right edge belongs to the building info panel.
             _toastRoot.anchorMin = _toastRoot.anchorMax = _toastRoot.pivot = new Vector2(0.5f, 1f);
-            _toastRoot.anchoredPosition = new Vector2(0f, -172f);
+            _toastRoot.anchoredPosition = new Vector2(0f, -160f);
             _toastRoot.sizeDelta = new Vector2(460f, 0f);
             var column = _toastRoot.gameObject.AddComponent<VerticalLayoutGroup>();
             column.spacing = 6;
