@@ -11,6 +11,15 @@ namespace XCity
         Industrial
     }
 
+    public enum ZoneStatus
+    {
+        NotZoned,
+        NeedsRoad,
+        WaitingForDevelopment,
+        DevelopedWithoutRoad,
+        Developed
+    }
+
     [Serializable]
     public struct CityCell
     {
@@ -50,6 +59,16 @@ namespace XCity
 
         public CityCell GetCell(int x, int z) => _cells[x, z];
 
+        public ZoneStatus GetZoneStatus(int x, int z)
+        {
+            if (!IsInBounds(x, z)) return ZoneStatus.NotZoned;
+            CityCell cell = _cells[x, z];
+            if (cell.Type < CellType.Residential) return ZoneStatus.NotZoned;
+            if (!Roads.HasRoadAccess(x, z))
+                return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
+            return cell.Level == 0 ? ZoneStatus.WaitingForDevelopment : ZoneStatus.Developed;
+        }
+
         public bool TrySetCell(int x, int z, CellType type)
         {
             if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.Industrial) return false;
@@ -83,7 +102,7 @@ namespace XCity
                         continue;
                     }
 
-                    if (cell.Level == 0 && Roads.HasRoadAccess(x, z) && NextRandom() < 0.35f)
+                    if (cell.Level == 0 && GetZoneStatus(x, z) == ZoneStatus.WaitingForDevelopment && NextRandom() < 0.35f)
                     {
                         cell.Level = 1;
                         cell.Height = cell.Type switch

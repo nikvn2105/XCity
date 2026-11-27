@@ -47,6 +47,11 @@ namespace XCity
         private Material _bldgComMat;
         private Material _bldgIndMat;
 
+        private Vector2 _gestureStart;
+        private bool _panMoved;
+        private Vector2Int? _inspectedCell;
+        private LineRenderer _inspectionOutline;
+        private Material _inspectionMaterial;
         private Vector2 _lastPointerPos;
         private bool _isDragging;
         private bool _waitForTouchRelease;
@@ -251,6 +256,8 @@ namespace XCity
         {
             CancelGesture();
             _activeTool = tool;
+            _inspectedCell = null;
+            RefreshHUD();
             foreach (var kv in _toolButtons)
             {
                 kv.Value.color = kv.Key == tool
@@ -365,6 +372,8 @@ namespace XCity
         {
             if (IsPointerOverUI(position)) return;
             _isDragging = true;
+            _gestureStart = position;
+            _panMoved = false;
             _lastPointerPos = position;
             if (_activeTool != BuildTool.Pan && TryGetCell(position, out var cell))
                 AddStrokeSample(cell);
@@ -376,6 +385,8 @@ namespace XCity
 
             if (_activeTool == BuildTool.Pan)
             {
+                if (!_panMoved && !IsPanMovement(position)) return;
+                _panMoved = true;
                 Vector2 delta = position - _lastPointerPos;
                 Vector3 right = Vector3.ProjectOnPlane(_cam.transform.right, Vector3.up).normalized;
                 Vector3 forward = Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up).normalized;
@@ -393,8 +404,21 @@ namespace XCity
             _lastPointerPos = position;
         }
 
+        private bool IsPanMovement(Vector2 position)
+        {
+            float threshold = 8f * Screen.height / 720f;
+            return (position - _gestureStart).sqrMagnitude > threshold * threshold;
+        }
+
         private void EndGesture(Vector2 position)
         {
+            if (_isDragging && _activeTool == BuildTool.Pan && !_panMoved &&
+                !IsPanMovement(position) && !IsPointerOverUI(position))
+            {
+                _inspectedCell = TryGetCell(position, out var inspected) ? inspected : (Vector2Int?)null;
+                RefreshHUD();
+            }
+
             if (_isDragging && _activeTool != BuildTool.Pan &&
                 !IsPointerOverUI(position) && TryGetCell(position, out var cell))
             {
@@ -537,7 +561,71 @@ namespace XCity
 
         private void LateUpdate() => _cityRenderer.RebuildDirtyChunks();
 
-        private void OnDestroy() => _cityRenderer?.Dispose();
+        private void OnDestroy()
+        {
+            _cityRenderer?.Dispose();
+            if (_inspectionMaterial != null) Destroy(_inspectionMaterial);
+        }
+
+        private string GetInspectionHint()
+        {
+            if (!_inspectedCell.HasValue)
+            {
+                if (_inspectionOutline != null) _inspectionOutline.enabled = false;
+                return "Chạm vào ô để xem trạng thái";
+            }
+
+            Vector2Int point = _inspectedCell.Value;
+            CellType type = _city.GetCell(point.x, point.y).Type;
+            ZoneStatus status = _city.GetZoneStatus(point.x, point.y);
+            if (_inspectionOutline == null)
+            {
+                var outline = new GameObject("InspectedCell");
+                outline.transform.SetParent(transform, false);
+                _inspectionOutline = outline.AddComponent<LineRenderer>();
+                _inspectionMaterial = MakeMat(_roadMat.shader, Color.white);
+                _inspectionOutline.sharedMaterial = _inspectionMaterial;
+                _inspectionOutline.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                _inspectionOutline.loop = true;
+                _inspectionOutline.positionCount = 4;
+                _inspectionOutline.startWidth = 0.16f;
+                _inspectionOutline.endWidth = 0.16f;
+            }
+
+            float x = point.x * CellSize;
+            float z = point.y * CellSize;
+            const float inset = 0.12f;
+            const float height = 0.18f;
+            _inspectionOutline.SetPosition(0, new Vector3(x + inset, height, z + inset));
+            _inspectionOutline.SetPosition(1, new Vector3(x + CellSize - inset, height, z + inset));
+            _inspectionOutline.SetPosition(2, new Vector3(x + CellSize - inset, height, z + CellSize - inset));
+            _inspectionOutline.SetPosition(3, new Vector3(x + inset, height, z + CellSize - inset));
+            _inspectionOutline.enabled = true;
+            _inspectionMaterial.color = status switch
+            {
+                ZoneStatus.NeedsRoad or ZoneStatus.DevelopedWithoutRoad => new Color(1f, 0.38f, 0.20f),
+                ZoneStatus.WaitingForDevelopment => new Color(1f, 0.82f, 0.25f),
+                ZoneStatus.Developed => new Color(0.25f, 1f, 0.48f),
+                _ => Color.white
+            };
+
+            string label = type switch
+            {
+                CellType.Road => "Đường",
+                CellType.Residential => "Nhà ở",
+                CellType.Commercial => "Thương mại",
+                CellType.Industrial => "Công nghiệp",
+                _ => "Ô trống"
+            };
+            return status switch
+            {
+                ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",
+                ZoneStatus.WaitingForDevelopment => label + " · Đang chờ phát triển",
+                ZoneStatus.DevelopedWithoutRoad => label + " · Mất kết nối đường",
+                ZoneStatus.Developed => label + " · Đã phát triển",
+                _ => label
+            };
+        }
 
         private string _lastHudHint;
         private int _lastHudMoney;
@@ -547,7 +635,16 @@ namespace XCity
         {
             if (_hudStatusText != null)
             {
-                string hint = "Kéo để vẽ đường · Thả để đặt";
+                if (_activeTool != BuildTool.Pan && _inspectionOutline != null)
+                    _inspectionOutline.enabled = false;
+
+                string hint = _activeTool switch
+                {
+                    BuildTool.Pan => GetInspectionHint(),
+                    BuildTool.Road => "Kéo để vẽ đường · Thả để đặt",
+                    BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
+                    _ => "Chạm hoặc kéo để phân khu"
+                };
                 if (_activeTool == BuildTool.Road && _stroke.Count > 0)
                 {
                     bool affordable = _roadStrokeCost <= _city.Money;
