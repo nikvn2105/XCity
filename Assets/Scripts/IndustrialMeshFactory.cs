@@ -14,6 +14,8 @@ namespace XCity
             CleanTechFab = 5
         }
 
+        private const float CatalogStackHeightRatio = 1.08f;
+
         // CS2 Industrial Palette
         private static readonly Color32 PadAsphalt = new Color32(114, 116, 118, 255);
         private static readonly Color32 ApronConcrete = new Color32(158, 156, 150, 255);
@@ -79,7 +81,8 @@ namespace XCity
             BuildCompoundBase(b);
 
             var paletteRng = new CellRng(BuildingMeshFactory.Hash(x, z, (int)cell.Type + 404));
-            var shapeRng = new CellRng(BuildingMeshFactory.Hash(x, z, (int)cell.Type * 19 + cell.Level + 707));
+            int shapeLevel = cell.Model == BuildingModel.Default ? cell.Level : 1;
+            var shapeRng = new CellRng(BuildingMeshFactory.Hash(x, z, (int)cell.Type * 19 + shapeLevel + 707));
             float h = Mathf.Max(1.8f, cell.Height);
 
             if (cell.Type == CellType.PowerPlant)
@@ -91,13 +94,13 @@ namespace XCity
             switch (cell.Model)
             {
                 case BuildingModel.Workshop:
-                    BuildWorkshop(b, h, ref paletteRng, ref shapeRng);
+                    BuildWorkshop(b, h, ref paletteRng, ref shapeRng, BuildingMeshFactory.CatalogVariant(x, z));
                     return;
                 case BuildingModel.Warehouse:
-                    BuildWarehouse(b, h, ref paletteRng, ref shapeRng);
+                    BuildWarehouse(b, h, ref paletteRng, ref shapeRng, BuildingMeshFactory.CatalogVariant(x, z));
                     return;
                 case BuildingModel.Factory:
-                    BuildHeavyFactoryCatalog(b, h, ref paletteRng);
+                    BuildHeavyFactoryCatalog(b, h, ref paletteRng, BuildingMeshFactory.CatalogVariant(x, z));
                     return;
             }
 
@@ -140,7 +143,7 @@ namespace XCity
                 float h = Mathf.Max(1.8f, cell.Height);
                 if (cell.Model == BuildingModel.Factory)
                 {
-                    localOffset = new Vector3(-1.18f, 0.04f + h * 1.32f, -1.38f);
+                    localOffset = new Vector3(-1.18f, 0.04f + h * CatalogStackHeightRatio, -1.38f);
                     isCoolingSteam = false;
                 }
                 else if (cell.Model == BuildingModel.Default)
@@ -248,27 +251,34 @@ namespace XCity
             }
         }
 
-        private static void BuildWorkshop(MeshBuilder b, float h, ref CellRng paletteRng, ref CellRng shapeRng)
+        private static void BuildWorkshop(MeshBuilder b, float h, ref CellRng paletteRng, ref CellRng shapeRng, int variant)
         {
             const float baseY = 0.04f;
             Color32 hallWall = CladdingPalette[paletteRng.Range(0, 2) == 0 ? 0 : 4];
             Color32 officeBrick = CladdingPalette[3];
-            float hallH = Mathf.Clamp(h * 0.68f, 1.35f, 2.2f);
+            float hallH = h * (variant == 2 ? 0.91f : 0.74f);
 
             // Fabrication hall on left/rear
             Vector3 hallCenter = new Vector3(-0.42f, baseY + hallH * 0.5f, -0.35f);
             Vector3 hallSize = new Vector3(2.15f, hallH, 2.05f);
             AddSteelHall(b, hallCenter, hallSize, hallWall, RoofDark, 3);
-            b.AddGableRoof(new Vector3(-0.42f, baseY + hallH, -0.35f), 2.15f, 2.05f, 0.42f, 0.06f, RoofDark, hallWall);
+            var roof = new Vector3(hallCenter.x, baseY + hallH, hallCenter.z);
+            if (variant == 0)
+                b.AddGableRoof(roof, hallSize.x, hallSize.z, h * 0.19f, 0.06f, RoofDark, hallWall);
+            else if (variant == 1)
+                AddSawtoothSkylights(b, roof, hallSize.x, hallSize.z, h * 0.23f, 2, hallWall);
+            else
+                b.AddBox(roof + new Vector3(0.24f, h * 0.045f, -0.30f),
+                    new Vector3(1.12f, h * 0.09f, 1.18f), SteelBeam, RoofLight, topSurface: BuildingSurface.Roof);
             AddLoadingDockRow(b, hallCenter, hallSize, 2, SafetyOrange);
 
             // Brick front office annex on right
-            float offH = 1.15f;
-            Vector3 offCenter = new Vector3(1.12f, baseY + offH * 0.5f, 0.15f);
+            float offH = variant == 2 ? h * 0.63f : 1.15f;
+            Vector3 offCenter = new Vector3(1.12f, baseY + offH * 0.5f, variant == 2 ? -0.18f : 0.15f);
             Vector3 offSize = new Vector3(1.05f, offH, 1.35f);
             b.AddBox(offCenter, offSize, officeBrick, RoofLight, wallSurface: BuildingSurface.Masonry, topSurface: BuildingSurface.Roof);
             b.AddFacadeRect(offCenter, offSize, 0, -0.38f, 0.38f, baseY + 0.52f, baseY + 0.92f, DarkGlass, BuildingSurface.Glazing);
-            b.AddBox(new Vector3(1.12f, baseY + 0.48f, 0.92f), new Vector3(0.68f, 0.06f, 0.24f), SteelBeam, SteelBeam);
+            b.AddBox(new Vector3(1.12f, baseY + 0.48f, offCenter.z + 0.77f), new Vector3(0.68f, 0.06f, 0.24f), SteelBeam, SteelBeam);
 
             // Dust collector cyclone + ISO yard container
             AddStorageTank(b, new Vector3(-1.42f, baseY, 1.05f), 0.24f, 1.28f, TankSilver, SafetyOrange);
@@ -276,12 +286,14 @@ namespace XCity
                 AddIsoContainer(b, new Vector3(1.12f, baseY + 0.32f, -1.15f), 1.05f, 0, ContainerPalette[paletteRng.Range(0, ContainerPalette.Length)]);
         }
 
-        private static void BuildWarehouse(MeshBuilder b, float h, ref CellRng paletteRng, ref CellRng shapeRng)
+        private static void BuildWarehouse(MeshBuilder b, float h, ref CellRng paletteRng, ref CellRng shapeRng,
+            int variant = -1)
         {
             const float baseY = 0.04f;
             Color32 wall = CladdingPalette[paletteRng.Range(0, 3)];
             Color32 accent = paletteRng.Next() < 0.5f ? LogisticsBlue : SafetyOrange;
-            float hallH = Mathf.Clamp(h * 0.80f, 1.75f, 2.65f);
+            float hallH = variant < 0 ? Mathf.Clamp(h * 0.80f, 1.75f, 2.65f) :
+                h * (variant == 0 ? 0.82f : 0.72f);
 
             Vector3 hallCenter = new Vector3(0f, baseY + hallH * 0.5f, -0.45f);
             Vector3 hallSize = new Vector3(3.16f, hallH, 2.02f);
@@ -296,8 +308,16 @@ namespace XCity
             AddLoadingDockRow(b, hallCenter, hallSize, 3, accent);
 
             // 2 rooftop HVAC chillers
-            AddRooftopHvac(b, new Vector3(-0.78f, baseY + hallH, -0.50f), 1.0f);
-            AddRooftopHvac(b, new Vector3(0.74f, baseY + hallH, -0.35f), 0.9f);
+            var roof = new Vector3(0f, baseY + hallH, hallCenter.z);
+            if (variant == 1)
+                AddBarrelRoof(b, roof, hallSize.x, hallSize.z, h * 0.25f, wall);
+            else if (variant == 2)
+                AddSawtoothSkylights(b, roof, hallSize.x - 0.12f, hallSize.z - 0.10f, h * 0.24f, 3, wall);
+            else
+            {
+                AddRooftopHvac(b, new Vector3(-0.78f, baseY + hallH, -0.50f), 1.0f);
+                AddRooftopHvac(b, new Vector3(0.74f, baseY + hallH, -0.35f), 0.9f);
+            }
 
             // Stacked ISO containers on front-left apron
             int c1 = paletteRng.Range(0, ContainerPalette.Length);
@@ -307,26 +327,39 @@ namespace XCity
                 AddIsoContainer(b, new Vector3(-1.12f, baseY + 0.90f, 1.18f), 1.06f, 1, ContainerPalette[c2]);
         }
 
-        private static void BuildHeavyFactoryCatalog(MeshBuilder b, float h, ref CellRng paletteRng)
+        private static void BuildHeavyFactoryCatalog(MeshBuilder b, float h, ref CellRng paletteRng, int variant)
         {
             const float baseY = 0.04f;
             Color32 wall = CladdingPalette[paletteRng.Range(1, 4)];
-            float hallH = Mathf.Clamp(h * 0.62f, 1.85f, 2.55f);
+            float hallH = h * (variant == 2 ? 0.76f : 0.62f);
 
             // High-bay main manufacturing hall shifted slightly right
             Vector3 hallCenter = new Vector3(0.32f, baseY + hallH * 0.5f, -0.32f);
             Vector3 hallSize = new Vector3(2.15f, hallH, 2.20f);
             AddSteelHall(b, hallCenter, hallSize, wall, RoofDark, 3);
-            AddSawtoothSkylights(b, new Vector3(0.32f, baseY + hallH, -0.32f), 2.10f, 2.10f, 0.58f, 3, wall);
+            var roof = new Vector3(hallCenter.x, baseY + hallH, hallCenter.z);
+            switch (variant)
+            {
+                case 1:
+                    b.AddGableRoof(roof, hallSize.x, hallSize.z, h * 0.28f, 0.06f, RoofDark, wall);
+                    AddStorageTank(b, new Vector3(-1.16f, baseY, 0.36f), 0.49f, h * 0.70f, TankSilver, LogisticsBlue);
+                    break;
+                case 2:
+                    b.AddBox(roof + new Vector3(0, h * 0.105f, -0.20f), new Vector3(1.48f, h * 0.21f, 1.48f),
+                        SteelBeam, RoofLight, topSurface: BuildingSurface.Roof);
+                    b.AddBox(new Vector3(-1.10f, baseY + h * 0.24f, 0.38f), new Vector3(0.85f, h * 0.48f, 1.28f),
+                        wall, RoofDark, wallSurface: BuildingSurface.Masonry);
+                    break;
+                default:
+                    AddSawtoothSkylights(b, roof, 2.10f, 2.10f, h * 0.15f, 3, wall);
+                    AddStorageTank(b, new Vector3(-1.22f, baseY, -0.25f), 0.36f, 2.15f, TankSilver, LogisticsBlue);
+                    AddStorageTank(b, new Vector3(-1.22f, baseY, 0.62f), 0.36f, 1.95f, TankSilver, LogisticsBlue);
+                    break;
+            }
             AddLoadingDockRow(b, hallCenter, hallSize, 2, OxideRed);
-
-            // Twin processing silos + pipe bridge on left
-            AddStorageTank(b, new Vector3(-1.22f, baseY, -0.25f), 0.36f, 2.15f, TankSilver, LogisticsBlue);
-            AddStorageTank(b, new Vector3(-1.22f, baseY, 0.62f), 0.36f, 1.95f, TankSilver, LogisticsBlue);
             AddPipeRack(b, new Vector3(-1.22f, baseY, 0.15f), new Vector3(-0.65f, baseY, 0.15f), 1.65f, TankSilver, SteelBeam);
-
-            // Tall tapered stack at back-left
-            AddTaperedStack(b, new Vector3(-1.18f, baseY, -1.38f), 0.24f, 0.14f, h * 1.32f, SiloConcrete, OxideRed);
+            AddTaperedStack(b, new Vector3(-1.18f, baseY, -1.38f), 0.24f, 0.14f,
+                h * CatalogStackHeightRatio, SiloConcrete, OxideRed);
         }
 
         private static void BuildSawtoothPlant(MeshBuilder b, float h, ref CellRng paletteRng)
@@ -559,6 +592,25 @@ namespace XCity
                 b.AddBox(new Vector3(bx + 0.28f, baseY + 0.12f, frontZ + 0.04f), new Vector3(0.06f, 0.22f, 0.07f), DarkShutter, DarkShutter);
                 b.AddBox(new Vector3(bx - 0.34f, baseY + 0.006f, frontZ + 0.38f), new Vector3(0.04f, 0.01f, 0.62f), SafetyYellow, SafetyYellow);
                 b.AddBox(new Vector3(bx + 0.34f, baseY + 0.006f, frontZ + 0.38f), new Vector3(0.04f, 0.01f, 0.62f), SafetyYellow, SafetyYellow);
+            }
+        }
+
+        private static void AddBarrelRoof(MeshBuilder b, Vector3 center, float width, float depth, float rise, Color32 endWall)
+        {
+            const int segments = 6;
+            float halfWidth = width * 0.5f;
+            Vector3 front = center + new Vector3(0, 0, depth * 0.5f);
+            Vector3 back = center - new Vector3(0, 0, depth * 0.5f);
+            Vector3 edge = new Vector3(-halfWidth, 0, 0);
+            for (int i = 1; i <= segments; i++)
+            {
+                float angle = Mathf.PI * i / segments;
+                Vector3 next = i == segments ? new Vector3(halfWidth, 0, 0) :
+                    new Vector3(-Mathf.Cos(angle) * halfWidth, Mathf.Sin(angle) * rise, 0);
+                b.AddQuad(front + edge, front + next, back + next, back + edge, Vector3.up, RoofLight, BuildingSurface.Roof);
+                b.AddTriangle(front, front + edge, front + next, Vector3.forward, endWall, BuildingSurface.Masonry);
+                b.AddTriangle(back, back + next, back + edge, Vector3.back, endWall, BuildingSurface.Masonry);
+                edge = next;
             }
         }
 
