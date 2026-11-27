@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace XCity
 {
@@ -64,6 +65,17 @@ namespace XCity
         internal const int BaseHappiness = 40;
         internal const int HappinessPerService = 15;
         internal const int MissingUtilityPenalty = 10;
+        internal const int CongestionPenalty = 10;
+        internal const int StudentPercent = 25;
+        internal const int CommutersPerRoad = 10;
+        private readonly int[] _cellComponent = new int[GridSize * GridSize];
+        private readonly SortedSet<int> _serviceCells = new SortedSet<int>();
+        private readonly List<int> _componentRoads = new List<int>();
+        private readonly Dictionary<int, int> _schoolStudents = new Dictionary<int, int>();
+        private readonly List<(int Distance, int Index)> _schoolCandidates = new List<(int, int)>();
+        private int[] _componentEmployment = new int[1];
+        private int[] _componentTraffic = new int[1];
+        private bool _trafficDirty = true;
         public const int LoanAmount = 20000;
         public const int LoanRepaid = 24000;
         public const int LoanRepayment = 250;
@@ -117,7 +129,76 @@ namespace XCity
 
         public int GetHappiness(int x, int z) =>
             BaseHappiness + HappinessPerService * ServiceCatalog.Count(GetCoverage(x, z)) -
-            (HasWater(x, z) ? 0 : MissingUtilityPenalty) - (HasSewage(x, z) ? 0 : MissingUtilityPenalty);
+            (HasWater(x, z) ? 0 : MissingUtilityPenalty) - (HasSewage(x, z) ? 0 : MissingUtilityPenalty) -
+            (GetTrafficLoad(x, z) > 100 ? CongestionPenalty : 0);
+
+        /// <summary>Students enrolled at the school on this cell (0 for other cells).</summary>
+        public int GetSchoolStudents(int x, int z)
+        {
+            RefreshCoverage();
+            return IsInBounds(x, z) && _schoolStudents.TryGetValue(CellIndex(x, z), out int students) ? students : 0;
+        }
+
+        /// <summary>
+        /// Commuters on this cell's road network as a percentage of what its roads carry; above 100 it is jammed.
+        /// Works for road cells and for buildings beside a road.
+        /// </summary>
+        public int GetTrafficLoad(int x, int z)
+        {
+            int network = NetworkAt(x, z);
+            return network == 0 ? 0 : _componentTraffic[network];
+        }
+
+        /// <summary>Share of jobs on this cell's road network that its own residents can fill, 0-100.</summary>
+        internal int EmploymentAt(int x, int z)
+        {
+            int network = NetworkAt(x, z);
+            return network == 0 ? 0 : _componentEmployment[network];
+        }
+
+        private int NetworkAt(int x, int z)
+        {
+            if (!IsInBounds(x, z)) return 0;
+            RefreshPower();
+            RefreshTraffic();
+            int index = CellIndex(x, z);
+            return _cells[x, z].Type == CellType.Road ? _roadComponent[index] : _cellComponent[index];
+        }
+
+        // Workers only reach jobs on their own road network, so each network is staffed and loaded on its own.
+        private void RefreshTraffic()
+        {
+            RefreshPower();
+            if (!_trafficDirty) return;
+            _trafficDirty = false;
+            int networks = _componentRoads.Count;
+            var workers = new int[networks];
+            var jobs = new int[networks];
+            foreach (int index in _occupied)
+            {
+                int network = _cellComponent[index];
+                if (network == 0) continue;
+                int x = index / GridSize, z = index % GridSize;
+                CityCell cell = _cells[x, z];
+                if (cell.Type == CellType.Residential) workers[network] += BuildingCatalog.Residents(cell) * WorkforcePercent / 100;
+                else jobs[network] += OperatingJobs(x, z, cell);
+            }
+
+            PublishTraffic(workers, jobs);
+        }
+
+        private void PublishTraffic(int[] workers, int[] jobs)
+        {
+            int networks = workers.Length;
+            _trafficDirty = false;
+            _componentEmployment = new int[networks];
+            _componentTraffic = new int[networks];
+            for (int n = 1; n < networks; n++)
+            {
+                _componentEmployment[n] = jobs[n] == 0 ? 100 : Math.Min(100, workers[n] * 100 / jobs[n]);
+                _componentTraffic[n] = Math.Min(workers[n], jobs[n]) * 100 / Math.Max(1, _componentRoads[n] * CommutersPerRoad);
+            }
+        }
 
         // A home needs water, sewage and one service type in reach to reach level 2, and two services for level 3.
         private bool CanUpgradeResidence(int x, int z, int level) =>
@@ -181,21 +262,44 @@ namespace XCity
             if (!_coverageDirty) return;
             _coverageDirty = false;
             Array.Clear(_coverage, 0, _coverage.Length);
-            foreach (int index in _occupied)
+            _schoolStudents.Clear();
+            foreach (int index in _serviceCells)
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
-                var (coverage, radius) = ServiceCatalog.Get(_cells[x, z].Model);
+                BuildingModel model = _cells[x, z].Model;
+                var (coverage, radius) = ServiceCatalog.Get(model);
                 if (coverage == ServiceCoverage.None || GetZoneStatus(x, z) != ZoneStatus.Developed) continue;
                 int minX = Math.Max(0, x - radius), maxX = Math.Min(GridSize - 1, x + radius);
                 int minZ = Math.Max(0, z - radius), maxZ = Math.Min(GridSize - 1, z + radius);
+                bool school = coverage == ServiceCoverage.Education;
+                _schoolCandidates.Clear();
                 for (int cx = minX; cx <= maxX; cx++)
                 for (int cz = minZ; cz <= maxZ; cz++)
                 {
                     int dx = cx - x, dz = cz - z;
-                    if (dx * dx + dz * dz <= radius * radius) _coverage[CellIndex(cx, cz)] |= coverage;
+                    if (dx * dx + dz * dz > radius * radius) continue;
+                    int cell = CellIndex(cx, cz);
+                    // Homes already served by another school keep their seat there.
+                    if (school && _cells[cx, cz].Type == CellType.Residential && (_coverage[cell] & coverage) == 0)
+                        _schoolCandidates.Add((dx * dx + dz * dz, cell));
+                    else _coverage[cell] |= coverage;
                 }
+                if (!school) continue;
+
+                // A school fills its seats with the nearest homes first; homes beyond its capacity go unserved.
+                _schoolCandidates.Sort((a, b) => a.Distance != b.Distance ? a.Distance.CompareTo(b.Distance) : a.Index.CompareTo(b.Index));
+                int seats = BuildingCatalog.Get(model).Seats, enrolled = 0;
+                foreach (var (_, cell) in _schoolCandidates)
+                {
+                    int students = BuildingCatalog.Residents(_cells[cell / GridSize, cell % GridSize]) * StudentPercent / 100;
+                    if (enrolled + students > seats) continue;
+                    enrolled += students;
+                    _coverage[cell] |= coverage;
+                }
+                _schoolStudents[index] = enrolled;
             }
         }
+
     }
 }

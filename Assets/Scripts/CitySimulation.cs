@@ -211,6 +211,8 @@ namespace XCity
             int index = CellIndex(x, z);
             if (type == CellType.Empty) _occupied.Remove(index);
             else _occupied.Add(index);
+            if (BuildingCatalog.IsPublicService(type)) _serviceCells.Add(index);
+            else _serviceCells.Remove(index);
             _coverageDirty = true;
             RoadConnections axis = _cells[x, z].BridgeAxis;
             Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis);
@@ -323,6 +325,12 @@ namespace XCity
         public void Tick()
         {
             if (IsBankrupt) return;
+            // Residents change as homes grow, so seats and commutes are re-evaluated from the state at tick start.
+            _coverageDirty = true;
+            RefreshCoverage();
+            RefreshTraffic();
+            var networkWorkers = new int[_componentRoads.Count];
+            var networkJobs = new int[_componentRoads.Count];
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
@@ -349,7 +357,9 @@ namespace XCity
                 if (BuildingCatalog.IsPublicService(cell.Type))
                 {
                     netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
-                    jobs += OperatingJobs(x, z, cell);
+                    int serviceJobs = OperatingJobs(x, z, cell);
+                    jobs += serviceJobs;
+                    networkJobs[_cellComponent[index]] += serviceJobs;
                     continue;
                 }
 
@@ -381,20 +391,24 @@ namespace XCity
                 {
                     population += BuildingCatalog.Residents(cell);
                     happiness += (long)GetHappiness(x, z) * BuildingCatalog.Residents(cell);
+                    networkWorkers[_cellComponent[index]] += BuildingCatalog.Residents(cell) * WorkforcePercent / 100;
                 }
                 else if (status == ZoneStatus.Developed)
                 {
                     int cellJobs = ServiceCatalog.Jobs(cell);
                     jobs += cellJobs;
+                    networkJobs[_cellComponent[index]] += cellJobs;
                     if (cell.Type == CellType.Commercial) commercialJobs += cellJobs;
                 }
                 if (operating)
                     taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 :
-                        15 * cell.Level * EmploymentPercent / 100;
+                        15 * cell.Level * EmploymentAt(x, z) / 100;
             }
 
             Population = population;
             UpdateDemand(jobs, commercialJobs, happiness);
+            // This tick's commute staffs and loads the networks for the next one (roads cannot change mid-tick).
+            PublishTraffic(networkWorkers, networkJobs);
             LastTaxIncome = taxIncome;
             int repayment = Math.Min(LoanBalance, LoanRepayment);
             LoanBalance -= repayment;
@@ -523,6 +537,10 @@ namespace XCity
             if (!_powerDirty) return;
 
             int[] components = _roadComponent;
+            _trafficDirty = true;
+            _componentRoads.Clear();
+            _componentRoads.Add(0);
+            Array.Clear(_cellComponent, 0, _cellComponent.Length);
             Queue<int> pending = _pendingRoads;
             Array.Clear(components, 0, components.Length);
             int component = 0;
@@ -532,6 +550,7 @@ namespace XCity
                 int z = index % GridSize;
                 if (_cells[x, z].Type != CellType.Road || components[index] != 0) continue;
                 component++;
+                _componentRoads.Add(0);
                 Visit(index);
                 while (pending.Count > 0)
                 {
@@ -556,6 +575,7 @@ namespace XCity
                 if (!UsesPower(_cells[index / GridSize, index % GridSize].Type)) continue;
                 int grid = AdjacentComponent(index);
                 if (grid == 0) continue;
+                _cellComponent[index] = grid;
                 if (capacity[grid] == 0)
                 {
                     _unpoweredZones++;
@@ -601,6 +621,7 @@ namespace XCity
             {
                 if (components[index] != 0) return;
                 components[index] = component;
+                _componentRoads[component]++;
                 pending.Enqueue(index);
             }
 

@@ -7,6 +7,7 @@ namespace XCity
 {
     internal sealed class CitizenSystem : IDisposable
     {
+        private const int MaxWalkCells = 600;
         private const int MaxCitizens = 90;
         private const float RecountInterval = 1.0f;
         private const float SpawnInterval = 0.25f;
@@ -54,6 +55,8 @@ namespace XCity
             public float PauseTimer;
             public float PauseYaw;
             public CitizenTemplate Template;
+            public List<int> Route; // directions to the destination; null while strolling
+            public int RouteStep;
         }
 
         private readonly CitySimulation _city;
@@ -197,7 +200,14 @@ namespace XCity
                         continue;
                     }
 
-                    c.OutDir = ChooseOutDir(c.Cell.x, c.Cell.y, c.InDir);
+                    if (c.Route != null && ++c.RouteStep >= c.Route.Count)
+                    {
+                        // Arrived: the walker goes inside and frees a slot for a new trip.
+                        _citizens.RemoveAt(i);
+                        _topologyDirty = true;
+                        continue;
+                    }
+                    c.OutDir = c.Route != null ? c.Route[c.RouteStep] : ChooseOutDir(c.Cell.x, c.Cell.y, c.InDir);
                     if (_rng.Next(100) < 12 && TryPickAdjacentBuildingYaw(c.Cell.x, c.Cell.y, out float yaw))
                     {
                         c.PauseTimer = 2.0f + (float)_rng.NextDouble() * 1.8f;
@@ -265,10 +275,12 @@ namespace XCity
             }
             if (count == 0) return false;
 
-            int outDir = _dirScratch[_rng.Next(count)];
+            List<int> route = PlanWalk(candidate.Cell);
+            int outDir = route != null ? route[0] : _dirScratch[_rng.Next(count)];
             CitizenTemplate tpl = CitizenMeshFactory.PickForGroup(_rng, candidate.Group);
             _citizens.Add(new Citizen
             {
+                Route = route,
                 Cell = candidate.Cell,
                 InDir = outDir,
                 OutDir = outDir,
@@ -280,6 +292,22 @@ namespace XCity
             });
             _topologyDirty = true;
             return true;
+        }
+
+        // Walk to nearby shops, workplaces or services; walks are short, so the search stops early.
+        private List<int> PlanWalk(Vector2Int origin)
+        {
+            Vector2Int goal = origin;
+            for (int attempt = 0; attempt < 8; attempt++)
+            {
+                CandidateCell cand = _candidates[_rng.Next(_candidates.Count)];
+                if (cand.Cell == origin) continue;
+                goal = cand.Cell;
+                if (cand.Group != CitizenGroup.Residential) break;
+            }
+            var route = new List<int>();
+            return goal != origin && _city.Roads.TryFindPath(origin.x, origin.y, goal.x, goal.y, route, MaxWalkCells) &&
+                route.Count > 0 ? route : null;
         }
 
         private void ValidateCitizens()
@@ -295,6 +323,7 @@ namespace XCity
                 }
 
                 RoadConnections conns = _city.Roads.GetConnections(c.Cell.x, c.Cell.y);
+                c.Route = null; // the road network changed, so the planned walk may be cut; stroll instead
                 if (((int)conns & (1 << c.OutDir)) == 0)
                     c.OutDir = ChooseOutDir(c.Cell.x, c.Cell.y, c.InDir);
             }

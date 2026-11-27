@@ -1059,14 +1059,18 @@ namespace XCity
                 label += $" · Cấp {cell.Level} · {BuildingCatalog.Residents(cell)} dân · Hạnh phúc {_city.GetHappiness(point.x, point.y)}%" +
                     $" · Dịch vụ: {DescribeCoverage(_city.GetCoverage(point.x, point.y))}" +
                     (_city.HasWater(point.x, point.y) ? "" : " · Thiếu nước") +
-                    (_city.HasSewage(point.x, point.y) ? "" : " · Thiếu thoát nước");
+                    (_city.HasSewage(point.x, point.y) ? "" : " · Thiếu thoát nước") +
+                    (_city.GetTrafficLoad(point.x, point.y) > 100 ? " · Kẹt xe" : "");
+            if (type == CellType.Road)
+                label += $" · Lưu lượng {_city.GetTrafficLoad(point.x, point.y)}%";
             if (cell.Model == BuildingModel.WaterPump || cell.Model == BuildingModel.SewagePlant)
                 label += $" · Cấp {CitySimulation.UtilityCapacity} ô qua đường";
             var service = ServiceCatalog.Get(cell.Model);
             if (service.Radius > 0)
                 label += $" · Bán kính {service.Radius} ô";
             if (type == CellType.School)
-                label += $" · {BuildingCatalog.Get(cell.Model).Seats:N0} chỗ · Phí: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
+                label += $" · Học sinh {_city.GetSchoolStudents(point.x, point.y):N0}/{BuildingCatalog.Get(cell.Model).Seats:N0} chỗ" +
+                    $" · Phí: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
             if (type == CellType.CivicService)
                 label += $" · Phí duy trì: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
             return status switch
