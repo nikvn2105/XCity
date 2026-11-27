@@ -113,6 +113,12 @@ namespace XCity
             LoadDisplaySettings();
             SetupCamera();
             SetupHUD();
+            // After SetupHUD, which clears the banner.
+            if (_city.DroppedCellsOnLoad > 0)
+            {
+                _unlockBanner = $"Đã gỡ {_city.DroppedCellsOnLoad} công trình không còn hợp lệ trên bản đồ";
+                _unlockBannerUntil = Time.unscaledTime + 10f;
+            }
             RestoreFpsCounter();
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
@@ -730,6 +736,11 @@ namespace XCity
                         {
                             _cityDirty = true;
                             _audio?.PlayBuild();
+                        }
+                        else if (BuildingCatalog.NeedsShore(_activeBuildingModel) && !_city.CanPlaceHarbor(cell.x, cell.y))
+                        {
+                            _unlockBanner = "Không giáp nước — chọn ô đất sát bờ";
+                            _unlockBannerUntil = Time.unscaledTime + 3f;
                         }
                     }
                     RefreshHUD();
