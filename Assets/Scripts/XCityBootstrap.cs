@@ -688,6 +688,7 @@ namespace XCity
 
         private void LateUpdate()
         {
+            Shader.SetGlobalFloat("_XCityTime", Time.time);
             _cityRenderer.RebuildDirtyChunks();
             _buildingRenderer.RebuildDirtyChunks();
             _vehicles.Update(Time.deltaTime);

@@ -16,6 +16,16 @@ namespace XCity
 
         public int VertexCount => _vertices.Count;
 
+        public static Color32 WithSway(Color32 c, float sway)
+        {
+            if (sway <= 0.001f)
+                return new Color32(c.r, c.g, c.b, 255);
+
+            float clamped = Mathf.Clamp(sway, 0.02f, 0.85f);
+            byte alpha = (byte)Mathf.Clamp(Mathf.RoundToInt((1f - clamped) * 255f), 30, 250);
+            return new Color32(c.r, c.g, c.b, alpha);
+        }
+
         public void Clear()
         {
             _vertices.Clear();
@@ -32,7 +42,10 @@ namespace XCity
             _quarterTurns = ((quarterTurns % 4) + 4) % 4;
         }
 
-        public void AddQuad(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 outward, Color32 color)
+        public void AddQuad(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Vector3 outward, Color32 color) =>
+            AddQuadColors(v0, v1, v2, v3, color, color, color, color, outward);
+
+        public void AddQuadColors(Vector3 v0, Vector3 v1, Vector3 v2, Vector3 v3, Color32 c0, Color32 c1, Color32 c2, Color32 c3, Vector3 outward)
         {
             Vector3 p0 = TransformPoint(v0);
             Vector3 p1 = TransformPoint(v1);
@@ -46,6 +59,9 @@ namespace XCity
                 Vector3 tmp = p1;
                 p1 = p3;
                 p3 = tmp;
+                Color32 tc = c1;
+                c1 = c3;
+                c3 = tc;
                 n = -n;
             }
 
@@ -59,10 +75,10 @@ namespace XCity
             _normals.Add(normal);
             _normals.Add(normal);
             _normals.Add(normal);
-            _colors.Add(color);
-            _colors.Add(color);
-            _colors.Add(color);
-            _colors.Add(color);
+            _colors.Add(c0);
+            _colors.Add(c1);
+            _colors.Add(c2);
+            _colors.Add(c3);
             _triangles.Add(index);
             _triangles.Add(index + 1);
             _triangles.Add(index + 2);
@@ -233,7 +249,10 @@ namespace XCity
                 Vector3.left, gable);
         }
 
-        public void AddCylinder(Vector3 baseCenter, float rBottom, float rTop, float height, int segments, Color32 color, bool capTop, Color32 capColor)
+        public void AddCylinder(Vector3 baseCenter, float rBottom, float rTop, float height, int segments, Color32 color, bool capTop, Color32 capColor) =>
+            AddCylinder(baseCenter, rBottom, rTop, height, segments, color, color, capTop, capColor);
+
+        public void AddCylinder(Vector3 baseCenter, float rBottom, float rTop, float height, int segments, Color32 bottomColor, Color32 topColor, bool capTop, Color32 capColor)
         {
             float step = Mathf.PI * 2f / segments;
             float y0 = baseCenter.y;
@@ -257,10 +276,43 @@ namespace XCity
                 Vector3 p01 = new Vector3(baseCenter.x + c0 * rTop, y1, baseCenter.z + s0 * rTop);
 
                 Vector3 outward = new Vector3(Mathf.Cos(mid), 0f, Mathf.Sin(mid));
-                AddQuad(p10, p00, p01, p11, outward, color);
+                AddQuadColors(p10, p00, p01, p11, bottomColor, bottomColor, topColor, topColor, outward);
 
                 if (capTop)
                     AddTriangle(topCenter, p11, p01, Vector3.up, capColor);
+            }
+        }
+
+        public void AddWheelCylinder(Vector3 center, float radius, float width, int segments, Color32 tireColor, Color32 hubColor)
+        {
+            float step = Mathf.PI * 2f / segments;
+            float x0 = center.x - width * 0.5f;
+            float x1 = center.x + width * 0.5f;
+            Vector3 leftCenter = new Vector3(x0, center.y, center.z);
+            Vector3 rightCenter = new Vector3(x1, center.y, center.z);
+
+            for (int i = 0; i < segments; i++)
+            {
+                float a0 = i * step;
+                float a1 = (i + 1) * step;
+                float mid = (a0 + a1) * 0.5f;
+
+                float c0 = Mathf.Cos(a0) * radius;
+                float s0 = Mathf.Sin(a0) * radius;
+                float c1 = Mathf.Cos(a1) * radius;
+                float s1 = Mathf.Sin(a1) * radius;
+
+                Vector3 l0 = new Vector3(x0, center.y + s0, center.z + c0);
+                Vector3 l1 = new Vector3(x0, center.y + s1, center.z + c1);
+                Vector3 r0 = new Vector3(x1, center.y + s0, center.z + c0);
+                Vector3 r1 = new Vector3(x1, center.y + s1, center.z + c1);
+
+                Vector3 outward = new Vector3(0f, Mathf.Sin(mid), Mathf.Cos(mid));
+                AddQuad(l0, r0, r1, l1, outward, tireColor);
+
+                Color32 spokeTint = (i & 1) == 0 ? hubColor : tireColor;
+                AddTriangle(rightCenter, r0, r1, Vector3.right, spokeTint);
+                AddTriangle(leftCenter, l1, l0, Vector3.left, spokeTint);
             }
         }
 

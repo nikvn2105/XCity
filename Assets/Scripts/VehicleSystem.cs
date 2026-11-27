@@ -10,6 +10,7 @@ namespace XCity
         private const int MaxVehicles = 40;
         private const float RecountInterval = 1.0f;
         private const float SpawnInterval = 0.3f;
+        private static readonly Color32 StrobeDim = new Color32(42, 34, 42, 255);
 
         // Direction indices: 0=W(-1,0), 1=E(+1,0), 2=S(0,-1), 3=N(0,+1)
         private static readonly Vector2Int[] Dir2D =
@@ -43,6 +44,11 @@ namespace XCity
             public int OutDir;
             public float T;
             public float Speed;
+            public float CurrentSpeed;
+            public float WheelAngle;
+            public float Pitch;
+            public float Roll;
+            public float Phase;
             public VehicleTemplate Template;
         }
 
@@ -66,8 +72,11 @@ namespace XCity
         private int _lastRoadVersion = -1;
         private float _recountTimer = RecountInterval;
         private float _spawnTimer;
+        private float _animTime;
+        private int _lastStrobeStep = -1;
         private int _targetCount;
         private bool _topologyDirty = true;
+        private bool _hasEmergencyVehicles;
 
         public VehicleSystem(CitySimulation city, float cellSize, Material material, Transform parent)
         {
@@ -106,6 +115,7 @@ namespace XCity
         public void Update(float dt)
         {
             if (dt <= 0f) return;
+            _animTime += dt;
 
             int roadVersion = _city.Roads.Version;
             if (roadVersion != _lastRoadVersion)
@@ -141,9 +151,38 @@ namespace XCity
             for (int i = _vehicles.Count - 1; i >= 0; i--)
             {
                 Vehicle v = _vehicles[i];
+                float desiredSpeed = v.InDir != v.OutDir ? v.Speed * 0.78f : v.Speed;
+
+                Vector2Int nextCell = v.Cell + Dir2D[v.OutDir];
+                for (int j = 0; j < _vehicles.Count; j++)
+                {
+                    if (j == i) continue;
+                    Vehicle other = _vehicles[j];
+                    if (other.Cell == v.Cell && other.OutDir == v.OutDir && other.T > v.T && other.T - v.T < 0.42f)
+                        desiredSpeed = Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.85f);
+                    else if (other.Cell == nextCell && other.InDir == v.OutDir && (1f - v.T) + other.T < 0.38f)
+                        desiredSpeed = Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.85f);
+                }
+
+                float prevSpeed = v.CurrentSpeed;
+                v.CurrentSpeed = Mathf.MoveTowards(v.CurrentSpeed, desiredSpeed, 9f * dt);
+                float accel = (v.CurrentSpeed - prevSpeed) / dt;
+
                 ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
                 float length = (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f;
-                v.T += v.Speed * dt / Mathf.Max(length, 0.1f);
+                float distMoved = v.CurrentSpeed * dt;
+                v.T += distMoved / Mathf.Max(length, 0.1f);
+                v.WheelAngle = Mathf.Repeat(v.WheelAngle + (distMoved / Mathf.Max(0.08f, v.Template.WheelRadius)) * Mathf.Rad2Deg, 360f);
+
+                int turnSign = GetTurnSign(v.InDir, v.OutDir);
+                float turnWeight = Mathf.Sin(Mathf.Clamp01(v.T) * Mathf.PI);
+                float targetRoll = v.Template.IsTwoWheeler
+                    ? -turnSign * 14f * turnWeight
+                    : turnSign * 3.2f * turnWeight;
+                v.Roll = Mathf.MoveTowards(v.Roll, targetRoll, 45f * dt);
+
+                float targetPitch = Mathf.Clamp(-accel * 0.45f, -3.0f, 3.0f);
+                v.Pitch = Mathf.MoveTowards(v.Pitch, targetPitch, 22f * dt);
 
                 if (v.T >= 1f)
                 {
@@ -163,6 +202,13 @@ namespace XCity
             }
 
             RenderVehicles();
+        }
+
+        private static int GetTurnSign(int inDir, int outDir)
+        {
+            if (inDir == outDir) return 0;
+            if (outDir == (inDir ^ 1)) return -1;
+            return Vector3.Dot(Right3D[inDir], Dir3D[outDir]) > 0f ? 1 : -1;
         }
 
         private void Recount()
@@ -224,6 +270,8 @@ namespace XCity
                     OutDir = outDir,
                     T = 0.5f,
                     Speed = tpl.Speed,
+                    CurrentSpeed = tpl.Speed,
+                    Phase = (float)_rng.NextDouble() * 6.283f,
                     Template = tpl
                 });
                 _topologyDirty = true;
@@ -264,7 +312,7 @@ namespace XCity
 
                 _dirScratch[count++] = d;
                 if (d == inDir)
-                    _dirScratch[count++] = d; // weight straight x2
+                    _dirScratch[count++] = d;
             }
 
             return count == 0 ? reverse : _dirScratch[_rng.Next(count)];
@@ -304,11 +352,13 @@ namespace XCity
             {
                 int totalVerts = 0;
                 int totalTris = 0;
+                _hasEmergencyVehicles = false;
                 for (int i = 0; i < count; i++)
                 {
                     VehicleTemplate tpl = _vehicles[i].Template;
                     totalVerts += tpl.Vertices.Length;
                     totalTris += tpl.Triangles.Length;
+                    if (tpl.HasEmergencyLights) _hasEmergencyVehicles = true;
                 }
 
                 if (_renderVertices.Length != totalVerts)
@@ -333,28 +383,68 @@ namespace XCity
                     vOffset += tpl.Vertices.Length;
                     tOffset += srcTris.Length;
                 }
+                _lastStrobeStep = -1;
             }
+
+            int strobeStep = (int)(_animTime * 6f) & 1;
+            bool updateColors = _topologyDirty || (_hasEmergencyVehicles && strobeStep != _lastStrobeStep);
+            if (_hasEmergencyVehicles) _lastStrobeStep = strobeStep;
 
             int vertCursor = 0;
             for (int i = 0; i < count; i++)
             {
                 Vehicle v = _vehicles[i];
+                VehicleTemplate tpl = v.Template;
                 ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
 
                 float u = 1f - v.T;
                 Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
                 Vector3 tangent = 2f * u * (p1 - p0) + 2f * v.T * (p2 - p1);
                 if (tangent.sqrMagnitude < 1e-6f) tangent = p2 - p0;
-                Quaternion rot = tangent.sqrMagnitude > 1e-6f
+                Quaternion pathRot = tangent.sqrMagnitude > 1e-6f
                     ? Quaternion.LookRotation(tangent.normalized, Vector3.up)
                     : Quaternion.identity;
 
-                Vector3[] srcV = v.Template.Vertices;
-                Vector3[] srcN = v.Template.Normals;
+                Quaternion bodyRot = pathRot * Quaternion.Euler(v.Pitch, 0f, v.Roll);
+                float bobY = Mathf.Sin(_animTime * 15f + v.Phase) * (0.008f + 0.006f * (v.CurrentSpeed / 6f));
+                Vector3 bodyOffset = new Vector3(0f, bobY, 0f);
+
+                int turnSign = GetTurnSign(v.InDir, v.OutDir);
+                float steerDeg = turnSign * 22f * Mathf.Sin(Mathf.Clamp01(v.T) * Mathf.PI);
+                Quaternion spinRot = Quaternion.Euler(v.WheelAngle, 0f, 0f);
+                Quaternion wheelRotFront = pathRot * Quaternion.Euler(0f, steerDeg, 0f) * spinRot;
+                Quaternion wheelRotRear = pathRot * spinRot;
+
+                Vector3[] srcV = tpl.Vertices;
+                Vector3[] srcN = tpl.Normals;
+                byte[] partIds = tpl.PartIds;
+                Vector3[] pivots = tpl.PartPivots;
+                bool pulseStrobes = updateColors && tpl.HasEmergencyLights;
+
                 for (int k = 0; k < srcV.Length; k++)
                 {
-                    _renderVertices[vertCursor] = rot * srcV[k] + pos;
-                    _renderNormals[vertCursor] = rot * srcN[k];
+                    byte partId = partIds[k];
+                    if (partId >= VehicleMeshFactory.PartWheelFL && partId <= VehicleMeshFactory.PartWheelRR)
+                    {
+                        Vector3 pivot = pivots[partId];
+                        Quaternion wRot = partId <= VehicleMeshFactory.PartWheelFR ? wheelRotFront : wheelRotRear;
+                        Vector3 worldPivot = pos + pathRot * pivot;
+                        _renderVertices[vertCursor] = worldPivot + wRot * (srcV[k] - pivot);
+                        _renderNormals[vertCursor] = wRot * srcN[k];
+                    }
+                    else
+                    {
+                        _renderVertices[vertCursor] = pos + bodyOffset + bodyRot * srcV[k];
+                        _renderNormals[vertCursor] = bodyRot * srcN[k];
+
+                        if (pulseStrobes)
+                        {
+                            if (partId == VehicleMeshFactory.PartStrobeL)
+                                _renderColors[vertCursor] = strobeStep == 0 ? tpl.StrobeLeftColor : StrobeDim;
+                            else if (partId == VehicleMeshFactory.PartStrobeR)
+                                _renderColors[vertCursor] = strobeStep == 1 ? tpl.StrobeRightColor : StrobeDim;
+                        }
+                    }
                     vertCursor++;
                 }
             }
@@ -373,6 +463,7 @@ namespace XCity
             {
                 _mesh.vertices = _renderVertices;
                 _mesh.normals = _renderNormals;
+                if (updateColors) _mesh.colors32 = _renderColors;
                 _mesh.bounds = _mapBounds;
             }
         }

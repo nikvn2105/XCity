@@ -428,9 +428,15 @@ namespace XCity
             int delta = rng.Range(-15, 16);
             byte g = (byte)Mathf.Clamp(140 + delta, 90, 185);
             Color32 foliage = new Color32((byte)(65 + delta / 2), g, (byte)(65 + delta / 2), 255);
+            Color32 foliageTip = new Color32((byte)Mathf.Min(255, foliage.r + 18), (byte)Mathf.Min(255, foliage.g + 22), (byte)Mathf.Min(255, foliage.b + 14), 255);
 
-            b.AddBox(new Vector3(tx, 0.24f, tz), new Vector3(0.12f, 0.4f, 0.12f), TrunkBrown, TrunkBrown);
-            b.AddBox(new Vector3(tx, 0.72f, tz), new Vector3(0.7f, 0.7f, 0.7f), foliage, foliage);
+            b.AddCylinder(new Vector3(tx, 0.04f, tz), 0.08f, 0.055f, 0.38f, 5,
+                TrunkBrown, MeshBuilder.WithSway(TrunkBrown, 0.14f), false, TrunkBrown);
+            b.AddCylinder(new Vector3(tx, 0.36f, tz), 0.22f, 0.44f, 0.26f, 6,
+                MeshBuilder.WithSway(foliage, 0.16f), MeshBuilder.WithSway(foliage, 0.40f), false, foliage);
+            b.AddCylinder(new Vector3(tx, 0.62f, tz), 0.44f, 0.16f, 0.38f, 6,
+                MeshBuilder.WithSway(foliageTip, 0.40f), MeshBuilder.WithSway(foliageTip, 0.60f),
+                true, MeshBuilder.WithSway(foliageTip, 0.60f));
         }
 
         private static Color32 PickWindowColor(ref CellRng rng) =>

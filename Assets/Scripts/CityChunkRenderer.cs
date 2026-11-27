@@ -178,7 +178,7 @@ namespace XCity
                 var planter = new Vector3(shoulder, CurbY + 0.07f, shoulder);
                 _props.AddBox(planter, new Vector3(0.45f, 0.14f, 0.45f), Curb, Paving);
                 _props.AddCylinder(planter + Vector3.up * 0.07f, 0.19f, 0.14f, 0.28f,
-                    6, Broadleaf, true, GrassLight);
+                    6, Broadleaf, MeshBuilder.WithSway(Broadleaf, 0.28f), true, MeshBuilder.WithSway(GrassLight, 0.28f));
             }
         }
 
@@ -252,22 +252,27 @@ namespace XCity
         private void AddTree(float x, float z, float scale, bool evergreen)
         {
             var baseCenter = new Vector3(x, 0.008f, z);
-            _props.AddCylinder(baseCenter, 0.11f * scale, 0.08f * scale, 0.93f * scale, 5, Bark, false, Bark);
+            _props.AddCylinder(baseCenter, 0.11f * scale, 0.08f * scale, 0.93f * scale, 5,
+                Bark, MeshBuilder.WithSway(Bark, 0.14f), false, Bark);
             if (evergreen)
             {
                 _props.AddCylinder(baseCenter + Vector3.up * (0.64f * scale), 0.63f * scale, 0.07f * scale,
-                    1.05f * scale, 6, Pine, true, Pine);
+                    1.05f * scale, 6, MeshBuilder.WithSway(Pine, 0.16f), MeshBuilder.WithSway(Pine, 0.42f),
+                    true, MeshBuilder.WithSway(Pine, 0.42f));
                 Color32 tip = Color32.Lerp(Pine, GrassLight, 0.24f);
                 _props.AddCylinder(baseCenter + Vector3.up * (1.12f * scale), 0.49f * scale, 0.045f * scale,
-                    0.99f * scale, 6, tip, true, tip);
+                    0.99f * scale, 6, MeshBuilder.WithSway(tip, 0.34f), MeshBuilder.WithSway(tip, 0.65f),
+                    true, MeshBuilder.WithSway(tip, 0.65f));
                 return;
             }
 
             Color32 lit = Color32.Lerp(Broadleaf, GrassLight, 0.50f);
             _props.AddCylinder(baseCenter + Vector3.up * (0.73f * scale), 0.33f * scale, 0.77f * scale,
-                0.44f * scale, 7, Broadleaf, false, lit);
+                0.44f * scale, 7, MeshBuilder.WithSway(Broadleaf, 0.16f), MeshBuilder.WithSway(Broadleaf, 0.38f),
+                false, lit);
             _props.AddCylinder(baseCenter + Vector3.up * (1.17f * scale), 0.77f * scale, 0.36f * scale,
-                0.72f * scale, 7, lit, true, GrassLight);
+                0.72f * scale, 7, MeshBuilder.WithSway(lit, 0.38f), MeshBuilder.WithSway(lit, 0.62f),
+                true, MeshBuilder.WithSway(GrassLight, 0.62f));
         }
 
         private static void Rect(MeshBuilder mesh, float x0, float z0, float x1, float z1, float y, Color32 color)
