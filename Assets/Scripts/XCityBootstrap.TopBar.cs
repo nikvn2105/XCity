@@ -179,7 +179,9 @@ namespace XCity
             if (_toasts.Count >= MaxToasts) DismissToast(_toasts[0]);
 
             var root = CreatePanel(_toastRoot, "Toast", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero, UiTheme.PanelSolid);
-            root.AddComponent<LayoutElement>().preferredHeight = UiTheme.MinTouch + 8f;
+            // The toast column has zero height, so the layout falls back to minHeight: set both.
+            var size = root.AddComponent<LayoutElement>();
+            size.minHeight = size.preferredHeight = UiTheme.MinTouch + 8f;
             var toast = new Toast
             {
                 Root = root,
