@@ -15,30 +15,14 @@ namespace XCity
         Bulldoze
     }
 
-    public enum CellType
-    {
-        Empty,
-        Road,
-        Residential,
-        Commercial,
-        Industrial
-    }
-
-    public struct CityCell
-    {
-        public CellType Type;
-        public int Level;
-        public GameObject Visual;
-        public GameObject Building;
-    }
-
     public class XCityBootstrap : MonoBehaviour
     {
-        private const int GridSize = 32;
+        private const int GridSize = CitySimulation.GridSize;
         private const float CellSize = 4f;
-        private const int RoadCost = 100;
+        private const float TickInterval = 1.5f;
 
-        private CityCell[,] _grid;
+        private CitySimulation _city;
+        private CityChunkRenderer _cityRenderer;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
         private Vector3 _camTarget;
@@ -46,10 +30,7 @@ namespace XCity
         private float _camPitch = 48f;
         private float _camYaw = 45f;
 
-        private int _money = 50000;
-        private int _population = 0;
-        private float _simTimer = 0f;
-        private float _simSpeed = 1f;
+        private float _simTimer;
 
         private Text _hudStatusText;
         private readonly Dictionary<BuildTool, Image> _toolButtons = new Dictionary<BuildTool, Image>();
@@ -93,8 +74,8 @@ namespace XCity
 
         private void Awake()
         {
-            Application.targetFrameRate = 60;
-            _grid = new CityCell[GridSize, GridSize];
+            Application.targetFrameRate = 30;
+            _city = new CitySimulation();
             CreateMaterials();
             SetupEnvironment();
             SetupCamera();
@@ -137,6 +118,8 @@ namespace XCity
             ground.transform.position = new Vector3(worldSpan * 0.5f, -0.5f, worldSpan * 0.5f);
             ground.transform.localScale = new Vector3(worldSpan, 1f, worldSpan);
             ground.GetComponent<Renderer>().sharedMaterial = _groundMat;
+            var materials = new[] { _roadMat, _resMat, _comMat, _indMat, _bldgResMat, _bldgComMat, _bldgIndMat };
+            _cityRenderer = new CityChunkRenderer(_city, CellSize, materials, transform);
         }
 
         private void SetupCamera()
@@ -409,7 +392,7 @@ namespace XCity
                 !IsPointerOverUI(position) && TryGetCell(position, out var cell))
             {
                 AddStrokeSample(cell);
-                if (_activeTool != BuildTool.Road || _roadStrokeCost <= _money)
+                if (_activeTool != BuildTool.Road || _roadStrokeCost <= _city.Money)
                     foreach (Vector2Int point in _stroke)
                         ApplyCellTool(point.x, point.y);
             }
@@ -486,7 +469,7 @@ namespace XCity
             int index = _stroke.Count;
             _stroke.Add(cell);
             if (_activeTool != BuildTool.Road) return;
-            if (_grid[cell.x, cell.y].Type != CellType.Road) _roadStrokeCost += RoadCost;
+            if (_city.GetCell(cell.x, cell.y).Type != CellType.Road) _roadStrokeCost += CitySimulation.RoadCost;
             if (index == _roadMarkers.Count)
             {
                 var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -507,20 +490,7 @@ namespace XCity
 
         private void ApplyCellTool(int gx, int gz)
         {
-            ref CityCell cell = ref _grid[gx, gz];
-
-            if (_activeTool == BuildTool.Bulldoze)
-            {
-                if (cell.Type == CellType.Empty) return;
-                if (cell.Visual != null) Destroy(cell.Visual);
-                if (cell.Building != null) Destroy(cell.Building);
-                cell = default;
-                _money -= 10;
-                RefreshHUD();
-                return;
-            }
-
-            CellType targetType = _activeTool switch
+            CellType type = _activeTool switch
             {
                 BuildTool.Road => CellType.Road,
                 BuildTool.Residential => CellType.Residential,
@@ -528,120 +498,25 @@ namespace XCity
                 BuildTool.Industrial => CellType.Industrial,
                 _ => CellType.Empty
             };
-
-            if (targetType == CellType.Empty || cell.Type == targetType) return;
-
-            int cost = targetType == CellType.Road ? RoadCost : 50;
-            if (_money < cost) return;
-
-            if (cell.Visual != null) Destroy(cell.Visual);
-            if (cell.Building != null) Destroy(cell.Building);
-
-            cell.Type = targetType;
-            cell.Level = 0;
-            _money -= cost;
-
-            Vector3 worldPos = new Vector3((gx + 0.5f) * CellSize, 0.05f, (gz + 0.5f) * CellSize);
-            var tile = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            tile.name = $"Tile_{gx}_{gz}_{targetType}";
-            tile.transform.position = worldPos;
-            tile.transform.localScale = new Vector3(CellSize * 0.96f, 0.1f, CellSize * 0.96f);
-            Destroy(tile.GetComponent<Collider>());
-
-            tile.GetComponent<Renderer>().sharedMaterial = targetType switch
-            {
-                CellType.Road => _roadMat,
-                CellType.Residential => _resMat,
-                CellType.Commercial => _comMat,
-                CellType.Industrial => _indMat,
-                _ => _indMat
-            };
-
-            cell.Visual = tile;
-            RefreshHUD();
+            _city.TrySetCell(gx, gz, type);
         }
 
         private void RunSimulationTick()
         {
-            _simTimer += Time.deltaTime * _simSpeed;
-            if (_simTimer < 1.5f) return;
-            _simTimer = 0f;
-
-            int pop = 0;
-            int taxIncome = 0;
-            int upkeep = 0;
-
-            for (int x = 0; x < GridSize; x++)
-            {
-                for (int z = 0; z < GridSize; z++)
-                {
-                    ref CityCell cell = ref _grid[x, z];
-                    if (cell.Type == CellType.Road)
-                    {
-                        upkeep += 2;
-                        continue;
-                    }
-
-                    if (cell.Type == CellType.Residential || cell.Type == CellType.Commercial || cell.Type == CellType.Industrial)
-                    {
-                        if (cell.Building == null && HasAdjacentRoad(x, z) && Random.value < 0.35f)
-                        {
-                            SpawnBuilding(x, z, ref cell);
-                        }
-
-                        if (cell.Building != null)
-                        {
-                            if (cell.Type == CellType.Residential) pop += 12 * cell.Level;
-                            taxIncome += 15 * cell.Level;
-                        }
-                    }
-                }
-            }
-
-            _population = pop;
-            _money += (taxIncome - upkeep);
+            _simTimer += Time.deltaTime;
+            if (_simTimer < TickInterval) return;
+            _simTimer -= TickInterval;
+            _city.Tick();
             RefreshHUD();
         }
 
-        private bool HasAdjacentRoad(int x, int z)
-        {
-            int[] dx = { -1, 1, 0, 0 };
-            int[] dz = { 0, 0, -1, 1 };
-            for (int i = 0; i < 4; i++)
-            {
-                int nx = x + dx[i];
-                int nz = z + dz[i];
-                if (nx >= 0 && nx < GridSize && nz >= 0 && nz < GridSize && _grid[nx, nz].Type == CellType.Road)
-                    return true;
-            }
-            return false;
-        }
+        private void LateUpdate() => _cityRenderer.RebuildDirtyChunks();
 
-        private void SpawnBuilding(int x, int z, ref CityCell cell)
-        {
-            cell.Level = 1;
-            float height = cell.Type switch
-            {
-                CellType.Residential => Random.Range(2.4f, 4.5f),
-                CellType.Commercial => Random.Range(4.0f, 7.5f),
-                _ => Random.Range(2.2f, 3.8f)
-            };
+        private void OnDestroy() => _cityRenderer?.Dispose();
 
-            var bldg = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            bldg.name = $"Building_{x}_{z}";
-            bldg.transform.position = new Vector3((x + 0.5f) * CellSize, height * 0.5f + 0.1f, (z + 0.5f) * CellSize);
-            bldg.transform.localScale = new Vector3(CellSize * 0.72f, height, CellSize * 0.72f);
-            Destroy(bldg.GetComponent<Collider>());
-
-            bldg.GetComponent<Renderer>().sharedMaterial = cell.Type switch
-            {
-                CellType.Residential => _bldgResMat,
-                CellType.Commercial => _bldgComMat,
-                _ => _bldgIndMat
-            };
-
-            cell.Building = bldg;
-        }
+        private string _lastHudHint;
+        private int _lastHudMoney;
+        private int _lastHudPopulation;
 
         private void RefreshHUD()
         {
@@ -650,11 +525,16 @@ namespace XCity
                 string hint = "Kéo để vẽ đường · Thả để đặt";
                 if (_activeTool == BuildTool.Road && _stroke.Count > 0)
                 {
-                    bool affordable = _roadStrokeCost <= _money;
+                    bool affordable = _roadStrokeCost <= _city.Money;
                     _roadPreviewMat.color = affordable ? Color.green : Color.red;
                     hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
                 }
-                _hudStatusText.text = $"XCity  |  Ngân sách: ${_money:N0}  |  Dân số: {_population:N0}  |  {hint}";
+                if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population)
+                    return;
+                _lastHudHint = hint;
+                _lastHudMoney = _city.Money;
+                _lastHudPopulation = _city.Population;
+                _hudStatusText.text = $"XCity  |  Ngân sách: ${_city.Money:N0}  |  Dân số: {_city.Population:N0}  |  {hint}";
             }
         }
     }
