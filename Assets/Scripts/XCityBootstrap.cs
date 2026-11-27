@@ -83,11 +83,26 @@ namespace XCity
         private GraphicRaycaster _hudRaycaster;
         private PointerEventData _hudPointer;
         private readonly List<RaycastResult> _hudHits = new List<RaycastResult>();
-        private readonly List<Vector2Int> _stroke = new List<Vector2Int>();
-        private readonly HashSet<Vector2Int> _strokeCells = new HashSet<Vector2Int>();
-        private readonly List<Transform> _roadMarkers = new List<Transform>();
+        private const int PreviewPoolCapacity = 256;
+        private readonly List<Vector2Int> _stroke = new List<Vector2Int>(PreviewPoolCapacity);
+        private readonly HashSet<Vector2Int> _strokeCells = new HashSet<Vector2Int>(PreviewPoolCapacity);
+        private readonly List<MeshRenderer> _roadMarkers = new List<MeshRenderer>(PreviewPoolCapacity);
+        private readonly HashSet<int> _quotedBridges = new HashSet<int>(PreviewPoolCapacity);
         private Material _roadPreviewMat;
-        private int _roadStrokeCost;
+        private Material _invalidPreviewMat;
+        private Material _bulldozePreviewMat;
+        private int _strokeCost;
+        private int _strokeBudget;
+        private bool _strokeOverBudget;
+        private Text _strokeCostLabel;
+        private readonly Text[] _strokeCostDigits = new Text[13];
+        private static readonly string[] CostSymbols = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "," };
+        private int _shownStrokeCost = -1;
+        private const string StrokeCostPrefix = "Chi phí: $";
+        private const string OverBudgetPrefix = "Thiếu ngân sách · Chi phí: $";
+        private float _strokeCostPrefixWidth;
+        private float _overBudgetPrefixWidth;
+        private bool _shownStrokeOverBudget;
         private Vector2Int? _bridgeStart;
         private Vector2Int _bridgeEnd;
         private BridgeQuote _bridgeQuote;
@@ -260,7 +275,10 @@ namespace XCity
             _safeAreaRoot = new GameObject("SafeArea", typeof(RectTransform)).GetComponent<RectTransform>();
             _safeAreaRoot.SetParent(canvas.transform, false);
             UpdateSafeArea();
-            _roadPreviewMat = MakeMat(_roadMat.shader, Color.green);
+            _roadPreviewMat = MakeMat(_roadMat.shader, new Color(0.30f, 0.94f, 0.42f));
+            _invalidPreviewMat = MakeMat(_roadMat.shader, new Color(1f, 0.16f, 0.18f));
+            _bulldozePreviewMat = MakeMat(_roadMat.shader, new Color(1f, 0.68f, 0.12f));
+            for (int i = 0; i < PreviewPoolCapacity; i++) CreateStreetMarker();
 
             Font font = Resources.Load<Font>("NotoSans-Regular");
 
@@ -280,6 +298,7 @@ namespace XCity
             _hudStatusText.resizeTextForBestFit = true;
             _hudStatusText.resizeTextMinSize = 13;
             _hudStatusText.resizeTextMaxSize = 21;
+            SetupStrokeCost(statusRect, font);
 
             _undoButton = CreateHudButton(topBar.transform, font, "Hoàn tác", "UndoBuild");
             var undoRect = (RectTransform)_undoButton.transform;
@@ -666,7 +685,7 @@ namespace XCity
                     UpdateBridgePreview(bank);
                 }
             }
-            else if (_activeTool != BuildTool.Pan && !IsSinglePlacement && TryGetCell(position, out var cell))
+            else if (_activeTool != BuildTool.Pan && TryGetCell(position, out var cell))
                 AddStrokeSample(cell);
         }
 
@@ -684,7 +703,11 @@ namespace XCity
                 TrackPanVelocity(delta);
                 UpdateCameraTransform();
             }
-            else if (!IsSinglePlacement && TryGetCell(position, out var cell))
+            else if (IsSinglePlacement && IsPanMovement(position))
+            {
+                CancelGesture();
+            }
+            else if (TryGetCell(position, out var cell))
             {
                 if (_activeTool == BuildTool.Bridge) UpdateBridgePreview(cell);
                 else AddStrokeSample(cell);
@@ -731,9 +754,7 @@ namespace XCity
                 {
                     if (!IsPanMovement(position))
                     {
-                        CellType placement = _activeTool == BuildTool.PowerPlant
-                            ? CellType.PowerPlant : BuildingCatalog.Get(_activeBuildingModel).Type;
-                        if (_city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel))
+                        if (_city.TrySetCell(cell.x, cell.y, StrokeType, _activeBuildingModel))
                         {
                             _shoreWarningUntil = 0f;
                             _cityDirty = true;
@@ -750,8 +771,7 @@ namespace XCity
                 else
                 {
                     AddStrokeSample(cell);
-                    if (_activeTool != BuildTool.Road || _roadStrokeCost <= _city.Money)
-                        ApplyBuildStroke();
+                    ApplyBuildStroke();
                 }
             }
             CancelGesture();
@@ -763,11 +783,14 @@ namespace XCity
             _activeFingerId = -1;
             _bridgeStart = null;
             if (_stroke.Count == 0) return;
-            if (_activeTool == BuildTool.Road || _activeTool == BuildTool.Bridge)
-                HideStreetPreview();
+            HideStreetPreview();
             _stroke.Clear();
             _strokeCells.Clear();
-            _roadStrokeCost = 0;
+            _quotedBridges.Clear();
+            _strokeCost = 0;
+            _strokeOverBudget = false;
+            _strokeCostLabel.gameObject.SetActive(false);
+            _shownStrokeCost = -1;
             RefreshHUD();
         }
 
@@ -829,9 +852,8 @@ namespace XCity
             Vector3 hit = ray.GetPoint(distance);
             cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
             if (cell.x < 0 || cell.y < 0 || cell.x >= GridSize || cell.y >= GridSize) return false;
-            return _activeTool == BuildTool.Bridge || CitySimulation.IsBuildable(cell.x, cell.y) ||
-                (IsSinglePlacement && BuildingCatalog.NeedsShore(_activeBuildingModel)) ||
-                (_activeTool == BuildTool.Bulldoze || _activeTool == BuildTool.Pan) &&
+            // Build gestures need water hits too, so the simulation can mark them invalid.
+            return _activeTool != BuildTool.Pan || CitySimulation.IsBuildable(cell.x, cell.y) ||
                 _city.GetCell(cell.x, cell.y).IsBridge;
         }
 
@@ -870,6 +892,17 @@ namespace XCity
         private void AddStrokeSample(Vector2Int destination)
         {
             if (_stroke.Count > 0 && destination == _lastStrokeSample) return;
+            if (IsSinglePlacement && _stroke.Count > 0)
+            {
+                HideStreetPreview();
+                _stroke.Clear();
+                _strokeCells.Clear();
+                _strokeCost = 0;
+                _strokeOverBudget = false;
+            }
+            bool firstSample = _stroke.Count == 0 && !_strokeCostLabel.gameObject.activeSelf;
+            if (_stroke.Count == 0) _strokeBudget = _city.Money;
+            bool wasOverBudget = _strokeOverBudget;
             Vector2Int cursor = _stroke.Count == 0 ? destination : _lastStrokeSample;
             int stepsX = Mathf.Abs(destination.x - cursor.x);
             int stepsY = Mathf.Abs(destination.y - cursor.y);
@@ -894,20 +927,83 @@ namespace XCity
                 AddStrokeCell(cursor);
             }
             _lastStrokeSample = destination;
-            RefreshHUD();
+            if (_activeTool == BuildTool.Road && !wasOverBudget && _strokeOverBudget)
+                RefreshStrokePreview();
+            if (firstSample) RefreshHUD();
+            else UpdateStrokeCost();
         }
+
+        private CellType StrokeType => _activeTool switch
+        {
+            BuildTool.Road => CellType.Road,
+            BuildTool.Residential => CellType.Residential,
+            BuildTool.Commercial => CellType.Commercial,
+            BuildTool.Industrial => CellType.Industrial,
+            BuildTool.PowerPlant => CellType.PowerPlant,
+            BuildTool.School or BuildTool.CivicService => BuildingCatalog.Get(_activeBuildingModel).Type,
+            _ => CellType.Empty
+        };
 
         private void AddStrokeCell(Vector2Int cell)
         {
-            if (!CitySimulation.IsBuildable(cell.x, cell.y) &&
-                (_activeTool != BuildTool.Bulldoze || !_city.GetCell(cell.x, cell.y).IsBridge)) return;
             if (!_strokeCells.Add(cell)) return;
 
             int index = _stroke.Count;
             _stroke.Add(cell);
-            if (_activeTool != BuildTool.Road) return;
-            if (_city.GetCell(cell.x, cell.y).Type != CellType.Road) _roadStrokeCost += CitySimulation.RoadCost;
-            ShowStreetPreview(index, cell);
+            Material material = QuoteStrokeMarker(cell);
+            ShowStreetPreview(index, cell, material, PreviewRise(cell));
+        }
+
+        private Material QuoteStrokeMarker(Vector2Int cell)
+        {
+            if (!_city.TryQuoteCell(cell.x, cell.y, StrokeType, _activeBuildingModel, out int cost, out int bridge, _strokeBudget))
+                return _invalidPreviewMat;
+
+            if (_activeTool == BuildTool.Bulldoze)
+            {
+                if (bridge < 0 || _quotedBridges.Add(bridge))
+                {
+                    _strokeCost += cost;
+                    _strokeBudget -= cost;
+                }
+                return _bulldozePreviewMat;
+            }
+
+            _strokeCost += cost;
+            if (_activeTool == BuildTool.Road)
+            {
+                _strokeOverBudget = _strokeCost > _city.Money;
+                return _strokeOverBudget ? _invalidPreviewMat : _roadPreviewMat;
+            }
+
+            // The simulation applies eligible cells in stroke order and skips cells it cannot afford.
+            if (cost <= _strokeBudget)
+            {
+                _strokeBudget -= cost;
+                return _roadPreviewMat;
+            }
+            _strokeOverBudget = true;
+            return _invalidPreviewMat;
+        }
+
+        private void RefreshStrokePreview()
+        {
+            _strokeBudget = _city.Money;
+            _strokeCost = 0;
+            _strokeOverBudget = false;
+            _quotedBridges.Clear();
+            for (int i = 0; i < _stroke.Count; i++)
+                _roadMarkers[i].sharedMaterial = QuoteStrokeMarker(_stroke[i]);
+            if (_activeTool == BuildTool.Road && _strokeOverBudget)
+                for (int i = 0; i < _stroke.Count; i++)
+                    _roadMarkers[i].sharedMaterial = _invalidPreviewMat;
+        }
+
+        private float PreviewRise(Vector2Int cell)
+        {
+            if (_activeTool == BuildTool.Bulldoze && _city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile bridge))
+                return Mathf.Max(bridge.Middle, Mathf.Max(bridge.Start, bridge.End));
+            return 0f;
         }
 
         private void UpdateBridgePreview(Vector2Int pointer)
@@ -916,10 +1012,18 @@ namespace XCity
             Vector2Int start = _bridgeStart.Value;
             Vector2Int delta = pointer - start;
             bool alongX = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y);
-            _bridgeEnd = alongX ? new Vector2Int(pointer.x, start.y) : new Vector2Int(start.x, pointer.y);
+            var end = alongX ? new Vector2Int(pointer.x, start.y) : new Vector2Int(start.x, pointer.y);
+            BridgeQuote quote = _city.QuoteBridge(start.x, start.y, end.x, end.y, out int cost);
+            bool sameQuote = _stroke.Count > 0 && quote == _bridgeQuote;
+            if (sameQuote && end == _bridgeEnd && cost == _strokeCost) return;
+            bool hintChanged = !sameQuote && !(HasBridgePrice &&
+                (quote == BridgeQuote.Ready || quote == BridgeQuote.InsufficientFunds));
+            _bridgeEnd = end;
+            _bridgeQuote = quote;
+            _strokeCost = cost;
+            _strokeOverBudget = quote == BridgeQuote.InsufficientFunds;
             HideStreetPreview();
             _stroke.Clear();
-            _bridgeQuote = _city.QuoteBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y, out _roadStrokeCost);
             int span = alongX ? delta.x : delta.y;
             int direction = System.Math.Sign(span);
             int previews = Mathf.Min(Mathf.Abs(span) + 1, CitySimulation.MaxBridgeWaterTiles + 2);
@@ -930,10 +1034,14 @@ namespace XCity
                 _stroke.Add(tile);
                 float rise = i > 0 && i < Mathf.Abs(span)
                     ? BridgeProfile.Rise(i - 0.5f, Mathf.Abs(span) - 1) : 0f;
-                ShowStreetPreview(i, tile, rise);
+                ShowStreetPreview(i, tile, quote == BridgeQuote.Ready ? _roadPreviewMat : _invalidPreviewMat, rise);
             }
-            RefreshHUD();
+            if (hintChanged) RefreshHUD();
+            else if (HasBridgePrice) UpdateStrokeCost();
         }
+
+        private bool HasBridgePrice => _bridgeStart.HasValue &&
+            (_bridgeQuote == BridgeQuote.Ready || _bridgeQuote == BridgeQuote.InsufficientFunds);
 
         private void HideStreetPreview()
         {
@@ -941,36 +1049,34 @@ namespace XCity
                 _roadMarkers[i].gameObject.SetActive(false);
         }
 
-        private void ShowStreetPreview(int index, Vector2Int cell, float rise = 0f)
+        private void CreateStreetMarker()
         {
-            if (index == _roadMarkers.Count)
-            {
-                var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                marker.name = "RoadPreview";
-                marker.GetComponent<Collider>().enabled = false;
-                Destroy(marker.GetComponent<Collider>());
-                var renderer = marker.GetComponent<Renderer>();
-                renderer.sharedMaterial = _roadPreviewMat;
-                renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-                marker.transform.localScale = new Vector3(CellSize * 0.9f, 0.06f, CellSize * 0.9f);
-                _roadMarkers.Add(marker.transform);
-            }
+            var marker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            marker.name = "StreetPreview";
+            marker.transform.SetParent(transform, false);
+            marker.GetComponent<Collider>().enabled = false;
+            Destroy(marker.GetComponent<Collider>());
+            var renderer = marker.GetComponent<MeshRenderer>();
+            renderer.sharedMaterial = _roadPreviewMat;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            marker.transform.localScale = new Vector3(CellSize * 0.98f, 0.06f, CellSize * 0.98f);
+            marker.SetActive(false);
+            _roadMarkers.Add(renderer);
+        }
 
-            Transform preview = _roadMarkers[index];
-            preview.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f + rise, (cell.y + 0.5f) * CellSize);
+        private void ShowStreetPreview(int index, Vector2Int cell, Material material, float rise = 0f)
+        {
+            if (index == _roadMarkers.Count) CreateStreetMarker();
+            MeshRenderer preview = _roadMarkers[index];
+            if (preview.sharedMaterial != material) preview.sharedMaterial = material;
+            preview.transform.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f + rise, (cell.y + 0.5f) * CellSize);
             preview.gameObject.SetActive(true);
         }
 
         private void ApplyBuildStroke()
         {
-            CellType type = _activeTool switch
-            {
-                BuildTool.Road => CellType.Road,
-                BuildTool.Residential => CellType.Residential,
-                BuildTool.Commercial => CellType.Commercial,
-                BuildTool.Industrial => CellType.Industrial,
-                _ => CellType.Empty
-            };
+            if (_activeTool == BuildTool.Road && _strokeOverBudget) return;
+            CellType type = StrokeType;
             if (_city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel))
             {
                 _cityDirty = true;
@@ -1090,6 +1196,8 @@ namespace XCity
             Destroy(_worldMapTexture);
             Destroy(_roadMat);
             Destroy(_roadPreviewMat);
+            Destroy(_invalidPreviewMat);
+            Destroy(_bulldozePreviewMat);
             Destroy(_buildingMaterial);
             if (_inspectionMaterial != null) Destroy(_inspectionMaterial);
             // DontSave survives the "new city" scene reload, so it must be freed by hand.
@@ -1214,11 +1322,10 @@ namespace XCity
         private string GetBridgeHint()
         {
             if (!_bridgeStart.HasValue) return "Kéo thẳng từ bờ này sang bờ kia để xây cầu";
-            _roadPreviewMat.color = _bridgeQuote == BridgeQuote.Ready ? Color.green : Color.red;
             return _bridgeQuote switch
             {
-                BridgeQuote.Ready => $"Chi phí cầu: ${_roadStrokeCost:N0} · Thả để xây",
-                BridgeQuote.InsufficientFunds => $"Thiếu ngân sách · Cầu: ${_roadStrokeCost:N0}",
+                BridgeQuote.Ready => "Thả để xây cầu",
+                BridgeQuote.InsufficientFunds => "Thiếu ngân sách",
                 BridgeQuote.TooLong => $"Cầu tối đa {CitySimulation.MaxBridgeWaterTiles} ô nước",
                 BridgeQuote.SpanObstructed => "Cần một nhịp nước trống giữa hai đầu cầu",
                 _ => "Kéo tiếp đến đất ở bờ đối diện"
@@ -1279,6 +1386,77 @@ namespace XCity
 
         private static string Signed(int value) => value.ToString("+0;-0;0");
 
+        private void SetupStrokeCost(RectTransform parent, Font font)
+        {
+            _strokeCostLabel = CreateStrokeCostText(parent, font, "StrokeCost", 0f, 400f);
+            _strokeCostLabel.text = StrokeCostPrefix;
+            _strokeCostPrefixWidth = _strokeCostLabel.preferredWidth;
+            _strokeCostLabel.text = OverBudgetPrefix;
+            _overBudgetPrefixWidth = _strokeCostLabel.preferredWidth;
+            for (int i = 0; i < _strokeCostDigits.Length; i++)
+                _strokeCostDigits[i] = CreateStrokeCostText(_strokeCostLabel.rectTransform, font, "CostDigit", 0f, 12f);
+            _strokeCostLabel.gameObject.SetActive(false);
+        }
+
+        private static Text CreateStrokeCostText(RectTransform parent, Font font, string name, float x, float width)
+        {
+            var obj = new GameObject(name, typeof(RectTransform));
+            var rect = (RectTransform)obj.transform;
+            rect.SetParent(parent, false);
+            rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
+            rect.pivot = Vector2.zero;
+            rect.anchoredPosition = new Vector2(x, -23f);
+            rect.sizeDelta = new Vector2(width, 22f);
+            var label = obj.AddComponent<Text>();
+            label.font = font;
+            label.fontSize = 16;
+            label.alignment = TextAnchor.MiddleLeft;
+            label.color = Color.white;
+            label.raycastTarget = false;
+            return label;
+        }
+
+        private void UpdateStrokeCost()
+        {
+            int cost = _strokeCost;
+            bool layoutChanged = _shownStrokeCost < 0 || _shownStrokeOverBudget != _strokeOverBudget;
+            if (!layoutChanged && _shownStrokeCost == cost) return;
+
+            if (layoutChanged)
+                _strokeCostLabel.text = _strokeOverBudget ? OverBudgetPrefix : StrokeCostPrefix;
+            _strokeCostLabel.gameObject.SetActive(true);
+            _shownStrokeCost = cost;
+            _shownStrokeOverBudget = _strokeOverBudget;
+
+            int length = 0;
+            int remaining = cost;
+            do
+            {
+                if (length == 3 || length == 7 || length == 11) length++;
+                length++;
+                remaining /= 10;
+            } while (remaining > 0);
+
+            // Reuse immutable one-character labels because uGUI Text needs a string for each update.
+            float start = _strokeOverBudget ? _overBudgetPrefixWidth : _strokeCostPrefixWidth;
+            int digits = 0;
+            for (int i = length - 1; i >= 0; i--)
+            {
+                bool separator = digits == 3;
+                Text digit = _strokeCostDigits[i];
+                digit.rectTransform.anchoredPosition = new Vector2(start + i * 10f, -11f);
+                digit.text = CostSymbols[separator ? 10 : cost % 10];
+                if (separator) digits = 0;
+                else
+                {
+                    digits++;
+                    cost /= 10;
+                }
+            }
+            for (int i = 0; i < _strokeCostDigits.Length; i++)
+                if (_strokeCostDigits[i].enabled != (i < length)) _strokeCostDigits[i].enabled = i < length;
+        }
+
         private void RefreshHUD()
         {
             int unlockTier = CurrentUnlockTier(_city.PeakPopulation);
@@ -1329,11 +1507,17 @@ namespace XCity
                         ? $"Thiếu ngân sách · {item.Name} · ${item.Cost:N0}"
                         : $"{hint} · {item.Name} · ${item.Cost:N0}";
                 }
-                if (_activeTool == BuildTool.Road && _stroke.Count > 0)
+                bool isBridge = _activeTool == BuildTool.Bridge;
+                bool showStrokeCost = isBridge ? HasBridgePrice : _stroke.Count > 0;
+                if (showStrokeCost)
                 {
-                    bool affordable = _roadStrokeCost <= _city.Money;
-                    _roadPreviewMat.color = affordable ? Color.green : Color.red;
-                    hint = affordable ? $"Chi phí: ${_roadStrokeCost:N0}" : $"Thiếu ngân sách · Chi phí: ${_roadStrokeCost:N0}";
+                    if (!isBridge) RefreshStrokePreview();
+                    UpdateStrokeCost();
+                }
+                else if (_strokeCostLabel.gameObject.activeSelf)
+                {
+                    _strokeCostLabel.gameObject.SetActive(false);
+                    _shownStrokeCost = -1;
                 }
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
@@ -1355,7 +1539,7 @@ namespace XCity
                 string debt = _city.LoanBalance > 0 ? $" · Nợ ${_city.LoanBalance:N0}" : "";
                 string text = $"${_city.Money:N0} ({_city.LastNetIncome:+#,##0;-#,##0;0}){debt}  |  Dân: {_city.Population:N0}" +
                     $"  |  Việc làm: {_city.Jobs:N0}  |  Nhu cầu  Ở {Signed(_city.ResidentialDemand)}" +
-                    $" · TM {Signed(_city.CommercialDemand)} · CN {Signed(_city.IndustrialDemand)}\n{hint}";
+                    $" · TM {Signed(_city.CommercialDemand)} · CN {Signed(_city.IndustrialDemand)}\n{(showStrokeCost ? "\u00a0" : hint)}";
                 if (text == _lastHudText) return;
                 _lastHudText = text;
                 _hudStatusText.text = text;
