@@ -39,6 +39,7 @@ namespace XCity
                 ("catalog", new Vector3(38f, 0f, 34f), 29f, 48f, 180f),
                 ("overview", new Vector3(54f, 0f, 54f), 136f, 54f, 45f),
                 ("residential", new Vector3(34f, 0f, 34f), 30f, 35f, 30f),
+                ("high-rises", new Vector3(74f, 2.3f, 41f), 20.0f, 19f, 180f),
                 ("commercial", new Vector3(85f, 0.6f, 48f), 34f, 48f, 210f),
                 ("public-services", new Vector3(109f, 0.6f, 49f), 40f, 52f, 155f),
                 ("industry", new Vector3(34f, 0f, 94f), 25f, 36f, 135f),

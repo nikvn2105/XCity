@@ -36,11 +36,21 @@ namespace XCity
                         continue;
                     }
 
+                    if (x == 17 && z >= 8 && z <= 11)
+                    {
+                        var apartment = PreviewBuilding(BuildingModel.Apartment);
+                        apartment.Level = 3;
+                        apartment.Height += 1.8f;
+                        cells[idx] = apartment;
+                        continue;
+                    }
+
                     if (x >= 19 && x <= 23 && z >= 7 && z <= 15)
                     {
                         cells[idx] = PreviewBuilding((x, z) switch
                         {
-                            (19, 8) or (23, 9) => BuildingModel.OfficeTower,
+                            (19, 8) or (19, 10) or (23, 9) => BuildingModel.OfficeTower,
+                            (19, 9) => BuildingModel.Office,
                             (19, 11) or (23, 13) => BuildingModel.Market,
                             (20, 11) or (21, 11) or (22, 13) or (19, 14) => BuildingModel.HighStreet,
                             (22, 11) or (20, 13) => BuildingModel.ShoppingMall,
