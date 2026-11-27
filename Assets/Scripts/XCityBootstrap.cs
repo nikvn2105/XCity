@@ -1235,7 +1235,9 @@ namespace XCity
         private string GetShoreHint() =>
             Time.unscaledTime < _shoreWarningUntil
                 ? "Không giáp nước — chọn ô sát bờ"
-                : "Đặt sát mép nước (một cạnh giáp biển)";
+                : _activeBuildingModel == BuildingModel.Harbor
+                    ? "Đặt sát mép nước (một cạnh giáp biển)"
+                    : "Đặt sát mép nước, cạnh đường có điện";
 
         private GameObject _bankruptPanel;
 
