@@ -7,9 +7,9 @@ namespace XCity
 {
     internal sealed class VehicleSystem : IDisposable
     {
-        private const int MaxVehicles = 40;
+        private const int MaxVehicles = 76;
         private const float RecountInterval = 1.0f;
-        private const float SpawnInterval = 0.3f;
+        private const float SpawnInterval = 0.20f;
         private static readonly Color32 StrobeDim = new Color32(42, 34, 42, 255);
 
         // Direction indices: 0=W(-1,0), 1=E(+1,0), 2=S(0,-1), 3=N(0,+1)
@@ -37,6 +37,12 @@ namespace XCity
             new Vector3(1f, 0f, 0f)
         };
 
+        private struct RoadCandidate
+        {
+            public Vector2Int Cell;
+            public VehicleCategory District;
+        }
+
         private sealed class Vehicle
         {
             public Vector2Int Cell;
@@ -48,6 +54,7 @@ namespace XCity
             public float WheelAngle;
             public float Pitch;
             public float Roll;
+            public float TrailerYaw;
             public float Phase;
             public VehicleTemplate Template;
         }
@@ -56,7 +63,7 @@ namespace XCity
         private readonly float _cellSize;
         private readonly System.Random _rng = new System.Random(1234);
         private readonly List<Vehicle> _vehicles = new List<Vehicle>(MaxVehicles);
-        private readonly List<Vector2Int> _candidates = new List<Vector2Int>(256);
+        private readonly List<RoadCandidate> _candidates = new List<RoadCandidate>(512);
         private readonly HashSet<Vector2Int> _occupied = new HashSet<Vector2Int>();
         private readonly int[] _dirScratch = new int[8];
 
@@ -77,6 +84,7 @@ namespace XCity
         private int _targetCount;
         private bool _topologyDirty = true;
         private bool _hasEmergencyVehicles;
+        private WorldView _view;
 
         public VehicleSystem(CitySimulation city, float cellSize, Material material, Transform parent)
         {
@@ -94,7 +102,7 @@ namespace XCity
             _go.AddComponent<MeshFilter>().sharedMesh = _mesh;
             MeshRenderer renderer = _go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;
-            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.shadowCastingMode = ShadowCastingMode.On;
             renderer.receiveShadows = true;
         }
 
@@ -111,8 +119,6 @@ namespace XCity
             for (int i = 0; i < steps; i++)
                 Update(step);
         }
-
-        private WorldView _view;
 
         public void SetView(WorldView view)
         {
@@ -179,10 +185,20 @@ namespace XCity
                 {
                     if (j == i) continue;
                     Vehicle other = _vehicles[j];
-                    if (other.Cell == v.Cell && other.OutDir == v.OutDir && other.T > v.T && other.T - v.T < 0.42f)
-                        desiredSpeed = Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.85f);
-                    else if (other.Cell == nextCell && other.InDir == v.OutDir && (1f - v.T) + other.T < 0.38f)
-                        desiredSpeed = Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.85f);
+                    float minGapSame = Mathf.Clamp((v.Template.Length + other.Template.Length) * 0.5f / _cellSize + 0.14f, 0.42f, 0.96f);
+                    if (other.Cell == v.Cell && other.OutDir == v.OutDir && other.T > v.T)
+                    {
+                        float gap = other.T - v.T;
+                        if (gap < minGapSame)
+                            desiredSpeed = gap < minGapSame * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                    }
+                    else if (other.Cell == nextCell && other.InDir == v.OutDir)
+                    {
+                        float gap = (1f - v.T) + other.T;
+                        float minGapNext = minGapSame - 0.04f;
+                        if (gap < minGapNext)
+                            desiredSpeed = gap < minGapNext * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                    }
                 }
 
                 float prevSpeed = v.CurrentSpeed;
@@ -199,11 +215,14 @@ namespace XCity
                 float turnWeight = Mathf.Sin(Mathf.Clamp01(v.T) * Mathf.PI);
                 float targetRoll = v.Template.IsTwoWheeler
                     ? -turnSign * 14f * turnWeight
-                    : turnSign * 3.2f * turnWeight;
+                    : turnSign * 3.0f * turnWeight;
                 v.Roll = Mathf.MoveTowards(v.Roll, targetRoll, 45f * dt);
 
                 float targetPitch = Mathf.Clamp(-accel * 0.45f, -3.0f, 3.0f);
                 v.Pitch = Mathf.MoveTowards(v.Pitch, targetPitch, 22f * dt);
+
+                float targetTrailerYaw = v.Template.HasTrailer ? -turnSign * 19f * turnWeight : 0f;
+                v.TrailerYaw = Mathf.MoveTowards(v.TrailerYaw, targetTrailerYaw, 55f * dt);
 
                 if (v.T >= 1f)
                 {
@@ -245,9 +264,13 @@ namespace XCity
                     if (cell.Type == CellType.Road)
                     {
                         if (_city.Roads.GetConnections(x, z) != RoadConnections.None)
-                            _candidates.Add(new Vector2Int(x, z));
+                            _candidates.Add(new RoadCandidate
+                            {
+                                Cell = new Vector2Int(x, z),
+                                District = DetectDistrict(x, z)
+                            });
                     }
-                    else if (cell.Type >= CellType.Residential && cell.Type <= CellType.Industrial && cell.Level > 0)
+                    else if (cell.Type != CellType.Empty && cell.Height > 0f)
                     {
                         developed++;
                     }
@@ -256,7 +279,33 @@ namespace XCity
 
             _targetCount = _candidates.Count < 2
                 ? 0
-                : Mathf.Clamp(developed / 3 + _candidates.Count / 12, 0, MaxVehicles);
+                : Mathf.Clamp(Mathf.Max(3, developed / 2 + _candidates.Count / 5), 0, MaxVehicles);
+        }
+
+        private VehicleCategory DetectDistrict(int x, int z)
+        {
+            VehicleCategory fallback = VehicleCategory.Any;
+            for (int dx = -2; dx <= 2; dx++)
+            {
+                int nx = x + dx;
+                if (nx < 0 || nx >= CitySimulation.GridSize) continue;
+                for (int dz = -2; dz <= 2; dz++)
+                {
+                    if (dx == 0 && dz == 0) continue;
+                    int nz = z + dz;
+                    if (nz < 0 || nz >= CitySimulation.GridSize) continue;
+                    CityCell c = _city.GetCell(nx, nz);
+                    if (c.Type == CellType.CivicService || c.Type == CellType.School)
+                        return VehicleCategory.Civic;
+                    if (c.Type == CellType.Industrial || c.Type == CellType.PowerPlant)
+                        return VehicleCategory.Industrial;
+                    if (c.Type == CellType.Commercial)
+                        fallback = VehicleCategory.Commercial;
+                    else if (c.Type == CellType.Residential && fallback == VehicleCategory.Any)
+                        fallback = VehicleCategory.Residential;
+                }
+            }
+            return fallback;
         }
 
         private bool TrySpawn()
@@ -270,7 +319,8 @@ namespace XCity
             int start = _rng.Next(_candidates.Count);
             for (int offset = 0; offset < _candidates.Count; offset++)
             {
-                Vector2Int cell = _candidates[(start + offset) % _candidates.Count];
+                RoadCandidate cand = _candidates[(start + offset) % _candidates.Count];
+                Vector2Int cell = cand.Cell;
                 if (_occupied.Contains(cell)) continue;
 
                 RoadConnections conns = _city.Roads.GetConnections(cell.x, cell.y);
@@ -283,7 +333,7 @@ namespace XCity
                 if (count == 0) continue;
 
                 int outDir = _dirScratch[_rng.Next(count)];
-                VehicleTemplate tpl = VehicleMeshFactory.PickRandom(_rng);
+                VehicleTemplate tpl = VehicleMeshFactory.PickForDistrict(_rng, cand.District);
                 _vehicles.Add(new Vehicle
                 {
                     Cell = cell,
@@ -442,16 +492,35 @@ namespace XCity
                 Vector3[] pivots = tpl.PartPivots;
                 bool pulseStrobes = updateColors && tpl.HasEmergencyLights;
 
+                Vector3 kingpinLocal = tpl.HasTrailer ? pivots[VehicleMeshFactory.PartTrailer] : Vector3.zero;
+                Vector3 worldKingpin = tpl.HasTrailer ? pos + pathRot * kingpinLocal : Vector3.zero;
+                Quaternion trailerPathRot = tpl.HasTrailer ? pathRot * Quaternion.Euler(0f, v.TrailerYaw, 0f) : Quaternion.identity;
+                Quaternion trailerBodyRot = tpl.HasTrailer ? trailerPathRot * Quaternion.Euler(v.Pitch * 0.4f, 0f, v.Roll * 0.6f) : Quaternion.identity;
+                Quaternion trailerWheelRot = tpl.HasTrailer ? trailerPathRot * spinRot : Quaternion.identity;
+
                 for (int k = 0; k < srcV.Length; k++)
                 {
                     byte partId = partIds[k];
-                    if (partId >= VehicleMeshFactory.PartWheelFL && partId <= VehicleMeshFactory.PartWheelRR)
+                    if ((partId >= VehicleMeshFactory.PartWheelFL && partId <= VehicleMeshFactory.PartWheelRR) ||
+                        partId == VehicleMeshFactory.PartWheelML || partId == VehicleMeshFactory.PartWheelMR)
                     {
                         Vector3 pivot = pivots[partId];
                         Quaternion wRot = partId <= VehicleMeshFactory.PartWheelFR ? wheelRotFront : wheelRotRear;
                         Vector3 worldPivot = pos + pathRot * pivot;
                         _renderVertices[vertCursor] = worldPivot + wRot * (srcV[k] - pivot);
                         _renderNormals[vertCursor] = wRot * srcN[k];
+                    }
+                    else if (partId == VehicleMeshFactory.PartTrailer)
+                    {
+                        _renderVertices[vertCursor] = worldKingpin + bodyOffset + trailerBodyRot * (srcV[k] - kingpinLocal);
+                        _renderNormals[vertCursor] = trailerBodyRot * srcN[k];
+                    }
+                    else if (partId >= VehicleMeshFactory.PartTrailerWheelFL && partId <= VehicleMeshFactory.PartTrailerWheelRR)
+                    {
+                        Vector3 pivot = pivots[partId];
+                        Vector3 worldPivot = worldKingpin + trailerPathRot * (pivot - kingpinLocal);
+                        _renderVertices[vertCursor] = worldPivot + trailerWheelRot * (srcV[k] - pivot);
+                        _renderNormals[vertCursor] = trailerWheelRot * srcN[k];
                     }
                     else
                     {
