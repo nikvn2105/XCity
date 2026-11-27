@@ -54,12 +54,7 @@ namespace XCity
         private Text _hudStatusText;
         private Button _undoButton;
         private Button _loanButton;
-        private Button _catalogButton;
-        private GameObject _catalog;
-        private GameObject _catalogOptions;
-        private Image _catalogTab;
         private BuildingModel _activeBuildingModel;
-        private readonly Dictionary<BuildTool, Image> _toolButtons = new Dictionary<BuildTool, Image>();
 
         private Material _roadMat;
         private Material _waterMat;
@@ -322,157 +317,17 @@ namespace XCity
             });
             SetupTutorial(topBar.transform, statusRect, font);
 
-            var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), UiTheme.Panel);
-            var layout = bottomBar.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 10;
-            layout.padding = new RectOffset(12, 12, 10, 10);
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = true;
-
-            AddToolButton(bottomBar.transform, font, "Xem", BuildTool.Pan);
-            SetupWorldMap(bottomBar.transform, font);
-            AddToolButton(bottomBar.transform, font, "Đường", BuildTool.Road);
-            AddToolButton(bottomBar.transform, font, "Cầu", BuildTool.Bridge);
-            _catalogButton = CreateHudButton(bottomBar.transform, font, "Xây", "OpenCatalog");
-            _catalogButton.onClick.AddListener(ToggleCatalog);
-            SetupBuildCatalog(font);
-            AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
-            AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
+            SetupBuildBar();
+            SetupWorldMap();
             SetupUXToolbar(font);
-            SetupInfoView(font);
+            SetupInfoView();
 
             SelectTool(BuildTool.Road);
             RefreshHUD();
         }
 
-        private readonly List<(BuildingModel Model, Button Button, Text Label)> _catalogButtons =
-            new List<(BuildingModel, Button, Text)>();
-        private int _catalogUnlockTier = -1;
         private string _unlockBanner;
         private float _unlockBannerUntil;
-
-        private void SetupBuildCatalog(Font font)
-        {
-            _catalogButtons.Clear();
-            _unlockBanner = null;
-            _unlockBannerUntil = 0f;
-
-            _catalog = new GameObject("BuildCatalog", typeof(RectTransform));
-            var root = (RectTransform)_catalog.transform;
-            root.SetParent(_safeAreaRoot, false);
-            root.anchorMin = Vector2.zero;
-            root.anchorMax = Vector2.one;
-            root.offsetMin = root.offsetMax = Vector2.zero;
-
-            Transform tabs = CreateCatalogRow(root, "Categories", 94, 146);
-            AddCatalogCategory(root, tabs, font, "Nhà ở", BuildTool.Residential,
-                BuildingModel.RowHouse, BuildingModel.Villa, BuildingModel.Apartment);
-            AddCatalogCategory(root, tabs, font, "Trường học", BuildTool.School,
-                BuildingModel.Preschool, BuildingModel.PrimarySchool, BuildingModel.HighSchool, BuildingModel.University);
-            AddCatalogCategory(root, tabs, font, "Công nghiệp", BuildTool.Industrial,
-                BuildingModel.Workshop, BuildingModel.Warehouse, BuildingModel.Factory);
-            AddCatalogCategory(root, tabs, font, "Văn phòng", BuildTool.Commercial,
-                BuildingModel.Office, BuildingModel.OfficeTower);
-            AddCatalogCategory(root, tabs, font, "Thương mại", BuildTool.Commercial,
-                BuildingModel.Market, BuildingModel.HighStreet, BuildingModel.ShoppingMall);
-            AddCatalogCategory(root, tabs, font, "Dịch vụ", BuildTool.CivicService,
-                BuildingModel.PolicePost, BuildingModel.Clinic, BuildingModel.FireStationSmall,
-                BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation, BuildingModel.Harbor);
-            AddCatalogCategory(root, tabs, font, "Tiện ích", BuildTool.CivicService,
-                BuildingModel.WaterPump, BuildingModel.SewagePlant);
-
-            _catalogUnlockTier = CurrentUnlockTier(_city.PeakPopulation);
-            RefreshCatalogUnlocks();
-            _catalog.SetActive(false);
-        }
-
-        private static Transform CreateCatalogRow(Transform parent, string name, float bottom, float top)
-        {
-            var row = CreatePanel(parent, name, new Vector2(0.1f, 0), new Vector2(0.9f, 0),
-                new Vector2(0, bottom), new Vector2(0, top), new Color(0.08f, 0.10f, 0.14f, 0.94f));
-            var layout = row.AddComponent<HorizontalLayoutGroup>();
-            layout.padding = new RectOffset(8, 8, 7, 7);
-            layout.spacing = 8;
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = true;
-            return row.transform;
-        }
-
-        private void AddCatalogCategory(Transform root, Transform tabs, Font font, string label, BuildTool tool,
-            params BuildingModel[] models)
-        {
-            Button tab = CreateHudButton(tabs, font, label, label);
-            Transform options = CreateCatalogRow(root, label, 152, 226);
-            foreach (BuildingModel model in models)
-            {
-                var item = BuildingCatalog.Get(model);
-                string price = item.Seats > 0 ? $"${item.Cost:N0} · {item.Seats:N0} chỗ" : $"${item.Cost:N0}/ô";
-                Button button = CreateHudButton(options, font, $"{item.Name}\n{price}", model.ToString());
-                _catalogButtons.Add((model, button, button.GetComponentInChildren<Text>()));
-                button.onClick.AddListener(() =>
-                {
-                    if (BuildingCatalog.UnlockPopulation(model) > _city.PeakPopulation) return;
-                    _activeBuildingModel = model;
-                    SelectTool(tool);
-                });
-            }
-
-            options.gameObject.SetActive(false);
-            tab.onClick.AddListener(() => ShowCatalogCategory(options.gameObject, tab.image));
-            if (_catalogOptions == null) ShowCatalogCategory(options.gameObject, tab.image);
-        }
-
-        private static int CurrentUnlockTier(int peakPopulation) =>
-            peakPopulation >= 5000 ? 5000 : peakPopulation >= 2000 ? 2000 : peakPopulation >= 500 ? 500 : 0;
-
-        private static string FormatMilestone(int population) =>
-            population >= 1000 ? $"{population / 1000}.{population % 1000:D3}" : population.ToString();
-
-        private void RefreshCatalogUnlocks()
-        {
-            for (int i = 0; i < _catalogButtons.Count; i++)
-            {
-                var entry = _catalogButtons[i];
-                int required = BuildingCatalog.UnlockPopulation(entry.Model);
-                bool unlocked = _city.PeakPopulation >= required;
-                var item = BuildingCatalog.Get(entry.Model);
-
-                entry.Button.interactable = unlocked;
-                entry.Button.image.color = unlocked
-                    ? UiTheme.Button
-                    : UiTheme.ButtonLocked;
-
-                if (entry.Label != null)
-                {
-                    entry.Label.color = unlocked ? Color.white : UiTheme.TextMuted;
-                    if (unlocked)
-                    {
-                        string price = item.Seats > 0 ? $"${item.Cost:N0} · {item.Seats:N0} chỗ" : $"${item.Cost:N0}/ô";
-                        entry.Label.text = $"{item.Name}\n{price}";
-                    }
-                    else
-                    {
-                        entry.Label.text = $"{item.Name}\nMở ở {FormatMilestone(required)} dân";
-                    }
-                }
-            }
-        }
-
-        private void ShowCatalogCategory(GameObject options, Image tab)
-        {
-            if (_catalogOptions != null) _catalogOptions.SetActive(false);
-            if (_catalogTab != null) _catalogTab.color = UiTheme.Button;
-            _catalogOptions = options;
-            _catalogTab = tab;
-            _catalogOptions.SetActive(true);
-            _catalogTab.color = UiTheme.Active;
-        }
-
-        private void ToggleCatalog()
-        {
-            CancelGesture();
-            _catalog.SetActive(!_catalog.activeSelf);
-        }
 
         private static GameObject CreatePanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax, Color color)
         {
@@ -486,17 +341,6 @@ namespace XCity
             var img = go.AddComponent<Image>();
             img.color = color;
             return go;
-        }
-
-        private void AddToolButton(Transform parent, Font font, string label, BuildTool tool)
-        {
-            Button button = CreateHudButton(parent, font, label, "Btn_" + tool);
-            button.onClick.AddListener(() =>
-            {
-                _activeBuildingModel = BuildingModel.Default;
-                SelectTool(tool);
-            });
-            _toolButtons[tool] = button.image;
         }
 
         private static Button CreateHudButton(Transform parent, Font font, string label, string name)
@@ -523,37 +367,6 @@ namespace XCity
             txt.alignment = TextAnchor.MiddleCenter;
 
             return btn;
-        }
-
-        private void SelectTool(BuildTool tool)
-        {
-            CancelGesture();
-            if (tool != BuildTool.Pan) ClearFollow();
-            if (_activeBuildingModel != BuildingModel.Default &&
-                BuildingCatalog.UnlockPopulation(_activeBuildingModel) > _city.PeakPopulation)
-            {
-                _activeBuildingModel = BuildingModel.Default;
-                if (tool == BuildTool.School || tool == BuildTool.CivicService)
-                    tool = BuildTool.Road;
-            }
-            _activeTool = tool;
-            _catalog.SetActive(false);
-            bool catalogTool = _activeBuildingModel != BuildingModel.Default;
-            _catalogButton.image.color = catalogTool
-                ? UiTheme.Active
-                : UiTheme.Button;
-            _catalogButton.GetComponentInChildren<Text>().text = catalogTool
-                ? BuildingCatalog.Get(_activeBuildingModel).Name
-                : "Xây";
-            _inspectedCell = null;
-            _shoreWarningUntil = 0f;
-            RefreshHUD();
-            foreach (var kv in _toolButtons)
-            {
-                kv.Value.color = kv.Key == tool
-                    ? UiTheme.Active
-                    : UiTheme.Button;
-            }
         }
 
         private void Update()
@@ -668,11 +481,7 @@ namespace XCity
         {
             if (IsPointerOverUI(position)) return;
             StopCameraInertia(); // a new touch catches the gliding camera
-            if (_catalog.activeSelf)
-            {
-                _catalog.SetActive(false);
-                return;
-            }
+            CloseBuildPicker();
             _isDragging = true;
             _gestureStart = position;
             _panMoved = false;
@@ -1459,28 +1268,8 @@ namespace XCity
 
         private void RefreshHUD()
         {
-            int unlockTier = CurrentUnlockTier(_city.PeakPopulation);
-            if (unlockTier != _catalogUnlockTier)
-            {
-                if (_catalogUnlockTier >= 0 && unlockTier > _catalogUnlockTier)
-                {
-                    var unlockedNames = new List<string>();
-                    for (int i = 0; i < _catalogButtons.Count; i++)
-                    {
-                        BuildingModel model = _catalogButtons[i].Model;
-                        int required = BuildingCatalog.UnlockPopulation(model);
-                        if (required > _catalogUnlockTier && required <= unlockTier)
-                            unlockedNames.Add(BuildingCatalog.Get(model).Name);
-                    }
-                    if (unlockedNames.Count > 0)
-                    {
-                        _unlockBanner = "Đã mở khóa: " + string.Join(", ", unlockedNames);
-                        _unlockBannerUntil = Time.unscaledTime + 6f;
-                    }
-                }
-                _catalogUnlockTier = unlockTier;
-                RefreshCatalogUnlocks();
-            }
+            RefreshBuildBar();
+            RefreshInfoViewHUD();
 
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;

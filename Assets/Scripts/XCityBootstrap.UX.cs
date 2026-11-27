@@ -25,7 +25,6 @@ namespace XCity
 
         private Button _speedButton;
         private Button _lightButton;
-        private Button _overlayButton;
         private Button _followButton;
         private Button _audioButton;
 
@@ -84,9 +83,6 @@ namespace XCity
 
             _lightButton = CreateCompactButton(bar.transform, font, "Tự động", "Btn_Light");
             _lightButton.onClick.AddListener(CycleLightingMode);
-
-            _overlayButton = CreateCompactButton(bar.transform, font, "Lớp phủ: Tắt", "Btn_Overlay");
-            _overlayButton.onClick.AddListener(CycleOverlayMode);
 
             _followButton = CreateCompactButton(bar.transform, font, "Theo dõi", "Btn_Follow");
             _followButton.onClick.AddListener(CycleFollowTarget);
@@ -150,15 +146,6 @@ namespace XCity
             RefreshUXButtons();
         }
 
-        private void CycleOverlayMode()
-        {
-            _overlays?.CycleMode();
-            _cityRenderer?.SetInfoView(_overlays != null && _overlays.Mode == CityOverlayMode.Happiness);
-            RefreshInfoViewHUD();
-            _audio?.PlayBuild();
-            RefreshUXButtons();
-        }
-
         private void ToggleAudioMute()
         {
             _audio?.ToggleMute();
@@ -183,14 +170,6 @@ namespace XCity
                 _lightButton.GetComponentInChildren<Text>().text = _dayNight.GetModeLabel();
                 _lightButton.image.color = _dayNight.Mode == LightingMode.Night
                     ? new Color(0.22f, 0.30f, 0.58f, 1f)
-                    : UiTheme.Button;
-            }
-
-            if (_overlayButton != null && _overlays != null)
-            {
-                _overlayButton.GetComponentInChildren<Text>().text = "Lớp phủ: " + _overlays.GetModeLabel();
-                _overlayButton.image.color = _overlays.Mode != CityOverlayMode.None
-                    ? UiTheme.Active
                     : UiTheme.Button;
             }
 

@@ -169,7 +169,8 @@ namespace XCity
         public const int PowerPlantCapacity = 24;
         public const int ResidentsPerLevel = 12;
         private const int MaxResidentialLevel = 3;
-        private const int PowerPlantUpkeep = 60;
+        internal const int PowerPlantUpkeep = 60;
+        internal const int RoadUpkeep = 2;
         internal const float PowerPlantHeight = 3.2f;
         internal const int CurrentSchemaVersion = 10;
         public const int UtilityCapacity = 40;
@@ -443,7 +444,7 @@ namespace XCity
                 ref CityCell cell = ref _cells[x, z];
                 if (cell.Type == CellType.Road)
                 {
-                    netIncome -= 2;
+                    netIncome -= RoadUpkeep;
                     continue;
                 }
 
