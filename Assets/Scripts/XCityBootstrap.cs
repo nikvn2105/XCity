@@ -169,6 +169,7 @@ namespace XCity
             _helicopters = new HelicopterSystem(_city, CellSize, _vertexColorMat, transform);
             _watercraft = new WatercraftSystem(_city, CellSize, _vertexColorMat, transform);
             _citizens = new CitizenSystem(_city, CellSize, _vertexColorMat, transform);
+            SetupUXSystems();
         }
 
         private void AddLandscapeBase(string name, float worldSpan, float size, float top, float depth, Material material)
@@ -278,6 +279,7 @@ namespace XCity
             SetupBuildCatalog(font);
             AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
             AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
+            SetupUXToolbar(font);
 
             SelectTool(BuildTool.Road);
             RefreshHUD();
@@ -412,6 +414,7 @@ namespace XCity
         private void SelectTool(BuildTool tool)
         {
             CancelGesture();
+            if (tool != BuildTool.Pan) ClearFollow();
             _activeTool = tool;
             _catalog.SetActive(false);
             bool catalogTool = _activeBuildingModel != BuildingModel.Default;
@@ -569,6 +572,7 @@ namespace XCity
             {
                 if (!_panMoved && !IsPanMovement(position)) return;
                 _panMoved = true;
+                ClearFollow();
                 Vector2 delta = position - _lastPointerPos;
                 Vector3 right = Vector3.ProjectOnPlane(_cam.transform.right, Vector3.up).normalized;
                 Vector3 forward = Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up).normalized;
@@ -598,7 +602,11 @@ namespace XCity
             if (_isDragging && _activeTool == BuildTool.Pan && !_panMoved &&
                 !IsPanMovement(position) && !IsPointerOverUI(position))
             {
-                _inspectedCell = TryInspectCell(position, out var inspected) ? inspected : (Vector2Int?)null;
+                if (!TryBeginFollowFromPointer(position))
+                {
+                    ClearFollow();
+                    _inspectedCell = TryInspectCell(position, out var inspected) ? inspected : (Vector2Int?)null;
+                }
                 RefreshHUD();
             }
 
@@ -611,7 +619,11 @@ namespace XCity
                     if (_bridgeStart.HasValue && _bridgeQuote == BridgeQuote.Ready)
                     {
                         Vector2Int start = _bridgeStart.Value;
-                        _cityDirty |= _city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y);
+                        if (_city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y))
+                        {
+                            _cityDirty = true;
+                            _audio?.PlayBridge();
+                        }
                     }
                 }
                 else if (IsSinglePlacement)
@@ -620,7 +632,11 @@ namespace XCity
                     {
                         CellType placement = _activeTool == BuildTool.PowerPlant
                             ? CellType.PowerPlant : BuildingCatalog.Get(_activeBuildingModel).Type;
-                        _cityDirty |= _city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel);
+                        if (_city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel))
+                        {
+                            _cityDirty = true;
+                            _audio?.PlayBuild();
+                        }
                     }
                     RefreshHUD();
                 }
@@ -847,7 +863,12 @@ namespace XCity
                 BuildTool.Industrial => CellType.Industrial,
                 _ => CellType.Empty
             };
-            _cityDirty |= _city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel);
+            if (_city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel))
+            {
+                _cityDirty = true;
+                if (_activeTool == BuildTool.Bulldoze) _audio?.PlayBulldoze();
+                else _audio?.PlayBuild();
+            }
         }
 
         private IEnumerable<(int X, int Z)> GetStrokeCells()
@@ -859,14 +880,18 @@ namespace XCity
         private void UndoBuild()
         {
             CancelGesture();
-            _cityDirty |= _city.TryUndoBuild();
+            if (_city.TryUndoBuild())
+            {
+                _cityDirty = true;
+                _audio?.PlayUndo();
+            }
             RefreshHUD();
         }
 
         private void RunSimulationTick()
         {
-            if (_previewOutput != null) return;
-            _simTimer += Time.deltaTime;
+            if (_previewOutput != null || _simSpeed <= 0f) return;
+            _simTimer += Time.deltaTime * _simSpeed;
             if (_simTimer < TickInterval) return;
             _simTimer -= TickInterval;
             _city.Tick();
@@ -904,6 +929,7 @@ namespace XCity
             _helicopters.SetVisible(visible);
             _watercraft.SetVisible(visible);
             _citizens.SetVisible(visible);
+            _emergencies?.SetVisible(visible);
             if (!visible) return;
             var view = LocalView;
             _industrialSmoke.SetView(view);
@@ -911,6 +937,7 @@ namespace XCity
             _helicopters.SetView(view);
             _watercraft.SetView(view);
             _citizens.SetView(view);
+            UpdateUXInView(view);
         }
 
         private void LateUpdate()
@@ -918,17 +945,23 @@ namespace XCity
             RefreshSceneDetail(2);
             _cityRenderer.RebuildDirtyChunks(1);
             bool visible = _chunkScheduler.ShowEffects;
-            _construction.Update(Time.deltaTime, visible, LocalView);
+            float simDt = Time.deltaTime * _simSpeed;
+            _construction.Update(simDt, visible, LocalView);
             _buildingRenderer.RebuildDirtyChunks(1);
-            _dayNight?.Update(Time.deltaTime);
+            _dayNight?.Update(simDt);
 
-            if (!visible) return;
+            if (!visible)
+            {
+                LateUpdateUX(0f);
+                return;
+            }
             Shader.SetGlobalFloat("_XCityTime", Time.time);
-            _industrialSmoke.Update(Time.deltaTime);
-            _vehicles.Update(Time.deltaTime);
-            _helicopters.Update(Time.deltaTime);
-            _watercraft.Update(Time.deltaTime);
-            _citizens.Update(Time.deltaTime);
+            _industrialSmoke.Update(simDt);
+            _vehicles.Update(simDt);
+            _helicopters.Update(simDt);
+            _watercraft.Update(simDt);
+            _citizens.Update(simDt);
+            LateUpdateUX(simDt);
         }
 
         private void OnDestroy()
@@ -941,6 +974,7 @@ namespace XCity
             _helicopters?.Dispose();
             _watercraft?.Dispose();
             _citizens?.Dispose();
+            DisposeUXSystems();
             Destroy(_vertexColorMat);
             Destroy(_waterMat);
             Destroy(_worldMapTexture);
@@ -1086,6 +1120,8 @@ namespace XCity
                     hint = "Chạm vào ô đất sát mặt nước để đặt cảng";
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
+                string uxPrefix = GetUXStatusPrefix();
+                if (uxPrefix != null) hint = $"{uxPrefix}  |  {hint}";
                 if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population &&
                     _lastHudTax == _city.LastTaxIncome && _lastHudNet == _city.LastNetIncome)
                     return;
