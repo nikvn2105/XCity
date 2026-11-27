@@ -25,6 +25,8 @@ namespace XCity
         public float WheelRadius;
         public float Length;
         public VehicleCategory Category;
+        public string DisplayName;
+        public bool IsFireTruck;
         public bool IsTwoWheeler;
         public bool HasTrailer;
         public bool HasEmergencyLights;
@@ -923,6 +925,8 @@ namespace XCity
                 WheelRadius = wheelRadius,
                 Length = length,
                 Category = category,
+                IsFireTruck = hasEmergencyLights && strobeLeft.r > 200 && length > 2.4f,
+                DisplayName = ResolveDisplayName(category, length, isTwoWheeler, hasTrailer, hasEmergencyLights, strobeLeft),
                 IsTwoWheeler = isTwoWheeler,
                 HasTrailer = hasTrailer,
                 HasEmergencyLights = hasEmergencyLights,
@@ -931,6 +935,30 @@ namespace XCity
             };
             UnityEngine.Object.Destroy(mesh);
             return tpl;
+        }
+
+        private static string ResolveDisplayName(
+            VehicleCategory category,
+            float length,
+            bool isTwoWheeler,
+            bool hasTrailer,
+            bool emergency,
+            Color32 strobeLeft)
+        {
+            if (isTwoWheeler) return "Xe máy";
+            if (emergency)
+            {
+                if (length > 2.4f) return "Xe cứu hỏa";
+                return strobeLeft.b > strobeLeft.r ? "Xe cảnh sát" : "Xe cấp cứu";
+            }
+            if (hasTrailer) return length >= 3.26f ? "Xe đầu kéo Container" : "Xe bồn nhiên liệu";
+            if (category == VehicleCategory.Civic) return "Xe buýt trường học";
+            if (length >= 2.70f) return "Xe buýt nội đô";
+            if (length >= 2.48f) return category == VehicleCategory.Residential ? "Xe chở rác" : "Xe tải ben";
+            if (length >= 2.35f) return "Xe tải thùng";
+            if (length >= 2.00f) return "Xe Van giao hàng";
+            if (length >= 1.80f) return length >= 1.90f ? "Xe bán tải" : "Xe SUV";
+            return category == VehicleCategory.Commercial ? "Taxi" : "Xe con";
         }
     }
 }

@@ -85,6 +85,52 @@ namespace XCity
         private bool _topologyDirty = true;
         private bool _hasEmergencyVehicles;
         private WorldView _view;
+        private CityEmergencySystem _emergency;
+
+        public int ActiveCount => _vehicles.Count;
+
+        public void SetEmergencySystem(CityEmergencySystem emergency) => _emergency = emergency;
+
+        public bool TryPickVehicle(Ray ray, out int index, out float nearest)
+        {
+            index = -1;
+            nearest = float.PositiveInfinity;
+            for (int i = 0; i < _vehicles.Count; i++)
+            {
+                Vector3 pos = ComputeWorldPos(_vehicles[i]);
+                float r = Mathf.Max(0.8f, _vehicles[i].Template.Length * 0.55f);
+                var bounds = new Bounds(pos + Vector3.up * 0.45f, new Vector3(r * 1.4f, 1.3f, r * 1.4f));
+                if (bounds.IntersectRay(ray, out float dist) && dist < nearest)
+                {
+                    nearest = dist;
+                    index = i;
+                }
+            }
+            return index >= 0;
+        }
+
+        public bool TryGetVehicleFocus(int index, out Vector3 worldPos, out string displayName)
+        {
+            if (index >= 0 && index < _vehicles.Count)
+            {
+                worldPos = ComputeWorldPos(_vehicles[index]);
+                displayName = _vehicles[index].Template.DisplayName;
+                return true;
+            }
+            worldPos = default;
+            displayName = null;
+            return false;
+        }
+
+        private Vector3 ComputeWorldPos(Vehicle v)
+        {
+            ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
+            float u = 1f - v.T;
+            Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
+            Vector3 tangent = 2f * u * (p1 - p0) + 2f * v.T * (p2 - p1);
+            CityChunkRenderer.ApplyBridgeGrade(_city, v.Cell, _cellSize, ref pos, ref tangent);
+            return pos;
+        }
 
         public VehicleSystem(CitySimulation city, float cellSize, Material material, Transform parent)
         {
@@ -178,7 +224,22 @@ namespace XCity
             for (int i = _vehicles.Count - 1; i >= 0; i--)
             {
                 Vehicle v = _vehicles[i];
+                bool fireActive = _emergency != null && _emergency.HasActiveFire;
+                bool responding = fireActive && v.Template.IsFireTruck;
                 float desiredSpeed = v.InDir != v.OutDir ? v.Speed * 0.78f : v.Speed;
+                if (responding)
+                {
+                    int fireDist = Mathf.Abs(v.Cell.x - _emergency.FireCell.x) + Mathf.Abs(v.Cell.y - _emergency.FireCell.y);
+                    if (fireDist <= 2)
+                    {
+                        desiredSpeed *= 0.45f;
+                        _emergency.NotifyResponderNear(ComputeWorldPos(v));
+                    }
+                    else
+                    {
+                        desiredSpeed *= 1.32f;
+                    }
+                }
 
                 Vector2Int nextCell = v.Cell + Dir2D[v.OutDir];
                 for (int j = 0; j < _vehicles.Count; j++)
@@ -251,7 +312,7 @@ namespace XCity
                         continue;
                     }
 
-                    v.OutDir = ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir);
+                    v.OutDir = ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir, v.Template.IsFireTruck);
                 }
             }
 
@@ -384,11 +445,31 @@ namespace XCity
             }
         }
 
-        private int ChooseOutDir(int x, int z, int inDir)
+        private int ChooseOutDir(int x, int z, int inDir, bool seekFire = false)
         {
             RoadConnections conns = _city.Roads.GetConnections(x, z);
             int reverse = inDir ^ 1;
             int count = 0;
+
+            if (seekFire && _emergency != null && _emergency.HasActiveFire)
+            {
+                Vector2Int target = _emergency.FireCell;
+                int bestDir = -1;
+                int bestDist = int.MaxValue;
+                for (int d = 0; d < 4; d++)
+                {
+                    if (d == reverse) continue;
+                    if (((int)conns & (1 << d)) == 0) continue;
+                    Vector2Int next = new Vector2Int(x, z) + Dir2D[d];
+                    int dist = Mathf.Abs(next.x - target.x) + Mathf.Abs(next.y - target.y);
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        bestDir = d;
+                    }
+                }
+                if (bestDir >= 0) return bestDir;
+            }
 
             for (int d = 0; d < 4; d++)
             {
