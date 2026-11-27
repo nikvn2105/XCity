@@ -460,7 +460,7 @@ namespace XCity
             RunSimulationTick();
             HandleInput();
             if (_cityDirty && Time.unscaledTime >= _nextAutosave)
-                SaveCity();
+                SaveCity(background: true);
         }
 
         private void UpdateSafeArea()
@@ -930,11 +930,13 @@ namespace XCity
 
         private void OnApplicationQuit() => SaveCity();
 
-        private void SaveCity()
+        // Autosaves run in the background; pausing or quitting saves synchronously so iOS cannot suspend mid-write.
+        private void SaveCity(bool background = false)
         {
             if (_previewOutput != null) return;
             _nextAutosave = Time.unscaledTime + 15f;
-            if (_cityDirty && _save.Write(_city)) _cityDirty = false;
+            if (!_cityDirty) return;
+            if (background ? _save.TryWriteInBackground(_city) : _save.Write(_city)) _cityDirty = false;
         }
 
         private WorldView LocalView => new WorldView(Mathf.FloorToInt(_camTarget.x / CellSize), Mathf.FloorToInt(_camTarget.z / CellSize));
