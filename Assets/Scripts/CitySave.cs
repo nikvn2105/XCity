@@ -31,7 +31,12 @@ namespace XCity
             {
                 if (!File.Exists(path)) return null;
                 var snapshot = JsonUtility.FromJson<CitySnapshot>(File.ReadAllText(path));
-                if (CitySimulation.TryRestore(snapshot, out var city)) return city;
+                if (CitySimulation.TryRestore(snapshot, out var city))
+                {
+                    if (city.DroppedCellsOnLoad > 0)
+                        Debug.LogWarning($"XCity save {Path.GetFileName(path)}: dropped {city.DroppedCellsOnLoad} cells that no longer fit the terrain.");
+                    return city;
+                }
                 Debug.LogWarning($"Invalid XCity save: {Path.GetFileName(path)}");
             }
             catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException)

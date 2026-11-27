@@ -144,11 +144,20 @@ namespace XCity
         private bool _powerDirty = true;
         private int _unpoweredZones;
         private uint _randomState;
-        private List<(int X, int Z, CityCell Cell)> _undoCells;
-        private int _undoMoney;
-        private int _undoPopulation;
+        internal const int MaxUndoSteps = 20;
+        private const int DemolishCost = 10;
+        private readonly List<UndoStep> _undoSteps = new List<UndoStep>();
 
-        public bool CanUndoBuild => _undoCells != null;
+        private sealed class UndoStep
+        {
+            public List<(int X, int Z, CityCell Cell)> Cells;
+            public int Spent;
+        }
+
+        public bool CanUndoBuild => _undoSteps.Count > 0;
+
+        /// <summary>Cells discarded while loading because they no longer fit the current terrain.</summary>
+        internal int DroppedCellsOnLoad { get; private set; }
 
         public int UnpoweredZones
         {
@@ -208,37 +217,48 @@ namespace XCity
         public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type, BuildingModel model = BuildingModel.Default)
         {
             int moneyBefore = Money;
-            int populationBefore = Population;
             var changed = new List<(int X, int Z, CityCell Cell)>();
             foreach (var point in points)
                 TrySetCell(point.X, point.Z, type, model, changed);
 
             if (changed.Count == 0) return false;
-            _undoCells = changed;
-            _undoMoney = moneyBefore;
-            _undoPopulation = populationBefore;
+            PushUndo(changed, moneyBefore - Money);
             return true;
         }
 
+        private void PushUndo(List<(int X, int Z, CityCell Cell)> cells, int spent)
+        {
+            if (_undoSteps.Count == MaxUndoSteps) _undoSteps.RemoveAt(0);
+            _undoSteps.Add(new UndoStep { Cells = cells, Spent = spent });
+        }
+
+        // Steps are undone newest first, so each restored cell is exactly the state that step replaced.
+        // Growth from later ticks is discarded with it; the money spent on the step is refunded in full.
         public bool TryUndoBuild()
         {
-            if (_undoCells == null) return false;
+            if (_undoSteps.Count == 0) return false;
 
-            var cells = _undoCells;
-            _undoCells = null;
-            foreach (var entry in cells)
+            UndoStep step = _undoSteps[_undoSteps.Count - 1];
+            _undoSteps.RemoveAt(_undoSteps.Count - 1);
+            for (int i = step.Cells.Count - 1; i >= 0; i--)
             {
-                _cells[entry.X, entry.Z] = entry.Cell;
+                var entry = step.Cells[i];
+                ref CityCell cell = ref _cells[entry.X, entry.Z];
+                if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
+                if (entry.Cell.Type == CellType.Residential) Population += BuildingCatalog.Residents(entry.Cell);
+                cell = entry.Cell;
                 TrackCell(entry.X, entry.Z, entry.Cell.Type);
             }
 
-            Money = _undoMoney;
-            Population = _undoPopulation;
+            Money += step.Spent;
             _powerDirty = true;
-            foreach (var entry in cells)
+            foreach (var entry in step.Cells)
                 CellChanged?.Invoke(entry.X, entry.Z);
             return true;
         }
+
+        // Demolition never pushes the treasury below zero, so a broke city can still clear costly buildings.
+        private int AffordableDemolition(int tiles) => Math.Min(DemolishCost * tiles, Math.Max(0, Money));
 
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
             List<(int X, int Z, CityCell Cell)> changed)
@@ -257,11 +277,11 @@ namespace XCity
             int cost = type switch
             {
                 CellType.Road => RoadCost,
-                CellType.Empty => 10,
+                CellType.Empty => AffordableDemolition(1),
                 CellType.PowerPlant => PowerPlantCost,
                 _ => model == BuildingModel.Default ? ZoneCost : option.Cost
             };
-            if (type != CellType.Empty && Money < cost) return false;
+            if (cost > 0 && Money < cost) return false;
 
             changed.Add((x, z, cell));
             if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
@@ -281,7 +301,6 @@ namespace XCity
 
         public void Tick()
         {
-            _undoCells = null;
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
@@ -398,18 +417,29 @@ namespace XCity
                 if (cell.Type == CellType.Empty) continue;
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (cell.IsBridge == IsBuildable(x, z)) return false;
+                if (cell.IsBridge == IsBuildable(x, z))
+                {
+                    restored.DroppedCellsOnLoad++;
+                    continue;
+                }
                 restored._cells[x, z] = cell;
                 restored.TrackCell(x, z, cell.Type);
                 if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
             }
 
+            var strandedHarbors = new List<int>();
             foreach (int index in restored._occupied)
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
                 if (restored._cells[x, z].Model == BuildingModel.Harbor && !restored.CanPlaceHarbor(x, z))
-                    return false;
+                    strandedHarbors.Add(index);
+            }
+            foreach (int index in strandedHarbors)
+            {
+                restored._cells[index / GridSize, index % GridSize] = default;
+                restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);
+                restored.DroppedCellsOnLoad++;
             }
             city = restored;
             return true;
