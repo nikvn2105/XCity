@@ -1,0 +1,85 @@
+name: Build XCity iOS (.ipa)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-unity-ios:
+    name: Build Unity Xcode Project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Cache Unity Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: |
+            Library-iOS-
+
+      - name: Build Unity project for iOS
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: iOS
+          unityVersion: 2022.3.47f1
+          buildName: XCity
+
+      - name: Upload Xcode project artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XCity-XcodeProject
+          path: build/iOS
+          retention-days: 3
+
+  package-unsigned-ipa:
+    name: Compile & Package Unsigned IPA
+    needs: build-unity-ios
+    runs-on: macos-14
+    steps:
+      - name: Download Xcode project
+        uses: actions/download-artifact@v4
+        with:
+          name: XCity-XcodeProject
+          path: ios-build
+
+      - name: Locate Xcode project & build unsigned .app
+        run: |
+          XCODE_PROJ=$(find ios-build -name "Unity-iPhone.xcodeproj" | head -n 1)
+          PROJ_DIR=$(dirname "$XCODE_PROJ")
+          cd "$PROJ_DIR"
+          xcodebuild \
+            -project Unity-iPhone.xcodeproj \
+            -scheme Unity-iPhone \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "$GITHUB_WORKSPACE/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package Unsigned .ipa
+        run: |
+          APP_PATH=$(find "$GITHUB_WORKSPACE/DerivedData/Build/Products/Release-iphoneos" -name "*.app" -maxdepth 2 | head -n 1)
+          mkdir -p "$GITHUB_WORKSPACE/ipa-out/Payload"
+          cp -R "$APP_PATH" "$GITHUB_WORKSPACE/ipa-out/Payload/"
+          cd "$GITHUB_WORKSPACE/ipa-out"
+          zip -r "$GITHUB_WORKSPACE/XCity-unsigned.ipa" Payload
+
+      - name: Upload Unsigned IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: XCity-unsigned-ipa
+          path: XCity-unsigned.ipa
+          retention-days: 14
