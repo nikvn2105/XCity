@@ -45,7 +45,6 @@ namespace XCity
         private static readonly Color32 LitWindowGlass = new Color32(162, 160, 139, 255);
         private static readonly Color32 DoorWood = new Color32(90, 60, 40, 255);
         private static readonly Color32 ConcreteLight = new Color32(200, 200, 195, 255);
-        private static readonly Color32 TrunkBrown = new Color32(110, 80, 50, 255);
 
         public static uint Hash(int x, int z, int salt)
         {
@@ -571,11 +570,8 @@ namespace XCity
 
         private static void AddPlanter(MeshBuilder b, Vector3 foot, float width)
         {
-            var edge = new Color32(169, 167, 154, 255);
-            var leaf = new Color32(86, 128, 80, 255);
-            b.AddBox(foot + Vector3.up * 0.11f, new Vector3(width, 0.22f, width), edge, edge);
-            b.AddCylinder(foot + Vector3.up * 0.22f, width * 0.39f, width * 0.26f, 0.32f,
-                6, leaf, true, LotGrass);
+          uint seed = Hash(Mathf.RoundToInt(foot.x * 100f), Mathf.RoundToInt(foot.z * 100f), 709);
+            TreeMeshFactory.AddPlanterShrub(b, foot, width, seed);
         }
 
         private static void BuildHarbor(MeshBuilder b)
@@ -903,18 +899,9 @@ namespace XCity
             float tz = Mathf.Clamp(halfD + 0.3f, 1.20f, 1.45f);
             if (rng.Next() < 0.35f) tz = -tz;
 
-            int delta = rng.Range(-15, 16);
-            byte g = (byte)Mathf.Clamp(140 + delta, 90, 185);
-            Color32 foliage = new Color32((byte)(65 + delta / 2), g, (byte)(65 + delta / 2), 255);
-            Color32 foliageTip = new Color32((byte)Mathf.Min(255, foliage.r + 18), (byte)Mathf.Min(255, foliage.g + 22), (byte)Mathf.Min(255, foliage.b + 14), 255);
-
-            b.AddCylinder(new Vector3(tx, 0.04f, tz), 0.08f, 0.055f, 0.38f, 5,
-                TrunkBrown, MeshBuilder.WithSway(TrunkBrown, 0.14f), false, TrunkBrown);
-            b.AddCylinder(new Vector3(tx, 0.36f, tz), 0.22f, 0.44f, 0.26f, 6,
-                MeshBuilder.WithSway(foliage, 0.16f), MeshBuilder.WithSway(foliage, 0.40f), false, foliage);
-            b.AddCylinder(new Vector3(tx, 0.62f, tz), 0.44f, 0.16f, 0.38f, 6,
-                MeshBuilder.WithSway(foliageTip, 0.40f), MeshBuilder.WithSway(foliageTip, 0.60f),
-                true, MeshBuilder.WithSway(foliageTip, 0.60f));
+          uint seed = (uint)rng.Range(1, 1000000);
+            float scale = 0.46f + rng.Next() * 0.16f;
+            TreeMeshFactory.AddYardTree(b, new Vector3(tx, 0.04f, tz), scale, seed);
         }
 
         private static Color32 PickWindowColor(ref CellRng rng) =>
