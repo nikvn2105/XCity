@@ -73,9 +73,9 @@ namespace XCity
         private static readonly Color32 SkidSteel = new Color32(62, 68, 76, 255);
         private static readonly Color32 Chrome = new Color32(196, 204, 214, 255);
         private static readonly Color32 StrobeDim = new Color32(42, 34, 42, 255);
-        private static readonly Color32 StrobeRed = new Color32(255, 48, 48, 255);
-        private static readonly Color32 StrobeBlue = new Color32(45, 138, 255, 255);
-        private static readonly Color32 StrobeWhite = new Color32(246, 250, 255, 255);
+        private static readonly Color32 StrobeRed = new Color32(255, 48, 48, 0);
+        private static readonly Color32 StrobeBlue = new Color32(45, 138, 255, 0);
+        private static readonly Color32 StrobeWhite = new Color32(246, 250, 255, 0);
 
         private static HeliTemplate[] _templates;
 
@@ -101,6 +101,47 @@ namespace XCity
         private int _targetCount;
         private int _lastStrobeStep = -1;
         private float _time;
+        private CityEmergencySystem _emergency;
+
+        public int ActiveCount => _helicopters.Count;
+
+        public void SetEmergencySystem(CityEmergencySystem emergency) => _emergency = emergency;
+
+        public bool TryPickHelicopter(Ray ray, out int index, out float nearest)
+        {
+            index = -1;
+            nearest = float.PositiveInfinity;
+            for (int i = 0; i < _helicopters.Count; i++)
+            {
+                var bounds = new Bounds(_helicopters[i].Position, new Vector3(2.8f, 1.4f, 2.8f));
+                if (bounds.IntersectRay(ray, out float dist) && dist < nearest)
+                {
+                    nearest = dist;
+                    index = i;
+                }
+            }
+            return index >= 0;
+        }
+
+        public bool TryGetHelicopterFocus(int index, out Vector3 worldPos, out string displayName)
+        {
+            if (index >= 0 && index < _helicopters.Count)
+            {
+                Helicopter h = _helicopters[index];
+                worldPos = h.Position;
+                displayName = h.Template.Role switch
+                {
+                    HeliRole.FireRescue => "Trực thăng Cứu hỏa",
+                    HeliRole.MedEvac => "Trực thăng Cấp cứu",
+                    HeliRole.Police => "Trực thăng Cảnh sát",
+                    _ => "Trực thăng Đô thị"
+                };
+                return true;
+            }
+            worldPos = default;
+            displayName = null;
+            return false;
+        }
 
         public HelicopterSystem(CitySimulation city, float cellSize, Material material, Transform parent)
         {
@@ -185,13 +226,31 @@ namespace XCity
             h.MainRotorAngle = Mathf.Repeat(h.MainRotorAngle + MainRotorDegPerSec * dt, 360f);
             h.TailRotorAngle = Mathf.Repeat(h.TailRotorAngle + TailRotorDegPerSec * dt, 360f);
 
+            bool emergencyCall = _emergency != null && _emergency.HasActiveFire && h.Template.Role == HeliRole.FireRescue;
+            if (emergencyCall)
+            {
+                Vector3 fireHover = _emergency.FireWorldPos + Vector3.up * (_emergency.FireHeight + 2.8f);
+                if ((h.Target - fireHover).sqrMagnitude > 4f)
+                {
+                    h.Start = h.Position;
+                    h.Target = fireHover;
+                    Vector3 flat = h.Target - h.Start;
+                    flat.y = 0f;
+                    h.FlightLength = Mathf.Max(6f, flat.magnitude);
+                    h.FlightProgress = 0f;
+                    h.IsHovering = false;
+                }
+                if (h.IsHovering)
+                    _emergency.NotifyResponderNear(h.Position);
+            }
+
             if (h.IsHovering)
             {
                 h.HoverTimer -= dt;
                 h.Pitch = Mathf.MoveTowards(h.Pitch, 0f, 18f * dt);
                 h.Roll = Mathf.MoveTowards(h.Roll, 0f, 22f * dt);
                 h.Yaw = Mathf.Repeat(h.Yaw + 10f * dt, 360f);
-                if (h.HoverTimer <= 0f)
+                if (h.HoverTimer <= 0f && !emergencyCall)
                     PickNextLeg(h);
                 return;
             }

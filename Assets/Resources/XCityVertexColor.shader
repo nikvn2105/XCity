@@ -13,12 +13,13 @@ Shader "XCity/VertexColor"
         #pragma multi_compile_local _ XCITY_ARCHITECTURE
         fixed4 _Color;
         float _XCityTime;
+        float _XCityNight;
 
         struct Input
         {
             float4 color : COLOR;
-            #if defined(XCITY_ARCHITECTURE)
             float3 worldPos;
+            #if defined(XCITY_ARCHITECTURE)
             float3 worldNormal;
             float surfaceType;
             #endif
@@ -31,7 +32,7 @@ Shader "XCity/VertexColor"
             data.surfaceType = v.texcoord1.x;
             #endif
             float a = v.color.a;
-            if (a > 0.02 && a < 0.995)
+            if (a > 0.05 && a < 0.995)
             {
                 float sway = 1.0 - a;
                 float3 wp = mul(unity_ObjectToWorld, v.vertex).xyz;
@@ -103,7 +104,29 @@ Shader "XCity/VertexColor"
             #if defined(XCITY_ARCHITECTURE)
             albedo = BuildingFinish(IN, albedo);
             #endif
+
+            fixed3 emission = fixed3(0, 0, 0);
+            if (IN.color.a < 0.005)
+            {
+                emission = IN.color.rgb * lerp(0.12, 1.35, _XCityNight);
+            }
+            else if (IN.color.a < 0.025)
+            {
+                emission = IN.color.rgb * 1.45;
+            }
+            #if defined(XCITY_ARCHITECTURE)
+            if (_XCityNight > 0.01 && IN.surfaceType > 2.5 && IN.surfaceType < 3.5)
+            {
+                float3 room = floor(IN.worldPos * float3(1.55, 1.28, 1.55));
+                float h = frac(sin(dot(room, float3(12.9898, 78.233, 37.719))) * 43758.5453);
+                float lit = step(0.30, h) * smoothstep(0.05 + h * 0.35, 0.50 + h * 0.35, _XCityNight);
+                fixed3 winColor = lerp(fixed3(1.0, 0.78, 0.44), fixed3(0.76, 0.91, 1.0), step(0.78, h));
+                emission += winColor * (lit * 0.96);
+            }
+            #endif
+
             output.Albedo = albedo;
+            output.Emission = emission;
             output.Alpha = 1;
         }
         ENDCG

@@ -37,7 +37,10 @@ namespace XCity
         private IndustrialSmokeSystem _industrialSmoke;
         private VehicleSystem _vehicles;
         private HelicopterSystem _helicopters;
+        private WatercraftSystem _watercraft;
         private CitizenSystem _citizens;
+        private DayNightSystem _dayNight;
+        private Light _sunLight;
         private BuildTool _activeTool = BuildTool.Road;
         private Camera _cam;
         private Vector3 _camTarget;
@@ -46,9 +49,6 @@ namespace XCity
         private float _camYaw = 45f;
 
         private float _simTimer;
-        private static readonly string[] SpeedLabels = { "Dừng", "1×", "2×", "3×" };
-        private readonly Image[] _speedButtons = new Image[SpeedLabels.Length];
-        private int _speed = 1;
 
         private Text _hudStatusText;
         private Button _undoButton;
@@ -132,12 +132,12 @@ namespace XCity
         private void SetupEnvironment()
         {
             var lightObj = new GameObject("SunLight");
-            var light = lightObj.AddComponent<Light>();
-            light.type = LightType.Directional;
-            light.intensity = 0.96f;
-            light.color = new Color(1f, 0.96f, 0.88f);
-            light.shadows = LightShadows.Soft;
-            light.shadowStrength = 0.64f;
+            _sunLight = lightObj.AddComponent<Light>();
+            _sunLight.type = LightType.Directional;
+            _sunLight.intensity = 0.96f;
+            _sunLight.color = new Color(1f, 0.96f, 0.88f);
+            _sunLight.shadows = LightShadows.Soft;
+            _sunLight.shadowStrength = 0.64f;
             lightObj.transform.SetParent(transform);
             lightObj.transform.rotation = Quaternion.Euler(56f, -34f, 0f);
 
@@ -169,7 +169,9 @@ namespace XCity
             _industrialSmoke = new IndustrialSmokeSystem(_city, _construction, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
             _helicopters = new HelicopterSystem(_city, CellSize, _vertexColorMat, transform);
+            _watercraft = new WatercraftSystem(_city, CellSize, _vertexColorMat, transform);
             _citizens = new CitizenSystem(_city, CellSize, _vertexColorMat, transform);
+            SetupUXSystems();
         }
 
         private void AddLandscapeBase(string name, float worldSpan, float size, float top, float depth, Material material)
@@ -205,6 +207,7 @@ namespace XCity
                 _camTarget = new Vector3((index / GridSize + 0.5f) * CellSize, 0f, (index % GridSize + 0.5f) * CellSize);
                 break;
             }
+            _dayNight = new DayNightSystem(_sunLight, _cam, _waterMat);
             UpdateCameraTransform();
         }
 
@@ -294,39 +297,9 @@ namespace XCity
             SetupBuildCatalog(font);
             AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
             AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
+            SetupUXToolbar(font);
 
-            SetupSpeedControls(font);
             SelectTool(BuildTool.Road);
-            RefreshHUD();
-        }
-
-        private void SetupSpeedControls(Font font)
-        {
-            var bar = CreatePanel(_safeAreaRoot, "SpeedBar", Vector2.one, Vector2.one,
-                new Vector2(-300, -118), new Vector2(-12, -70), new Color(0.08f, 0.10f, 0.14f, 0.85f));
-            bar.transform.SetAsFirstSibling();
-            var layout = bar.AddComponent<HorizontalLayoutGroup>();
-            layout.spacing = 6;
-            layout.padding = new RectOffset(6, 6, 5, 5);
-            layout.childForceExpandWidth = true;
-            layout.childForceExpandHeight = true;
-            for (int i = 0; i < SpeedLabels.Length; i++)
-            {
-                int speed = i;
-                Button button = CreateHudButton(bar.transform, font, SpeedLabels[i], "Speed_" + i);
-                button.onClick.AddListener(() => SetSpeed(speed));
-                _speedButtons[i] = button.image;
-            }
-            SetSpeed(_speed);
-        }
-
-        // Scaling time pauses or speeds up the simulation together with traffic, citizens and construction.
-        private void SetSpeed(int speed)
-        {
-            _speed = speed;
-            Time.timeScale = speed;
-            for (int i = 0; i < _speedButtons.Length; i++)
-                _speedButtons[i].color = i == speed ? new Color(0.19f, 0.52f, 0.96f) : new Color(0.20f, 0.24f, 0.30f);
             RefreshHUD();
         }
 
@@ -461,6 +434,7 @@ namespace XCity
         private void SelectTool(BuildTool tool)
         {
             CancelGesture();
+            if (tool != BuildTool.Pan) ClearFollow();
             _activeTool = tool;
             _catalog.SetActive(false);
             bool catalogTool = _activeBuildingModel != BuildingModel.Default;
@@ -618,6 +592,7 @@ namespace XCity
             {
                 if (!_panMoved && !IsPanMovement(position)) return;
                 _panMoved = true;
+                ClearFollow();
                 Vector2 delta = position - _lastPointerPos;
                 Vector3 right = Vector3.ProjectOnPlane(_cam.transform.right, Vector3.up).normalized;
                 Vector3 forward = Vector3.ProjectOnPlane(_cam.transform.forward, Vector3.up).normalized;
@@ -647,7 +622,11 @@ namespace XCity
             if (_isDragging && _activeTool == BuildTool.Pan && !_panMoved &&
                 !IsPanMovement(position) && !IsPointerOverUI(position))
             {
-                _inspectedCell = TryInspectCell(position, out var inspected) ? inspected : (Vector2Int?)null;
+                if (!TryBeginFollowFromPointer(position))
+                {
+                    ClearFollow();
+                    _inspectedCell = TryInspectCell(position, out var inspected) ? inspected : (Vector2Int?)null;
+                }
                 RefreshHUD();
             }
 
@@ -660,7 +639,11 @@ namespace XCity
                     if (_bridgeStart.HasValue && _bridgeQuote == BridgeQuote.Ready)
                     {
                         Vector2Int start = _bridgeStart.Value;
-                        _cityDirty |= _city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y);
+                        if (_city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y))
+                        {
+                            _cityDirty = true;
+                            _audio?.PlayBridge();
+                        }
                     }
                 }
                 else if (IsSinglePlacement)
@@ -669,7 +652,11 @@ namespace XCity
                     {
                         CellType placement = _activeTool == BuildTool.PowerPlant
                             ? CellType.PowerPlant : BuildingCatalog.Get(_activeBuildingModel).Type;
-                        _cityDirty |= _city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel);
+                        if (_city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel))
+                        {
+                            _cityDirty = true;
+                            _audio?.PlayBuild();
+                        }
                     }
                     RefreshHUD();
                 }
@@ -896,7 +883,12 @@ namespace XCity
                 BuildTool.Industrial => CellType.Industrial,
                 _ => CellType.Empty
             };
-            _cityDirty |= _city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel);
+            if (_city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel))
+            {
+                _cityDirty = true;
+                if (_activeTool == BuildTool.Bulldoze) _audio?.PlayBulldoze();
+                else _audio?.PlayBuild();
+            }
         }
 
         private IEnumerable<(int X, int Z)> GetStrokeCells()
@@ -908,14 +900,18 @@ namespace XCity
         private void UndoBuild()
         {
             CancelGesture();
-            _cityDirty |= _city.TryUndoBuild();
+            if (_city.TryUndoBuild())
+            {
+                _cityDirty = true;
+                _audio?.PlayUndo();
+            }
             RefreshHUD();
         }
 
         private void RunSimulationTick()
         {
-            if (_previewOutput != null) return;
-            _simTimer += Time.deltaTime;
+            if (_previewOutput != null || _simSpeed <= 0f) return;
+            _simTimer += Time.deltaTime * _simSpeed;
             if (_simTimer < TickInterval) return;
             _simTimer -= TickInterval;
             _city.Tick();
@@ -951,13 +947,17 @@ namespace XCity
             _industrialSmoke.SetVisible(visible);
             _vehicles.SetVisible(visible);
             _helicopters.SetVisible(visible);
+            _watercraft.SetVisible(visible);
             _citizens.SetVisible(visible);
+            _emergencies?.SetVisible(visible);
             if (!visible) return;
             var view = LocalView;
             _industrialSmoke.SetView(view);
             _vehicles.SetView(view);
             _helicopters.SetView(view);
+            _watercraft.SetView(view);
             _citizens.SetView(view);
+            UpdateUXInView(view);
         }
 
         private void LateUpdate()
@@ -965,15 +965,23 @@ namespace XCity
             RefreshSceneDetail(2);
             _cityRenderer.RebuildDirtyChunks(1);
             bool visible = _chunkScheduler.ShowEffects;
-            _construction.Update(Time.deltaTime, visible, LocalView);
+            float simDt = Time.deltaTime * _simSpeed;
+            _construction.Update(simDt, visible, LocalView);
             _buildingRenderer.RebuildDirtyChunks(1);
+            _dayNight?.Update(simDt);
 
-            if (!visible) return;
+            if (!visible)
+            {
+                LateUpdateUX(0f);
+                return;
+            }
             Shader.SetGlobalFloat("_XCityTime", Time.time);
-            _industrialSmoke.Update(Time.deltaTime);
-            _vehicles.Update(Time.deltaTime);
-            _helicopters.Update(Time.deltaTime);
-            _citizens.Update(Time.deltaTime);
+            _industrialSmoke.Update(simDt);
+            _vehicles.Update(simDt);
+            _helicopters.Update(simDt);
+            _watercraft.Update(simDt);
+            _citizens.Update(simDt);
+            LateUpdateUX(simDt);
         }
 
         private void OnDestroy()
@@ -984,7 +992,9 @@ namespace XCity
             _buildingRenderer?.Dispose();
             _vehicles?.Dispose();
             _helicopters?.Dispose();
+            _watercraft?.Dispose();
             _citizens?.Dispose();
+            DisposeUXSystems();
             Destroy(_vertexColorMat);
             Destroy(_waterMat);
             Destroy(_worldMapTexture);
@@ -1208,7 +1218,9 @@ namespace XCity
                         : "Chạm vào ô đất sát mặt nước, cạnh đường có điện";
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
-                if (_speed == 0) hint = $"Đang tạm dừng  |  {hint}";
+                string uxPrefix = GetUXStatusPrefix();
+                if (uxPrefix != null) hint = $"{uxPrefix}  |  {hint}";
+                if (_simSpeed <= 0f) hint = $"Đang tạm dừng  |  {hint}";
                 if (_city.TicksInDebt > 0 && !_city.IsBankrupt)
                     hint = $"Cảnh báo phá sản: còn {CitySimulation.BankruptcyTicks - _city.TicksInDebt} lượt · Vay hoặc cắt giảm chi phí  |  {hint}";
                 if (_city.IsBankrupt) ShowBankruptcy();

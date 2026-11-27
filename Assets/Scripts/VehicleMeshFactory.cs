@@ -25,6 +25,8 @@ namespace XCity
         public float WheelRadius;
         public float Length;
         public VehicleCategory Category;
+        public string DisplayName;
+        public bool IsFireTruck;
         public bool IsTwoWheeler;
         public bool HasTrailer;
         public bool HasEmergencyLights;
@@ -56,12 +58,12 @@ namespace XCity
         private static readonly Color32 ChromeSilver = new Color32(204, 210, 218, 255);
         private static readonly Color32 SteelGrey = new Color32(82, 90, 100, 255);
         private static readonly Color32 GlassDark = new Color32(40, 52, 68, 255);
-        private static readonly Color32 HeadlightWarm = new Color32(255, 240, 180, 255);
-        private static readonly Color32 TaillightRed = new Color32(215, 45, 45, 255);
-        private static readonly Color32 StrobeBlue = new Color32(45, 130, 255, 255);
-        private static readonly Color32 StrobeRed = new Color32(255, 45, 45, 255);
-        private static readonly Color32 StrobeWhite = new Color32(245, 248, 255, 255);
-        private static readonly Color32 StrobeAmber = new Color32(255, 178, 36, 255);
+        private static readonly Color32 HeadlightWarm = new Color32(255, 240, 180, 0);
+        private static readonly Color32 TaillightRed = new Color32(215, 45, 45, 0);
+        private static readonly Color32 StrobeBlue = new Color32(45, 130, 255, 0);
+        private static readonly Color32 StrobeRed = new Color32(255, 45, 45, 0);
+        private static readonly Color32 StrobeWhite = new Color32(245, 248, 255, 0);
+        private static readonly Color32 StrobeAmber = new Color32(255, 178, 36, 0);
 
         private static readonly Color32[] SedanColors =
         {
@@ -251,7 +253,7 @@ namespace XCity
             if (isTaxi)
             {
                 b.AddBox(new Vector3(0f, 0.81f, -0.02f), new Vector3(0.28f, 0.08f, 0.14f),
-                    new Color32(250, 245, 220, 255), new Color32(250, 245, 220, 255));
+                    new Color32(250, 232, 140, 0), new Color32(250, 232, 140, 0));
             }
 
             AddHeadAndTailLights(b, bodyCenter, bodySize, 0.22f, 0.34f);
@@ -923,6 +925,8 @@ namespace XCity
                 WheelRadius = wheelRadius,
                 Length = length,
                 Category = category,
+                IsFireTruck = hasEmergencyLights && strobeLeft.r > 200 && length > 2.4f,
+                DisplayName = ResolveDisplayName(category, length, isTwoWheeler, hasTrailer, hasEmergencyLights, strobeLeft),
                 IsTwoWheeler = isTwoWheeler,
                 HasTrailer = hasTrailer,
                 HasEmergencyLights = hasEmergencyLights,
@@ -931,6 +935,30 @@ namespace XCity
             };
             UnityEngine.Object.Destroy(mesh);
             return tpl;
+        }
+
+        private static string ResolveDisplayName(
+            VehicleCategory category,
+            float length,
+            bool isTwoWheeler,
+            bool hasTrailer,
+            bool emergency,
+            Color32 strobeLeft)
+        {
+            if (isTwoWheeler) return "Xe máy";
+            if (emergency)
+            {
+                if (length > 2.4f) return "Xe cứu hỏa";
+                return strobeLeft.b > strobeLeft.r ? "Xe cảnh sát" : "Xe cấp cứu";
+            }
+            if (hasTrailer) return length >= 3.26f ? "Xe đầu kéo Container" : "Xe bồn nhiên liệu";
+            if (category == VehicleCategory.Civic) return "Xe buýt trường học";
+            if (length >= 2.70f) return "Xe buýt nội đô";
+            if (length >= 2.48f) return category == VehicleCategory.Residential ? "Xe chở rác" : "Xe tải ben";
+            if (length >= 2.35f) return "Xe tải thùng";
+            if (length >= 2.00f) return "Xe Van giao hàng";
+            if (length >= 1.80f) return length >= 1.90f ? "Xe bán tải" : "Xe SUV";
+            return category == VehicleCategory.Commercial ? "Taxi" : "Xe con";
         }
     }
 }

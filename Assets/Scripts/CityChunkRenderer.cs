@@ -184,7 +184,18 @@ namespace XCity
             DeckHalf(-half, 0f);
             DeckHalf(0f, half);
 
-            if (bridge.HasNavigationOpening || (bridge.Index % 2 != 0 && bridge.Index != bridge.Count - 1))
+            if (full && bridge.HasNavigationOpening &&
+                Mathf.Abs(bridge.Index + 0.5f - bridge.Count * 0.5f) <= 0.55f)
+            {
+                var channelGreen = new Color32(58, 242, 134, 0);
+                float beaconY = bridge.Middle + RoadY - BridgeProfile.DeckThickness - 0.06f;
+                _props.AddBox(new Vector3(-edge, beaconY, 0f), new Vector3(0.14f, 0.12f, 0.24f), channelGreen, channelGreen);
+                _props.AddBox(new Vector3(edge, beaconY, 0f), new Vector3(0.14f, 0.12f, 0.24f), channelGreen, channelGreen);
+            }
+
+            bool isGatewayTower = full && bridge.Count >= 5 && !bridge.HasNavigationOpening &&
+                (IsNavigationIndex(bridge.Index - 1, bridge.Count) || IsNavigationIndex(bridge.Index + 1, bridge.Count));
+            if (bridge.HasNavigationOpening || (!isGatewayTower && bridge.Index % 2 != 0 && bridge.Index != bridge.Count - 1))
                 return;
             const float pierBase = BridgeProfile.WaterSurface - 0.30f;
             float bearing = bridge.Middle + RoadY - BridgeProfile.DeckThickness;
@@ -193,6 +204,9 @@ namespace XCity
                 new Vector3(0.72f, bearing - pierBase, 0.70f), concrete, concrete);
             support.AddBox(new Vector3(0f, bearing - 0.09f, 0f),
                 new Vector3(edge * 1.55f, 0.18f, 0.57f), concrete, concrete);
+
+            if (isGatewayTower)
+                AddBridgeTowers(bridge.Middle, edge, bearing, concrete, steel);
 
             float Grade(float z) => bridge.HeightAt((z + half) / _cellSize);
 
@@ -248,6 +262,54 @@ namespace XCity
             position.y += bridge.HeightAt(progress);
             tangent.y += (xAxis ? tangent.x : tangent.z) * bridge.SlopeAt(progress) / cellSize;
         }
+
+        private void AddBridgeTowers(float deckY, float edge, float bearing, Color32 concrete, Color32 steel)
+        {
+            float towerTop = deckY + 3.85f;
+            float pylonX = edge - 0.05f;
+            var cableSilver = new Color32(198, 206, 214, 255);
+            var aviationRed = new Color32(255, 58, 52, 0);
+
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float px = side * pylonX;
+                float lowerTop = deckY + 1.1f;
+                _props.AddBox(new Vector3(px, (bearing + lowerTop) * 0.5f, 0f),
+                    new Vector3(0.24f, lowerTop - bearing, 0.28f), concrete, concrete);
+                _props.AddBox(new Vector3(px, (lowerTop + towerTop) * 0.5f, 0f),
+                    new Vector3(0.18f, towerTop - lowerTop, 0.22f), steel, steel);
+                _props.AddBox(new Vector3(px, towerTop + 0.09f, 0f),
+                    new Vector3(0.11f, 0.12f, 0.11f), aviationRed, aviationRed);
+
+                // Stay cables fanning along the bridge deck edge without obstructing traffic lanes.
+                for (int c = 1; c <= 3; c++)
+                {
+                    float reach = c * 0.60f;
+                    float anchorY = deckY + 3.55f - c * 0.22f;
+                    float deckAnchorY = deckY + 0.30f;
+                    AddStayCable(px, anchorY, reach, deckAnchorY, cableSilver);
+                    AddStayCable(px, anchorY, -reach, deckAnchorY, cableSilver);
+                }
+            }
+
+            // High portal crossbeam clear above all trucks/buses.
+            _props.AddBox(new Vector3(0f, deckY + 3.15f, 0f),
+                new Vector3(pylonX * 2f - 0.12f, 0.22f, 0.20f), steel, concrete);
+        }
+
+        private void AddStayCable(float x, float topY, float zAnchor, float botY, Color32 color)
+        {
+            const float hw = 0.024f;
+            _props.AddQuad(
+                new Vector3(x - hw, topY, 0f),
+                new Vector3(x + hw, topY, 0f),
+                new Vector3(x + hw, botY, zAnchor),
+                new Vector3(x - hw, botY, zAnchor),
+                Vector3.up, color);
+        }
+
+        private static bool IsNavigationIndex(int index, int count) =>
+            index >= 0 && index < count && Math.Abs(index + 0.5f - count * 0.5f) <= 1.5f;
 
         private void AddCoast(int x, int z)
         {
@@ -363,10 +425,11 @@ namespace XCity
         private void AddStreetlight(float offset)
         {
             var metal = new Color32(52, 72, 79, 255);
+            var lampWarm = new Color32(255, 240, 198, 0);
             _props.AddBox(new Vector3(offset, 0.17f, offset), new Vector3(0.19f, 0.14f, 0.19f), Curb, Paving);
             _props.AddBox(new Vector3(offset, 1.10f, offset), new Vector3(0.08f, 1.84f, 0.08f), metal, metal);
             _props.AddBox(new Vector3(offset - 0.18f, 2.04f, offset), new Vector3(0.43f, 0.09f, 0.08f), metal, metal);
-            _props.AddBox(new Vector3(offset - 0.39f, 2.02f, offset), new Vector3(0.24f, 0.10f, 0.16f), Paint, metal);
+            _props.AddBox(new Vector3(offset - 0.39f, 2.02f, offset), new Vector3(0.24f, 0.10f, 0.16f), lampWarm, metal);
         }
 
         private void AddLot(CellType type, int x, int z, bool full)
@@ -395,6 +458,12 @@ namespace XCity
             if (!full) return;
 
             uint seed = BuildingMeshFactory.Hash(x, z, 921);
+            if (_city.Roads.HasRoadAccess(x, z) && CountAdjacentBuildings(x, z) >= 2)
+            {
+                AddPocketPark(half, seed);
+                return;
+            }
+
             float grove = WorldTerrain.Vegetation(x, z);
             float threshold = _city.Roads.HasRoadAccess(x, z) ? 0.53f : 0.39f;
             if (grove > threshold && seed % 5u < 3u)
@@ -416,6 +485,59 @@ namespace XCity
                 _props.AddCylinder(new Vector3(0.37f, 0.01f, -0.44f), 0.34f, 0.22f, 0.22f, 5, rock, true, Paving);
             }
         }
+
+        private int CountAdjacentBuildings(int x, int z)
+        {
+            int count = 0;
+            for (int d = 0; d < 4; d++)
+            {
+                int nx = x + (d == 0 ? -1 : d == 1 ? 1 : 0);
+                int nz = z + (d == 2 ? -1 : d == 3 ? 1 : 0);
+                if (nx >= 0 && nz >= 0 && nx < CitySimulation.GridSize && nz < CitySimulation.GridSize &&
+                    _city.GetCell(nx, nz).Height > 0f)
+                    count++;
+            }
+            return count;
+        }
+
+        private void AddPocketPark(float half, uint seed)
+        {
+            var wood = new Color32(146, 102, 62, 255);
+            var fountainWater = new Color32(94, 184, 212, 255);
+            var spray = new Color32(236, 248, 254, 255);
+            var lamp = new Color32(255, 240, 198, 0);
+
+            // Cross stone walkways
+            Rect(_surface, -0.30f, -half * 0.92f, 0.30f, half * 0.92f, 0.026f, Paving);
+            Rect(_surface, -half * 0.92f, -0.30f, half * 0.92f, 0.30f, 0.026f, Paving);
+            _surface.AddCylinder(new Vector3(0f, 0.026f, 0f), 0.72f, 0.72f, 0.04f, 8, Paving, true, Curb);
+
+            // Fountain plaza vs planter court
+            if ((seed & 1u) == 0u)
+            {
+                _props.AddCylinder(new Vector3(0f, 0.06f, 0f), 0.56f, 0.56f, 0.16f, 8, Concrete(), true, fountainWater);
+                _props.AddCylinder(new Vector3(0f, 0.20f, 0f), 0.12f, 0.06f, 0.28f, 6, spray, true, spray);
+            }
+            else
+            {
+                _props.AddBox(new Vector3(0f, 0.14f, 0f), new Vector3(0.84f, 0.16f, 0.84f), Curb, GrassLight);
+                TreeMeshFactory.AddStreetTree(_props, new Vector3(0f, 0.22f, 0f), 0.62f, seed);
+            }
+
+            // Wooden benches & park lantern
+            _props.AddBox(new Vector3(-0.78f, 0.11f, 0.44f), new Vector3(0.42f, 0.12f, 0.16f), wood, wood);
+            _props.AddBox(new Vector3(0.78f, 0.11f, -0.44f), new Vector3(0.42f, 0.12f, 0.16f), wood, wood);
+            _props.AddBox(new Vector3(-0.78f, 0.52f, -0.78f), new Vector3(0.06f, 0.96f, 0.06f), Curb, Curb);
+            _props.AddBox(new Vector3(-0.78f, 1.04f, -0.78f), new Vector3(0.14f, 0.14f, 0.14f), lamp, lamp);
+
+            // Corner park trees
+            TreeMeshFactory.AddWildTree(_props, new Vector3(1.18f, 0.02f, 1.18f), 0.58f, seed ^ 0x517u, 0.4f);
+            TreeMeshFactory.AddWildTree(_props, new Vector3(-1.18f, 0.02f, -1.18f), 0.54f, seed ^ 0xA23u, 0.7f);
+            if ((seed & 2u) == 0u)
+                TreeMeshFactory.AddWildTree(_props, new Vector3(1.18f, 0.02f, -1.18f), 0.52f, seed ^ 0x7E9u, 0.6f);
+        }
+
+        private static Color32 Concrete() => new Color32(182, 184, 178, 255);
 
         private static void Rect(MeshBuilder mesh, float x0, float z0, float x1, float z1, float y, Color32 color)
         {
