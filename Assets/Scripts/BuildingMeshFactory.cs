@@ -60,6 +60,8 @@ namespace XCity
             }
         }
 
+        internal static int CatalogVariant(int x, int z) => (int)(Hash(x, z, 1187) % 3u);
+
         private struct CellRng
         {
             private uint _s;
@@ -92,7 +94,8 @@ namespace XCity
             b.SetFrame(cellCenterLocal + Vector3.up * CityChunkRenderer.BuildingBase, quarterTurns);
 
             var paletteRng = new CellRng(Hash(x, z, (int)cell.Type));
-            var shapeRng = new CellRng(Hash(x, z, (int)cell.Type * 16 + cell.Level + 100));
+            int shapeLevel = cell.Model == BuildingModel.Default ? cell.Level : 1;
+            var shapeRng = new CellRng(Hash(x, z, (int)cell.Type * 16 + shapeLevel + 100));
 
             Color32 lotColor = cell.Type switch
             {
@@ -107,7 +110,7 @@ namespace XCity
             float h = Mathf.Max(1.5f, cell.Height);
             if (cell.Model != BuildingModel.Default)
             {
-                BuildCatalogModel(b, cell, h, ref paletteRng, ref shapeRng);
+                BuildCatalogModel(b, x, z, cell, h, ref paletteRng, ref shapeRng);
                 return;
             }
 
@@ -183,11 +186,7 @@ namespace XCity
             b.AddCylinder(new Vector3(0.65f, 0.03f, 1.10f), 0.11f, 0.03f, 0.28f, 6, coneOrange, true, coneOrange);
         }
 
-        // One of three looks per building, fixed by the cell (the palette rng is seeded from x, z and
-        // the cell type only), so a building keeps its style across upgrades, reloads and chunk rebuilds.
-        private static int PickVariant(ref CellRng palette) => palette.Range(0, 3);
-
-        private static void BuildCatalogModel(MeshBuilder b, CityCell cell, float height,
+        private static void BuildCatalogModel(MeshBuilder b, int x, int z, CityCell cell, float height,
             ref CellRng palette, ref CellRng shape)
         {
             switch (cell.Model)
@@ -195,23 +194,23 @@ namespace XCity
                 case BuildingModel.RowHouse:
                 case BuildingModel.Villa:
                 case BuildingModel.Apartment:
-                    BuildHousingOption(b, cell, height, ref palette, ref shape);
+                    BuildHousingOption(b, cell, height, CatalogVariant(x, z), ref palette, ref shape);
                     break;
                 case BuildingModel.Preschool:
                 case BuildingModel.PrimarySchool:
                 case BuildingModel.HighSchool:
                 case BuildingModel.University:
-                    BuildSchool(b, cell.Model, height, PickVariant(ref palette));
+                    BuildSchool(b, cell.Model, height, CatalogVariant(x, z));
                     break;
                 case BuildingModel.Office:
                 case BuildingModel.OfficeTower:
-                    BuildOffice(b, height, cell.Model == BuildingModel.OfficeTower, ref palette, ref shape);
+                    BuildOffice(b, height, cell.Model == BuildingModel.OfficeTower, ref palette, ref shape, CatalogVariant(x, z));
                     break;
                 case BuildingModel.Market:
-                    BuildMarket(b, height);
+                    BuildMarket(b, height, CatalogVariant(x, z));
                     break;
                 case BuildingModel.HighStreet:
-                    BuildHighStreet(b, height);
+                    BuildHighStreet(b, height, CatalogVariant(x, z));
                     break;
                 case BuildingModel.Harbor:
                     BuildHarbor(b);
@@ -219,19 +218,19 @@ namespace XCity
                 case BuildingModel.PoliceStation:
                 case BuildingModel.Hospital:
                 case BuildingModel.FireStation:
-                    BuildCivicService(b, cell.Model, height, PickVariant(ref palette));
+                    BuildCivicService(b, cell.Model, height, CatalogVariant(x, z));
                     break;
                 case BuildingModel.PolicePost:
                 case BuildingModel.Clinic:
                 case BuildingModel.FireStationSmall:
-                    BuildSmallService(b, cell.Model, height, PickVariant(ref palette));
+                    BuildSmallService(b, cell.Model, height, CatalogVariant(x, z));
                     break;
                 case BuildingModel.ShoppingMall:
-                    BuildMall(b, height);
+                    BuildMall(b, height, CatalogVariant(x, z));
                     break;
                 case BuildingModel.WaterPump:
                 case BuildingModel.SewagePlant:
-                    BuildUtility(b, cell.Model, height, PickVariant(ref palette));
+                    BuildUtility(b, cell.Model, height, CatalogVariant(x, z));
                     break;
             }
         }
@@ -288,46 +287,99 @@ namespace XCity
             }
         }
 
-        private static void BuildHousingOption(MeshBuilder b, CityCell cell, float h, ref CellRng palette, ref CellRng shape)
+        private static void BuildHousingOption(MeshBuilder b, CityCell cell, float h, int variant,
+            ref CellRng palette, ref CellRng shape)
         {
             Color32 wall = WallPalette[palette.Range(0, WallPalette.Length)];
             Color32 roof = RoofPalette[palette.Range(0, RoofPalette.Length)];
             if (cell.Model == BuildingModel.Apartment)
             {
-                BuildApartmentTower(b, h, wall, ref shape);
+                BuildApartmentTower(b, h, wall, ref shape, variant);
                 return;
             }
 
             if (cell.Model == BuildingModel.Villa)
             {
-                float body = h * 0.60f;
-                AddWindowBlock(b, new Vector3(-0.28f, 0.04f, -0.24f), 2.05f, 1.9f, body,
-                    cell.Level, wall, roof);
-                b.AddGableRoof(new Vector3(-0.28f, body + 0.04f, -0.24f),
-                    2.05f, 1.9f, h * 0.19f, 0.12f, roof, wall);
-                AddPorch(b, -0.48f, 0.72f, 0.94f, 0.80f);
-                b.AddBox(new Vector3(1.13f, 0.59f, -0.67f), new Vector3(0.78f, 1.10f, 1.42f), wall, roof);
-                b.AddBox(new Vector3(1.13f, 1.18f, -0.67f), new Vector3(0.91f, 0.11f, 1.53f), roof, roof);
-                b.AddBox(new Vector3(1.06f, 0.10f, 0.77f), new Vector3(0.98f, 0.12f, 1.16f),
-                    ConcreteLight, new Color32(119, 185, 188, 255));
-                b.AddCylinder(new Vector3(-1.36f, 0.04f, 1.22f), 0.23f, 0.16f, 0.73f,
-                    6, new Color32(89, 138, 88, 255), true, LotGrass);
+                BuildVilla(b, h, cell.Level, variant, wall, roof);
                 return;
             }
 
             for (int house = -1; house <= 1; house++)
             {
                 float x = house * 0.97f;
-                float body = h * 0.70f + (house == 0 ? 0.12f : 0f);
+                float z = variant == 2 && house != 0 ? -0.30f : -0.06f;
+                float body = h * (variant == 2 ? 0.80f : 0.70f);
+                body += (variant == 1 ? house + 1 : house == 0 ? 1 : 0) * 0.10f;
                 Color32 tone = house == 0 ? wall : Darken(wall, house < 0 ? 0.88f : 0.96f);
-                AddWindowBlock(b, new Vector3(x, 0.04f, -0.06f), 0.91f, 2.04f, body,
-                    cell.Level, tone, roof);
-                AddPorch(b, x, 0.97f, 0.57f, 0.72f);
-                b.AddBox(new Vector3(x + 0.24f, body + h * 0.13f, -0.36f),
-                    new Vector3(0.16f, h * 0.27f, 0.21f), tone, ConcreteLight);
-                b.AddGableRoof(new Vector3(x, body + 0.04f, -0.06f),
-                    0.91f, 2.04f, h * 0.18f, 0.025f, roof, tone);
+                var foot = new Vector3(x, 0.04f, z);
+                AddWindowBlock(b, foot, 0.91f, 2.04f, body, cell.Level, tone, roof);
+                AddPorch(b, x, z + 1.03f, 0.57f, 0.72f);
+                var eave = foot + Vector3.up * body;
+                switch (variant)
+                {
+                    case 1:
+                        AddHipRoof(b, eave, 0.95f, 2.08f, h * 0.20f, roof);
+                        break;
+                    case 2:
+                        b.AddBox(eave + new Vector3(0, h * 0.09f, -0.32f),
+                            new Vector3(0.74f, h * 0.18f, 1.19f), tone, roof);
+                        b.AddBox(eave + new Vector3(0, 0.055f, 0.97f),
+                            new Vector3(0.91f, 0.11f, 0.10f), tone, ConcreteLight);
+                        break;
+                    default:
+                        b.AddBox(new Vector3(x + 0.24f, body + h * 0.13f, -0.36f),
+                            new Vector3(0.16f, h * 0.27f, 0.21f), tone, ConcreteLight);
+                        b.AddGableRoof(eave, 0.91f, 2.04f, h * 0.18f, 0.025f, roof, tone);
+                        break;
+                }
             }
+        }
+
+        private static void BuildVilla(MeshBuilder b, float h, int level, int variant, Color32 wall, Color32 roof)
+        {
+            var foot = new Vector3(-0.28f, 0.04f, variant == 1 ? -0.40f : -0.24f);
+            float body = h * (variant == 2 ? 0.82f : 0.70f);
+            AddWindowBlock(b, foot, 2.05f, 1.9f, body, level, wall, roof);
+            Vector3 eave = foot + Vector3.up * body;
+            if (variant == 0)
+                b.AddGableRoof(eave, 2.05f, 1.9f, h * 0.24f, 0.12f, roof, wall);
+            else if (variant == 1)
+                AddHipRoof(b, eave, 2.23f, 2.08f, h * 0.27f, roof);
+            else
+            {
+                b.AddBox(eave + new Vector3(-0.22f, h * 0.085f, -0.23f),
+                    new Vector3(1.35f, h * 0.17f, 1.26f), wall, roof);
+                b.AddBox(eave + new Vector3(0, 0.075f, 0.91f),
+                    new Vector3(2.05f, 0.15f, 0.08f), wall, ConcreteLight);
+            }
+
+            AddPorch(b, -0.48f, foot.z + 0.96f, 0.94f, 0.80f);
+            float wingHeight = variant == 1 ? h * 0.55f : 1.10f;
+            float wingZ = variant == 1 ? -0.35f : -0.67f;
+            b.AddBox(new Vector3(1.13f, 0.04f + wingHeight * 0.5f, wingZ),
+                new Vector3(0.78f, wingHeight, 1.42f), wall, roof);
+            b.AddBox(new Vector3(1.13f, 0.095f + wingHeight, wingZ),
+                new Vector3(0.91f, 0.11f, 1.53f), roof, roof);
+            b.AddBox(new Vector3(1.06f, 0.10f, variant == 1 ? 1.02f : 0.77f), new Vector3(0.98f, 0.12f, 1.16f),
+                ConcreteLight, new Color32(119, 185, 188, 255));
+            b.AddCylinder(new Vector3(-1.36f, 0.04f, 1.22f), 0.23f, 0.16f, 0.73f,
+                6, new Color32(89, 138, 88, 255), true, LotGrass);
+        }
+
+        internal static void AddHipRoof(MeshBuilder b, Vector3 center, float width, float depth, float rise, Color32 roof)
+        {
+            float x = width * 0.5f;
+            float z = depth * 0.5f;
+            Vector3 frontLeft = center + new Vector3(-x, 0, z);
+            Vector3 frontRight = center + new Vector3(x, 0, z);
+            Vector3 backLeft = center + new Vector3(-x, 0, -z);
+            Vector3 backRight = center + new Vector3(x, 0, -z);
+            Vector3 ridgeLeft = center + new Vector3(-x * 0.46f, rise, 0);
+            Vector3 ridgeRight = center + new Vector3(x * 0.46f, rise, 0);
+            b.AddQuad(frontLeft, frontRight, ridgeRight, ridgeLeft, Vector3.up, roof, BuildingSurface.Roof);
+            b.AddQuad(backRight, backLeft, ridgeLeft, ridgeRight, Vector3.up, roof, BuildingSurface.Roof);
+            b.AddTriangle(frontRight, backRight, ridgeRight, Vector3.up, roof, BuildingSurface.Roof);
+            b.AddTriangle(backLeft, frontLeft, ridgeLeft, Vector3.up, roof, BuildingSurface.Roof);
         }
 
         private static void BuildSchool(MeshBuilder b, BuildingModel model, float h, int variant)
@@ -404,11 +456,13 @@ namespace XCity
                 ConcreteLight, ConcreteLight);
         }
 
-        private static void BuildOffice(MeshBuilder b, float h, bool tower, ref CellRng palette, ref CellRng shape)
+        private static void BuildOffice(MeshBuilder b, float h, bool tower, ref CellRng palette, ref CellRng shape,
+            int variant = -1)
         {
             var pavement = new Color32(161, 163, 156, 255);
             var metal = new Color32(83, 94, 99, 255);
-            int form = shape.Range(0, 3);
+            int originalForm = shape.Range(0, 3);
+            int form = variant < 0 ? originalForm : variant;
             Color32 glass = CommercialGlassPalette[palette.Range(0, CommercialGlassPalette.Length)];
             Color32 frame = form == 1 ? new Color32(176, 172, 159, 255) : Darken(glass, 0.59f);
             const float baseY = 0.04f;
@@ -427,6 +481,8 @@ namespace XCity
             var shaft = new Vector3(shift, shaftBottom, -0.25f);
             int floors = Mathf.Clamp(Mathf.RoundToInt(shaftHeight / 0.74f), 3, 9);
             int crownFloors = (tower || h > 5.7f) && form != 1 ? 2 : 0;
+            if (!tower && variant == 1) crownFloors = 1;
+            else if (tower && variant == 2) crownFloors = Mathf.Min(3, floors - 1);
             int lowerFloors = floors - crownFloors;
             float lowerHeight = shaftHeight * lowerFloors / floors;
             AddTowerFloors(b, shaft, new Vector3(shaftWidth, lowerHeight, shaftDepth), lowerFloors,
@@ -435,7 +491,8 @@ namespace XCity
             float roofY = shaftBottom + lowerHeight;
             if (crownFloors > 0)
             {
-                float upperWidth = shaftWidth - (form == 0 ? 0.36f : 0.52f);
+                float setback = variant == 1 ? 0.82f : variant == 2 ? 0.71f : form == 0 ? 0.36f : 0.52f;
+                float upperWidth = shaftWidth - setback;
                 float upperDepth = shaftDepth - 0.39f;
                 float upperHeight = shaftHeight - lowerHeight;
                 var upper = new Vector3(shift + 0.14f, roofY, shaft.z - 0.10f);
@@ -451,7 +508,8 @@ namespace XCity
                 form == 2);
         }
 
-        private static void BuildApartmentTower(MeshBuilder b, float h, Color32 wall, ref CellRng shape)
+        private static void BuildApartmentTower(MeshBuilder b, float h, Color32 wall, ref CellRng shape,
+            int variant = -1)
         {
             var charcoal = new Color32(79, 85, 82, 255);
             var glazing = new Color32(84, 113, 129, 255);
@@ -459,6 +517,19 @@ namespace XCity
             float width = shape.Range(2.50f, 2.82f);
             float depth = shape.Range(1.95f, 2.20f);
             float offset = shape.Next() < 0.5f ? -0.19f : 0.19f;
+            if (variant == 1)
+            {
+                width = 2.24f;
+                depth = 2.42f;
+                offset = -0.24f;
+            }
+            else if (variant == 2)
+            {
+                width = 2.86f;
+                depth = 1.80f;
+                offset = 0.14f;
+            }
+
             const float podiumHeight = 0.83f;
             const float baseY = 0.04f;
             AddTowerLobby(b, new Vector3(0, baseY, -0.16f), 3.02f, 2.43f, podiumHeight, plinth, glazing);
@@ -469,7 +540,8 @@ namespace XCity
             var foot = new Vector3(offset, shaftBottom, -0.29f);
             float shaftHeight = h - shaftBottom - 0.29f;
             int floors = Mathf.Clamp(Mathf.RoundToInt(shaftHeight / 0.77f), 3, 8);
-            int mainFloors = floors - 1;
+            int crownFloors = variant == 2 ? 2 : 1;
+            int mainFloors = floors - crownFloors;
             float pitch = shaftHeight / floors;
             float mainHeight = pitch * mainFloors;
             AddTowerFloors(b, foot, new Vector3(width, mainHeight, depth), mainFloors, wall,
@@ -478,16 +550,19 @@ namespace XCity
             for (int floor = 0; floor < mainFloors; floor++)
             {
                 float y = shaftBottom + floor * pitch + 0.10f;
-                AddTowerBalcony(b, new Vector3(offset + width * 0.245f, y, foot.z + depth * 0.5f + 0.13f),
-                    width * 0.39f, charcoal);
+                float balconyX = variant == 1 && (floor & 1) == 0 ? -0.245f : 0.245f;
+                float balconyWidth = variant == 2 ? 0.82f : 0.39f;
+                AddTowerBalcony(b, new Vector3(variant == 2 ? offset : offset + width * balconyX,
+                    y, foot.z + depth * 0.5f + 0.13f), width * balconyWidth, charcoal);
             }
 
             var penthouse = new Vector3(offset - 0.13f, shaftBottom + mainHeight, foot.z - 0.16f);
-            const float setbackWidth = 0.52f;
-            const float setbackDepth = 0.36f;
-            AddTowerFloors(b, penthouse, new Vector3(width - setbackWidth, pitch, depth - setbackDepth),
-                1, plinth, glazing, true, ref shape);
-            AddTowerRoof(b, penthouse + Vector3.up * pitch, width - setbackWidth,
+            float setbackWidth = variant == 2 ? 0.92f : 0.52f;
+            float setbackDepth = variant == 1 ? 0.62f : 0.36f;
+            float crownHeight = pitch * crownFloors;
+            AddTowerFloors(b, penthouse, new Vector3(width - setbackWidth, crownHeight, depth - setbackDepth),
+                crownFloors, plinth, glazing, true, ref shape);
+            AddTowerRoof(b, penthouse + Vector3.up * crownHeight, width - setbackWidth,
                 depth - setbackDepth, charcoal, false);
         }
 
@@ -569,15 +644,26 @@ namespace XCity
                 new Vector3(0.28f, 0.124f, 0.46f), ConcreteLight, ConcreteLight);
         }
 
-        private static void BuildMarket(MeshBuilder b, float h)
+        private static void BuildMarket(MeshBuilder b, float h, int variant)
         {
             var steel = new Color32(83, 108, 107, 255);
             var canvas = new Color32(192, 158, 106, 255);
             var stone = new Color32(181, 170, 146, 255);
             float eave = h * 0.62f;
             b.AddBox(new Vector3(0, 0.065f, -0.26f), new Vector3(3.28f, 0.052f, 2.82f), stone, stone);
-            b.AddGableRoof(new Vector3(0, eave, -0.43f), 3.08f, 1.85f, h * 0.28f, 0.12f,
-                steel, steel);
+            var roof = new Vector3(0, eave, -0.43f);
+            if (variant == 1)
+                AddHipRoof(b, roof, 3.32f, 2.09f, h * 0.32f, steel);
+            else if (variant == 2)
+            {
+                b.AddGableRoof(roof + new Vector3(-0.81f, 0, 0), 1.54f, 1.85f, h * 0.33f, 0.04f, steel, steel);
+                b.AddGableRoof(roof + new Vector3(0.81f, 0, 0), 1.54f, 1.85f, h * 0.21f, 0.04f, canvas, steel);
+                for (int end = -1; end <= 1; end += 2)
+                    b.AddBox(new Vector3(0, eave * 0.5f, roof.z + end * 0.88f),
+                        new Vector3(0.09f, eave, 0.09f), steel, steel);
+            }
+            else
+                b.AddGableRoof(roof, 3.08f, 1.85f, h * 0.28f, 0.12f, steel, steel);
             for (int side = -1; side <= 1; side += 2)
             {
                 for (int end = -1; end <= 1; end += 2)
@@ -597,7 +683,7 @@ namespace XCity
             AddPlanter(b, new Vector3(1.36f, 0.06f, 1.39f), 0.46f);
         }
 
-        private static void BuildHighStreet(MeshBuilder b, float h)
+        private static void BuildHighStreet(MeshBuilder b, float h, int variant)
         {
             var limestone = new Color32(206, 198, 175, 255);
             var terracotta = new Color32(163, 109, 84, 255);
@@ -606,9 +692,14 @@ namespace XCity
             {
                 float x = shop * 1.06f;
                 float roof = h - (shop == 0 ? 0.08f : 0.34f);
+                if (variant == 1) roof -= h * 0.13f;
                 Color32 wall = shop == 0 ? limestone : terracotta;
-                AddWindowBlock(b, new Vector3(x, 0.97f, -0.30f), 1.01f, 2.05f, roof - 0.97f,
-                    2, wall, Darken(wall, 0.78f));
+                Color32 trim = Darken(wall, 0.78f);
+                float depth = variant == 2 ? 1.50f : 2.05f;
+                var upstairs = new Vector3(x, 0.97f, variant == 2 ? -0.53f : -0.30f);
+                AddWindowBlock(b, upstairs, 1.01f, depth, roof - 0.97f, 2, wall, trim);
+                if (variant == 1)
+                    b.AddGableRoof(new Vector3(x, roof, upstairs.z), 1.01f, depth, h * 0.15f, 0.02f, trim, wall);
                 var foot = new Vector3(x, 0.04f, -0.30f);
                 AddShopfront(b, foot, 1.01f, 2.05f, 0.93f, wall, shop == 0 ? terracotta : enamel);
             }
@@ -616,23 +707,42 @@ namespace XCity
             AddPlanter(b, new Vector3(1.39f, 0.04f, 1.34f), 0.44f);
         }
 
-        private static void BuildMall(MeshBuilder b, float h)
+        private static void BuildMall(MeshBuilder b, float h, int variant)
         {
             var wall = new Color32(184, 175, 155, 255);
             var cladding = new Color32(122, 145, 146, 255);
             var glass = new Color32(87, 148, 159, 255);
-            AddShopfront(b, new Vector3(0, 0.04f, -0.37f), 3.42f, 2.48f, 1.06f, wall, cladding);
-            AddWindowBlock(b, new Vector3(0, 1.10f, -0.38f), 3.36f, 2.37f, h * 0.47f,
+            const float baseY = 0.04f;
+            float podiumHeight = h * 0.235f;
+            float upperHeight = h * 0.47f;
+            float roof = baseY + podiumHeight + upperHeight;
+            float roofScale = h / 4.5f;
+            AddShopfront(b, new Vector3(0, baseY, -0.37f), 3.42f, 2.48f, podiumHeight, wall, cladding);
+            AddWindowBlock(b, new Vector3(0, baseY + podiumHeight, -0.38f), 3.36f, 2.37f, upperHeight,
                 2, wall, cladding);
-            float roof = 1.10f + h * 0.47f;
-            var atrium = new Vector3(0, roof + 0.18f, -0.38f);
-            b.AddBox(atrium, new Vector3(1.91f, 0.36f, 1.74f), glass, glass, wallSurface: BuildingSurface.Panel);
-            b.AddGableRoof(atrium + Vector3.up * 0.18f, 1.91f, 1.74f, 0.58f, 0.06f,
-                glass, glass, BuildingSurface.Glazing);
+            var atrium = new Vector3(0, roof + 0.18f * roofScale, -0.38f);
+            if (variant == 1)
+            {
+                b.AddBox(atrium + new Vector3(0.14f, 0.25f * roofScale, -0.12f), new Vector3(2.32f, 0.86f * roofScale, 1.45f),
+                    glass, cladding, wallSurface: BuildingSurface.Glazing);
+                b.AddBox(atrium + new Vector3(0.14f, 0.73f * roofScale, -0.12f), new Vector3(2.48f, 0.10f * roofScale, 1.59f), cladding, cladding);
+            }
+            else if (variant == 2)
+            {
+                b.AddBox(atrium + new Vector3(0.45f, 0.26f * roofScale, 0.24f), new Vector3(2.12f, 0.88f * roofScale, 1.17f),
+                    glass, glass, wallSurface: BuildingSurface.Glazing);
+                b.AddBox(atrium + new Vector3(-0.26f, -0.02f * roofScale, -0.45f), new Vector3(1.18f, 0.32f * roofScale, 0.75f), cladding, glass);
+            }
+            else
+            {
+                b.AddBox(atrium, new Vector3(1.91f, 0.36f * roofScale, 1.74f), glass, glass, wallSurface: BuildingSurface.Panel);
+                b.AddGableRoof(atrium + Vector3.up * (0.18f * roofScale), 1.91f, 1.74f, 0.58f * roofScale, 0.06f,
+                    glass, glass, BuildingSurface.Glazing);
+            }
             AddRoofPlant(b, new Vector3(-1.10f, roof, -0.88f), cladding);
             var paving = new Color32(144, 151, 145, 255);
             b.AddBox(new Vector3(0, 0.07f, 1.34f), new Vector3(3.30f, 0.06f, 0.83f), paving, paving);
-            b.AddBox(new Vector3(0, 1.28f, 1.10f), new Vector3(1.78f, 0.10f, 0.65f), cladding, glass);
+            b.AddBox(new Vector3(0, baseY + podiumHeight + 0.18f, 1.10f), new Vector3(1.78f, 0.10f, 0.65f), cladding, glass);
             AddPlanter(b, new Vector3(-1.24f, 0.10f, 1.39f), 0.57f);
             AddPlanter(b, new Vector3(1.24f, 0.10f, 1.39f), 0.57f);
         }
