@@ -53,5 +53,9 @@ workflows:
           ditto "$app" "ipa-out/Payload/$(basename "$app")"
           ditto -c -k --keepParent ipa-out/Payload XCity-unsigned.ipa
           unzip -tq XCity-unsigned.ipa
+      # Phones offer to install a .ipa link instead of saving it; a .zip downloads as a normal file.
+      - name: Zip the IPA for phone download
+        script: zip -j XCity-unsigned-ipa.zip XCity-unsigned.ipa
     artifacts:
       - XCity-unsigned.ipa
+      - XCity-unsigned-ipa.zip
