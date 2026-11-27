@@ -148,8 +148,7 @@ namespace XCity
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogColor = new Color(0.69f, 0.82f, 0.86f);
-            RenderSettings.fogStartDistance = 120f;
-            RenderSettings.fogEndDistance = 265f;
+            UpdateAtmosphereRanges();
 
             float worldSpan = GridSize * CellSize;
             AddLandscapeBase("Ocean", worldSpan, worldSpan + 800f, -1.05f, 0.2f, _waterMat);
@@ -217,6 +216,7 @@ namespace XCity
             Vector3 offset = rot * new Vector3(0f, 0f, -_camDistance);
             _cam.transform.position = _camTarget + offset;
             _cam.transform.LookAt(_camTarget);
+            UpdateAtmosphereRanges();
         }
 
         private void SetupHUD()
@@ -298,6 +298,7 @@ namespace XCity
             AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
             AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
             SetupUXToolbar(font);
+            SetupInfoView(font);
 
             SelectTool(BuildTool.Road);
             RefreshHUD();
@@ -502,7 +503,8 @@ namespace XCity
             float scroll = Input.mouseScrollDelta.y;
             if (Mathf.Abs(scroll) > 0.01f)
             {
-                _camDistance = Mathf.Clamp(_camDistance - scroll * 3f, 14f, 110f);
+                float step = Mathf.Max(3f, _camDistance * 0.12f);
+                _camDistance = Mathf.Clamp(_camDistance - scroll * step, MinCamDistance, MaxCamDistance);
                 UpdateCameraTransform();
             }
         }
@@ -531,7 +533,7 @@ namespace XCity
                     Vector2 previous = current - second.deltaPosition + first.deltaPosition;
                     if (current.sqrMagnitude > 1f && previous.sqrMagnitude > 1f)
                     {
-                        _camDistance = Mathf.Clamp(_camDistance * previous.magnitude / current.magnitude, 14f, 110f);
+                        _camDistance = Mathf.Clamp(_camDistance * previous.magnitude / current.magnitude, MinCamDistance, MaxCamDistance);
                         _camYaw -= Vector2.SignedAngle(previous, current);
                         UpdateCameraTransform();
                     }

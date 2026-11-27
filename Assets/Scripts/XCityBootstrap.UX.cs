@@ -153,6 +153,8 @@ namespace XCity
         private void CycleOverlayMode()
         {
             _overlays?.CycleMode();
+            _cityRenderer?.SetInfoView(_overlays != null && _overlays.Mode == CityOverlayMode.Happiness);
+            RefreshInfoViewHUD();
             _audio?.PlayBuild();
             RefreshUXButtons();
         }

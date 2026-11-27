@@ -11,7 +11,8 @@ namespace XCity
         Power,
         Services,
         Education,
-        Environment
+        Environment,
+        Happiness
     }
 
     internal sealed class CityOverlaySystem : IDisposable
@@ -59,7 +60,8 @@ namespace XCity
             if (Mode == mode) return;
             Mode = mode;
             _dirty = true;
-            _go.SetActive(mode != CityOverlayMode.None);
+            // Happiness tints the chunk ground itself (it reaches the far view), so it needs no overlay quads.
+            _go.SetActive(mode != CityOverlayMode.None && mode != CityOverlayMode.Happiness);
             if (mode == CityOverlayMode.None)
                 _mesh.Clear();
         }
@@ -72,6 +74,7 @@ namespace XCity
                 CityOverlayMode.Power => CityOverlayMode.Services,
                 CityOverlayMode.Services => CityOverlayMode.Education,
                 CityOverlayMode.Education => CityOverlayMode.Environment,
+                CityOverlayMode.Environment => CityOverlayMode.Happiness,
                 _ => CityOverlayMode.None
             };
             SetMode(next);
@@ -83,6 +86,7 @@ namespace XCity
             CityOverlayMode.Services => "Dịch vụ",
             CityOverlayMode.Education => "Giáo dục",
             CityOverlayMode.Environment => "Môi trường",
+            CityOverlayMode.Happiness => "Hạnh phúc",
             _ => "Tắt"
         };
 
@@ -95,7 +99,7 @@ namespace XCity
 
         public void Update()
         {
-            if (Mode == CityOverlayMode.None) return;
+            if (Mode == CityOverlayMode.None || Mode == CityOverlayMode.Happiness) return;
             if (_lastTick != _city.TickCount)
             {
                 _lastTick = _city.TickCount;
