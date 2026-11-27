@@ -100,9 +100,9 @@ namespace XCity
 
         private void BuildSettingsPanel()
         {
-            Font font = Resources.Load<Font>("NotoSans-Regular");
+            Font font = UiTheme.Font;
             _settingsPanel = CreatePanel(_safeAreaRoot, "Settings", new Vector2(0.2f, 0.14f), new Vector2(0.8f, 0.86f),
-                Vector2.zero, Vector2.zero, new Color(0.06f, 0.08f, 0.12f, 0.96f));
+                Vector2.zero, Vector2.zero, UiTheme.PanelSolid);
             var layout = _settingsPanel.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(18, 18, 14, 14);
             layout.spacing = 10;
@@ -144,7 +144,7 @@ namespace XCity
                 var text = go.AddComponent<Text>();
                 text.font = labelFont;
                 text.fontSize = 18;
-                text.color = new Color(0.82f, 0.86f, 0.92f);
+                text.color = UiTheme.TextSoft;
                 text.alignment = TextAnchor.LowerLeft;
                 text.text = label;
             }
@@ -182,7 +182,7 @@ namespace XCity
                 rect.anchoredPosition = new Vector2(12f, 108f);
                 rect.sizeDelta = new Vector2(420f, 28f);
                 _fpsText = go.AddComponent<Text>();
-                _fpsText.font = Resources.Load<Font>("NotoSans-Regular");
+                _fpsText.font = UiTheme.Font;
                 _fpsText.fontSize = 18;
                 _fpsText.color = new Color(1f, 0.95f, 0.55f);
                 _fpsText.raycastTarget = false;
@@ -211,8 +211,8 @@ namespace XCity
 
         private void RefreshSettingsButtons()
         {
-            var active = new Color(0.19f, 0.52f, 0.96f);
-            var idle = new Color(0.20f, 0.24f, 0.30f);
+            var active = UiTheme.Active;
+            var idle = UiTheme.Button;
             for (int i = 0; i < _graphicsButtons.Length; i++)
                 if (_graphicsButtons[i] != null) _graphicsButtons[i].color = i == _graphicsLevel ? active : idle;
             for (int i = 0; i < _frameRateButtons.Length; i++)

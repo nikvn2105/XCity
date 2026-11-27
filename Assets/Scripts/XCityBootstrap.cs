@@ -98,8 +98,8 @@ namespace XCity
         private readonly Text[] _strokeCostDigits = new Text[13];
         private static readonly string[] CostSymbols = { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "," };
         private int _shownStrokeCost = -1;
-        private const string StrokeCostPrefix = "Chi phí: $";
-        private const string OverBudgetPrefix = "Thiếu ngân sách · Chi phí: $";
+        private const string StrokeCostPrefix = UiText.StrokeCost;
+        private const string OverBudgetPrefix = UiText.StrokeOverBudget;
         private float _strokeCostPrefixWidth;
         private float _overBudgetPrefixWidth;
         private bool _shownStrokeOverBudget;
@@ -280,9 +280,9 @@ namespace XCity
             _bulldozePreviewMat = MakeMat(_roadMat.shader, new Color(1f, 0.68f, 0.12f));
             for (int i = 0; i < PreviewPoolCapacity; i++) CreateStreetMarker();
 
-            Font font = Resources.Load<Font>("NotoSans-Regular");
+            Font font = UiTheme.Font;
 
-            var topBar = CreatePanel(_safeAreaRoot, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), new Color(0.08f, 0.10f, 0.14f, 0.85f));
+            var topBar = CreatePanel(_safeAreaRoot, "TopBar", new Vector2(0, 1), new Vector2(1, 1), new Vector2(0, -64), new Vector2(0, 0), UiTheme.Panel);
             var statusObj = new GameObject("StatusText");
             statusObj.transform.SetParent(topBar.transform, false);
             var statusRect = statusObj.AddComponent<RectTransform>();
@@ -322,7 +322,7 @@ namespace XCity
             });
             SetupTutorial(topBar.transform, statusRect, font);
 
-            var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), new Color(0.08f, 0.10f, 0.14f, 0.88f));
+            var bottomBar = CreatePanel(_safeAreaRoot, "BottomBar", new Vector2(0.1f, 0), new Vector2(0.9f, 0), new Vector2(0, 14), new Vector2(0, 88), UiTheme.Panel);
             var layout = bottomBar.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 10;
             layout.padding = new RectOffset(12, 12, 10, 10);
@@ -439,12 +439,12 @@ namespace XCity
 
                 entry.Button.interactable = unlocked;
                 entry.Button.image.color = unlocked
-                    ? new Color(0.20f, 0.24f, 0.30f, 1f)
-                    : new Color(0.13f, 0.15f, 0.19f, 0.65f);
+                    ? UiTheme.Button
+                    : UiTheme.ButtonLocked;
 
                 if (entry.Label != null)
                 {
-                    entry.Label.color = unlocked ? Color.white : new Color(0.62f, 0.66f, 0.72f, 0.75f);
+                    entry.Label.color = unlocked ? Color.white : UiTheme.TextMuted;
                     if (unlocked)
                     {
                         string price = item.Seats > 0 ? $"${item.Cost:N0} · {item.Seats:N0} chỗ" : $"${item.Cost:N0}/ô";
@@ -461,11 +461,11 @@ namespace XCity
         private void ShowCatalogCategory(GameObject options, Image tab)
         {
             if (_catalogOptions != null) _catalogOptions.SetActive(false);
-            if (_catalogTab != null) _catalogTab.color = new Color(0.20f, 0.24f, 0.30f);
+            if (_catalogTab != null) _catalogTab.color = UiTheme.Button;
             _catalogOptions = options;
             _catalogTab = tab;
             _catalogOptions.SetActive(true);
-            _catalogTab.color = new Color(0.19f, 0.52f, 0.96f);
+            _catalogTab.color = UiTheme.Active;
         }
 
         private void ToggleCatalog()
@@ -504,7 +504,7 @@ namespace XCity
             var btnObj = new GameObject(name);
             btnObj.transform.SetParent(parent, false);
             var img = btnObj.AddComponent<Image>();
-            img.color = new Color(0.20f, 0.24f, 0.30f, 1f);
+            img.color = UiTheme.Button;
             var btn = btnObj.AddComponent<Button>();
             btn.targetGraphic = img;
 
@@ -517,7 +517,7 @@ namespace XCity
             tr.offsetMax = Vector2.zero;
             var txt = txtObj.AddComponent<Text>();
             txt.font = font;
-            txt.fontSize = 20;
+            txt.fontSize = UiTheme.BodySize;
             txt.text = label;
             txt.color = Color.white;
             txt.alignment = TextAnchor.MiddleCenter;
@@ -540,8 +540,8 @@ namespace XCity
             _catalog.SetActive(false);
             bool catalogTool = _activeBuildingModel != BuildingModel.Default;
             _catalogButton.image.color = catalogTool
-                ? new Color(0.19f, 0.52f, 0.96f)
-                : new Color(0.20f, 0.24f, 0.30f);
+                ? UiTheme.Active
+                : UiTheme.Button;
             _catalogButton.GetComponentInChildren<Text>().text = catalogTool
                 ? BuildingCatalog.Get(_activeBuildingModel).Name
                 : "Xây";
@@ -551,8 +551,8 @@ namespace XCity
             foreach (var kv in _toolButtons)
             {
                 kv.Value.color = kv.Key == tool
-                    ? new Color(0.19f, 0.52f, 0.96f, 1f)
-                    : new Color(0.20f, 0.24f, 0.30f, 1f);
+                    ? UiTheme.Active
+                    : UiTheme.Button;
             }
         }
 
@@ -1345,7 +1345,7 @@ namespace XCity
         {
             if (_bankruptPanel != null) return;
             CancelGesture();
-            Font font = Resources.Load<Font>("NotoSans-Regular");
+            Font font = UiTheme.Font;
             _bankruptPanel = CreatePanel(_safeAreaRoot, "Bankruptcy", Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
                 new Color(0.05f, 0.06f, 0.09f, 0.92f));
             var message = new GameObject("Message", typeof(RectTransform));

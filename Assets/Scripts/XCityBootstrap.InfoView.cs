@@ -29,7 +29,7 @@ namespace XCity
             _infoLegend = CreatePanel(_safeAreaRoot, "ServiceLegend",
                 new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(12, -148), new Vector2(-12, -114),
-                new Color(0.08f, 0.10f, 0.14f, 0.88f));
+                UiTheme.Panel);
 
             var txtObj = new GameObject("LegendText");
             txtObj.transform.SetParent(_infoLegend.transform, false);
@@ -40,7 +40,7 @@ namespace XCity
             tr.offsetMax = new Vector2(-12, -2);
             var txt = txtObj.AddComponent<Text>();
             txt.font = font;
-            txt.fontSize = 15;
+            txt.fontSize = UiTheme.SmallSize;
             txt.color = Color.white;
             txt.alignment = TextAnchor.MiddleLeft;
             txt.resizeTextForBestFit = true;

@@ -58,7 +58,7 @@ namespace XCity
                 new Vector2(1f, 1f),
                 new Vector2(12f, -110f),
                 new Vector2(-12f, -68f),
-                new Color(0.06f, 0.08f, 0.12f, 0.78f));
+                UiTheme.Panel);
 
             var layout = bar.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 8;
@@ -75,9 +75,9 @@ namespace XCity
             rciRow.childForceExpandWidth = true;
             rciRow.childForceExpandHeight = true;
 
-            _rciResFill = CreateDemandBar(rciBox.transform, font, "R", new Color(0.29f, 0.83f, 0.46f));
-            _rciComFill = CreateDemandBar(rciBox.transform, font, "C", new Color(0.27f, 0.64f, 0.96f));
-            _rciIndFill = CreateDemandBar(rciBox.transform, font, "I", new Color(0.94f, 0.68f, 0.20f));
+            _rciResFill = CreateDemandBar(rciBox.transform, font, "R", UiTheme.Residential);
+            _rciComFill = CreateDemandBar(rciBox.transform, font, "C", UiTheme.Commercial);
+            _rciIndFill = CreateDemandBar(rciBox.transform, font, "I", UiTheme.Industrial);
 
             _speedButton = CreateCompactButton(bar.transform, font, "Tốc độ: 1×", "Btn_Speed");
             _speedButton.onClick.AddListener(CycleSimSpeed);
@@ -104,7 +104,7 @@ namespace XCity
         private static RectTransform CreateDemandBar(Transform parent, Font font, string code, Color barColor)
         {
             var slot = CreatePanel(parent, "Demand_" + code, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero,
-                new Color(0.08f, 0.10f, 0.14f, 1f));
+                UiTheme.Inset);
 
             var fillGo = CreatePanel(slot.transform, "Fill", new Vector2(0f, 0f), new Vector2(1f, 0.5f),
                 new Vector2(2f, 2f), new Vector2(-2f, -2f), barColor);
@@ -132,7 +132,7 @@ namespace XCity
         {
             Button btn = CreateHudButton(parent, font, label, name);
             Text txt = btn.GetComponentInChildren<Text>();
-            if (txt != null) txt.fontSize = 15;
+            if (txt != null) txt.fontSize = UiTheme.SmallSize;
             return btn;
         }
 
@@ -172,10 +172,10 @@ namespace XCity
                 string lbl = _simSpeed <= 0f ? "Tạm dừng" : _simSpeed > 2f ? "Tốc độ: 3×" : "Tốc độ: 1×";
                 _speedButton.GetComponentInChildren<Text>().text = lbl;
                 _speedButton.image.color = _simSpeed <= 0f
-                    ? new Color(0.58f, 0.24f, 0.24f, 1f)
+                    ? UiTheme.Danger
                     : _simSpeed > 2f
-                        ? new Color(0.19f, 0.52f, 0.96f, 1f)
-                        : new Color(0.20f, 0.24f, 0.30f, 1f);
+                        ? UiTheme.Active
+                        : UiTheme.Button;
             }
 
             if (_lightButton != null && _dayNight != null)
@@ -183,15 +183,15 @@ namespace XCity
                 _lightButton.GetComponentInChildren<Text>().text = _dayNight.GetModeLabel();
                 _lightButton.image.color = _dayNight.Mode == LightingMode.Night
                     ? new Color(0.22f, 0.30f, 0.58f, 1f)
-                    : new Color(0.20f, 0.24f, 0.30f, 1f);
+                    : UiTheme.Button;
             }
 
             if (_overlayButton != null && _overlays != null)
             {
                 _overlayButton.GetComponentInChildren<Text>().text = "Lớp phủ: " + _overlays.GetModeLabel();
                 _overlayButton.image.color = _overlays.Mode != CityOverlayMode.None
-                    ? new Color(0.19f, 0.52f, 0.96f, 1f)
-                    : new Color(0.20f, 0.24f, 0.30f, 1f);
+                    ? UiTheme.Active
+                    : UiTheme.Button;
             }
 
             if (_followButton != null)
@@ -199,8 +199,8 @@ namespace XCity
                 _followButton.GetComponentInChildren<Text>().text =
                     _followKind != FollowKind.None ? "Đang theo dõi" : "Theo dõi";
                 _followButton.image.color = _followKind != FollowKind.None
-                    ? new Color(0.19f, 0.52f, 0.96f, 1f)
-                    : new Color(0.20f, 0.24f, 0.30f, 1f);
+                    ? UiTheme.Active
+                    : UiTheme.Button;
             }
 
             if (_audioButton != null && _audio != null)

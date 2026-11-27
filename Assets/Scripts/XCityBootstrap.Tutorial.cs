@@ -33,7 +33,7 @@ namespace XCity
 
             _skipTutorialButton = CreateHudButton(topBar, font, "Bỏ qua", "SkipTutorial");
             var txt = _skipTutorialButton.GetComponentInChildren<Text>();
-            if (txt != null) txt.fontSize = 15;
+            if (txt != null) txt.fontSize = UiTheme.SmallSize;
             _skipTutorialButton.image.color = new Color(0.22f, 0.27f, 0.35f, 1f);
 
             var skipRect = (RectTransform)_skipTutorialButton.transform;
