@@ -113,6 +113,11 @@ namespace XCity
                 Update(step);
         }
 
+        public void SetVisible(bool visible)
+        {
+            if (_go.activeSelf != visible) _go.SetActive(visible);
+        }
+
         public void Update(float dt)
         {
             if (dt <= 0f) return;

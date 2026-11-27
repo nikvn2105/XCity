@@ -9,8 +9,8 @@ namespace XCity
     {
         internal const float BuildingWidthRatio = 0.72f;
         internal const float BuildingBase = 0.1f;
-        private const int ChunkSize = 8;
-        private const int ChunkCount = CitySimulation.GridSize / ChunkSize;
+        private const int ChunkSize = ChunkRenderScheduler.Size;
+        private const int ChunkCount = ChunkRenderScheduler.Count;
         private const float RoadY = 0.048f;
         private const float CurbY = 0.106f;
         private const float PaintY = RoadY + 0.004f;
@@ -32,6 +32,9 @@ namespace XCity
         private readonly HashSet<Vector2Int> _dirty = new HashSet<Vector2Int>();
         private readonly Mesh[,] _surfaces = new Mesh[ChunkCount, ChunkCount];
         private readonly Mesh[,] _scenery = new Mesh[ChunkCount, ChunkCount];
+        private readonly GameObject[,] _groundLayers = new GameObject[ChunkCount, ChunkCount];
+        private readonly GameObject[,] _sceneryLayers = new GameObject[ChunkCount, ChunkCount];
+        private readonly ChunkDetail[,] _details = new ChunkDetail[ChunkCount, ChunkCount];
         private readonly CellType[,] _renderedTypes = new CellType[CitySimulation.GridSize, CitySimulation.GridSize];
         private readonly MeshBuilder _surface = new MeshBuilder();
         private readonly MeshBuilder _props = new MeshBuilder();
@@ -48,9 +51,35 @@ namespace XCity
             _root = new GameObject("Streets and Landscape").transform;
             _root.SetParent(parent, false);
             _city.CellChanged += MarkDirty;
-            for (int x = 0; x < ChunkCount; x++)
-                for (int z = 0; z < ChunkCount; z++)
-                    _dirty.Add(new Vector2Int(x, z));
+
+        }
+
+        public void SetDetail(int x, int z, ChunkDetail detail)
+        {
+            _details[x, z] = detail;
+            var chunk = new Vector2Int(x, z);
+            _dirty.Remove(chunk);
+            if (detail != ChunkDetail.Full)
+            {
+                ReleaseLayer(ref _surfaces[x, z], ref _groundLayers[x, z]);
+                ReleaseLayer(ref _scenery[x, z], ref _sceneryLayers[x, z]);
+            }
+            if (detail != ChunkDetail.Hidden) RebuildChunk(chunk);
+        }
+
+        private static void ReleaseLayer(ref Mesh mesh, ref GameObject layer)
+        {
+            if (layer != null)
+            {
+                layer.SetActive(false);
+                UnityEngine.Object.Destroy(layer);
+                layer = null;
+            }
+            if (mesh != null)
+            {
+                UnityEngine.Object.Destroy(mesh);
+                mesh = null;
+            }
         }
 
         private void MarkDirty(int x, int z)
@@ -69,26 +98,34 @@ namespace XCity
 
         private void MarkChunk(int x, int z)
         {
-            if (x >= 0 && z >= 0 && x < CitySimulation.GridSize && z < CitySimulation.GridSize)
-                _dirty.Add(new Vector2Int(x / ChunkSize, z / ChunkSize));
+            if (x < 0 || z < 0 || x >= CitySimulation.GridSize || z >= CitySimulation.GridSize) return;
+            int cx = x / ChunkSize;
+            int cz = z / ChunkSize;
+            if (_details[cx, cz] != ChunkDetail.Hidden) _dirty.Add(new Vector2Int(cx, cz));
         }
 
-        public void RebuildDirtyChunks()
+        public void RebuildDirtyChunks(int budget)
         {
-            foreach (Vector2Int chunk in _dirty)
+            while (_dirty.Count > 0 && budget-- > 0)
+            {
+                var pending = _dirty.GetEnumerator();
+                pending.MoveNext();
+                Vector2Int chunk = pending.Current;
+                _dirty.Remove(chunk);
                 RebuildChunk(chunk);
-            _dirty.Clear();
+            }
         }
 
         private void RebuildChunk(Vector2Int chunk)
         {
             _surface.Clear();
             _props.Clear();
+            bool full = _details[chunk.x, chunk.y] == ChunkDetail.Full;
             int startX = chunk.x * ChunkSize;
             int startZ = chunk.y * ChunkSize;
-            for (int x = startX; x < startX + ChunkSize; x++)
+            for (int x = startX; x < Mathf.Min(startX + ChunkSize, CitySimulation.GridSize); x++)
             {
-                for (int z = startZ; z < startZ + ChunkSize; z++)
+                for (int z = startZ; z < Mathf.Min(startZ + ChunkSize, CitySimulation.GridSize); z++)
                 {
                     CityCell cell = _city.GetCell(x, z);
                     _renderedTypes[x, z] = cell.Type;
@@ -96,25 +133,28 @@ namespace XCity
                     _surface.SetFrame(center, 0);
                     _props.SetFrame(center, 0);
                     if (cell.Type == CellType.Road)
-                        AddStreet(center, x, z);
+                    {
+                        if (full) AddStreet(center, x, z);
+                        else AddOverviewStreet(center, x, z);
+                    }
                     else
-                        AddLot(cell.Type, x, z);
+                        AddLot(cell.Type, x, z, full);
                 }
             }
 
             var origin = new Vector3(startX * _cellSize, 0, startZ * _cellSize);
-            ApplyLayer(_surface, ref _surfaces[chunk.x, chunk.y], $"Ground_{chunk.x}_{chunk.y}", origin, ShadowCastingMode.Off);
-            ApplyLayer(_props, ref _scenery[chunk.x, chunk.y], $"Scenery_{chunk.x}_{chunk.y}", origin, ShadowCastingMode.On);
+            ApplyLayer(_surface, ref _surfaces[chunk.x, chunk.y], ref _groundLayers[chunk.x, chunk.y], $"Ground_{chunk.x}_{chunk.y}", origin, ShadowCastingMode.Off);
+            if (full) ApplyLayer(_props, ref _scenery[chunk.x, chunk.y], ref _sceneryLayers[chunk.x, chunk.y], $"Scenery_{chunk.x}_{chunk.y}", origin, ShadowCastingMode.On);
         }
 
-        private void ApplyLayer(MeshBuilder builder, ref Mesh mesh, string name, Vector3 origin, ShadowCastingMode shadows)
+        private void ApplyLayer(MeshBuilder builder, ref Mesh mesh, ref GameObject layer, string name, Vector3 origin, ShadowCastingMode shadows)
         {
             if (mesh == null)
             {
                 if (builder.VertexCount == 0) return;
                 mesh = new Mesh { name = name };
                 mesh.MarkDynamic();
-                var layer = new GameObject(name);
+                layer = new GameObject(name);
                 layer.transform.SetParent(_root, false);
                 layer.transform.localPosition = origin;
                 layer.AddComponent<MeshFilter>().sharedMesh = mesh;
@@ -123,6 +163,21 @@ namespace XCity
                 renderer.shadowCastingMode = shadows;
             }
             builder.ApplyTo(mesh);
+        }
+
+        private void AddOverviewStreet(Vector3 center, int x, int z)
+        {
+            RoadConnections links = _city.Roads.GetConnections(x, z);
+            float half = _cellSize * 0.5f;
+            float lane = half * 0.67f;
+            Rect(_surface, -half, -half, half, half, RoadY - 0.012f, Paving);
+            Rect(_surface, -lane, -lane, lane, lane, RoadY, Asphalt);
+            for (int turn = 0; turn < Directions.Length; turn++)
+            {
+                if ((links & Directions[turn]) == 0) continue;
+                _surface.SetFrame(center, turn);
+                Rect(_surface, -lane, lane, lane, half, RoadY, Asphalt);
+            }
         }
 
         private void AddStreet(Vector3 center, int x, int z)
@@ -209,7 +264,7 @@ namespace XCity
             _props.AddBox(new Vector3(offset - 0.39f, 2.02f, offset), new Vector3(0.24f, 0.10f, 0.16f), Paint, metal);
         }
 
-        private void AddLot(CellType type, int x, int z)
+        private void AddLot(CellType type, int x, int z, bool full)
         {
             float half = _cellSize * 0.5f;
             float grass = Mathf.PerlinNoise(x * 0.15f + 12f, z * 0.15f + 22f);
@@ -231,6 +286,8 @@ namespace XCity
                     new Vector3(plotWidth, BuildingBase, plotWidth), Curb, plot);
                 return;
             }
+
+            if (!full) return;
 
             uint seed = BuildingMeshFactory.Hash(x, z, 921);
             float grove = Mathf.PerlinNoise(x * 0.18f + 42f, z * 0.18f + 52f);

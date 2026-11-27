@@ -30,6 +30,7 @@ namespace XCity
         private float _nextAutosave;
         private CityChunkRenderer _cityRenderer;
         private BuildingChunkRenderer _buildingRenderer;
+        private ChunkRenderScheduler _chunkScheduler;
         private ConstructionSystem _construction;
         private IndustrialSmokeSystem _industrialSmoke;
         private VehicleSystem _vehicles;
@@ -160,7 +161,8 @@ namespace XCity
             _cityRenderer = new CityChunkRenderer(_city, CellSize, _vertexColorMat, transform);
             _buildingMaterial = new Material(vc);
             _buildingMaterial.EnableKeyword("XCITY_ARCHITECTURE");
-            _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _buildingMaterial, transform);
+            _buildingRenderer = new BuildingChunkRenderer(_city, CellSize, _buildingMaterial, _vertexColorMat, transform);
+            _chunkScheduler = new ChunkRenderScheduler(_cityRenderer, _buildingRenderer, CellSize);
             _construction = new ConstructionSystem(_city, _buildingRenderer, CellSize, _vertexColorMat, transform);
             _industrialSmoke = new IndustrialSmokeSystem(_city, _construction, CellSize, _vertexColorMat, transform);
             _vehicles = new VehicleSystem(_city, CellSize, _vertexColorMat, transform);
@@ -801,12 +803,26 @@ namespace XCity
             if (_cityDirty && _save.Write(_city)) _cityDirty = false;
         }
 
+        private void RefreshSceneDetail(int budget)
+        {
+            _chunkScheduler.Refresh(_cam, budget);
+            bool visible = _chunkScheduler.ShowEffects;
+            _construction.SetVisible(visible);
+            _industrialSmoke.SetVisible(visible);
+            _vehicles.SetVisible(visible);
+            _citizens.SetVisible(visible);
+        }
+
         private void LateUpdate()
         {
+            RefreshSceneDetail(2);
+            _cityRenderer.RebuildDirtyChunks(1);
+            bool visible = _chunkScheduler.ShowEffects;
+            _construction.Update(Time.deltaTime, visible);
+            _buildingRenderer.RebuildDirtyChunks(1);
+
+            if (!visible) return;
             Shader.SetGlobalFloat("_XCityTime", Time.time);
-            _cityRenderer.RebuildDirtyChunks();
-            _construction.Update(Time.deltaTime);
-            _buildingRenderer.RebuildDirtyChunks();
             _industrialSmoke.Update(Time.deltaTime);
             _vehicles.Update(Time.deltaTime);
             _citizens.Update(Time.deltaTime);

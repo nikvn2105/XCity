@@ -26,9 +26,7 @@ namespace XCity
             Directory.CreateDirectory(_previewOutput);
 
             Shader.SetGlobalFloat("_XCityTime", 12.5f);
-            _cityRenderer.RebuildDirtyChunks();
             _construction?.SeedPreviewSites();
-            _buildingRenderer.RebuildDirtyChunks();
             _industrialSmoke?.Prewarm(15f);
             _construction?.Update(0.05f);
             _vehicles?.Prewarm(20f);
@@ -64,6 +62,9 @@ namespace XCity
                     _camPitch = shot.Pitch;
                     _camYaw = shot.Yaw;
                     UpdateCameraTransform();
+                    RefreshSceneDetail(int.MaxValue);
+                    var counts = _chunkScheduler.GetChunkCounts();
+                    Debug.Log($"XCITY_PREVIEW_LOD {shot.Name} full={counts.Full} overview={counts.Overview} hidden={counts.Hidden} effects={_chunkScheduler.ShowEffects}");
 
                     _cam.Render();
                     RenderTexture.active = rt;

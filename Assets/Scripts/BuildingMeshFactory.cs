@@ -123,6 +123,35 @@ namespace XCity
             }
         }
 
+        public static void BuildOverview(MeshBuilder builder, CityCell cell, int quarterTurns, Vector3 center)
+        {
+            builder.SetFrame(center + Vector3.up * CityChunkRenderer.BuildingBase, quarterTurns);
+            var (walls, roof, width) = cell.Type switch
+            {
+                CellType.Residential => (new Color32(173, 156, 131, 255), new Color32(116, 86, 73, 255), 2.65f),
+                CellType.Commercial => (new Color32(106, 140, 148, 255), new Color32(145, 154, 151, 255), 2.73f),
+                CellType.Industrial => (new Color32(145, 142, 130, 255), new Color32(111, 118, 120, 255), 3.10f),
+                CellType.School => (new Color32(201, 186, 147, 255), new Color32(88, 129, 124, 255), 2.98f),
+                CellType.CivicService => (new Color32(189, 191, 177, 255), new Color32(97, 121, 132, 255), 3.06f),
+                _ => (new Color32(159, 154, 141, 255), new Color32(84, 90, 93, 255), 3.02f)
+            };
+
+            float height = cell.Height;
+            float depth = width * 0.82f;
+            bool house = cell.Type == CellType.Residential && cell.Model != BuildingModel.Apartment && cell.Level == 1;
+            if (house)
+            {
+                float wallHeight = height * 0.67f;
+                builder.AddBox(new Vector3(0f, wallHeight * 0.5f, 0f), new Vector3(width, wallHeight, depth), walls, walls);
+                builder.AddGableRoof(new Vector3(0f, wallHeight, 0f), width, depth,
+                    height - wallHeight, 0.07f, roof, walls);
+            }
+            else
+            {
+                builder.AddBox(new Vector3(0f, height * 0.5f, 0f), new Vector3(width, height, depth), walls, roof);
+            }
+        }
+
         public static void BuildGroundwork(MeshBuilder b, int x, int z, CellType type, int quarterTurns, Vector3 cellCenterLocal)
         {
             b.SetFrame(cellCenterLocal + Vector3.up * CityChunkRenderer.BuildingBase, quarterTurns);

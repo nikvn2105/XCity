@@ -205,7 +205,12 @@ namespace XCity
             return false;
         }
 
-        public void Update(float dt)
+        public void SetVisible(bool visible)
+        {
+            if (_go.activeSelf != visible) _go.SetActive(visible);
+        }
+
+        public void Update(float dt, bool draw = true)
         {
             if (dt > 0f) _animTime += dt;
 
@@ -234,10 +239,13 @@ namespace XCity
                 }
             }
 
-            if (_sites.Count == 0)
+            if (!draw || _sites.Count == 0)
             {
-                _mesh.Clear();
-                _meshDirty = false;
+                if (_meshDirty)
+                {
+                    _mesh.Clear();
+                    _meshDirty = false;
+                }
                 return;
             }
 
