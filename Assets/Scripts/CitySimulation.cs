@@ -171,6 +171,7 @@ namespace XCity
         public CitySimulation(uint seed = 1)
         {
             _randomState = seed == 0 ? 1u : seed;
+            UpdateDemand(0, 0, 0);
         }
 
         public int Money { get; private set; } = 50000;
@@ -192,6 +193,7 @@ namespace XCity
             int index = CellIndex(x, z);
             if (type == CellType.Empty) _occupied.Remove(index);
             else _occupied.Add(index);
+            _coverageDirty = true;
             RoadConnections axis = _cells[x, z].BridgeAxis;
             Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis);
         }
@@ -304,6 +306,9 @@ namespace XCity
             int population = 0;
             int netIncome = 0;
             int taxIncome = 0;
+            int jobs = 0;
+            int commercialJobs = 0;
+            long happiness = 0;
             foreach (int index in _occupied)
             {
                 int x = index / GridSize;
@@ -324,12 +329,13 @@ namespace XCity
                 if (BuildingCatalog.IsPublicService(cell.Type))
                 {
                     netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
+                    jobs += OperatingJobs(x, z, cell);
                     continue;
                 }
 
                 ZoneStatus status = GetZoneStatus(x, z);
                 bool operating = status == ZoneStatus.Developed || status == ZoneStatus.WaitingForDevelopment;
-                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < 0.35f)
+                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < DevelopmentChance(cell.Type))
                 {
                     cell.Level = 1;
                     cell.Height = cell.Model != BuildingModel.Default
@@ -343,19 +349,32 @@ namespace XCity
                 }
 
                 else if (status == ZoneStatus.Developed && cell.Type == CellType.Residential &&
-                         cell.Level < MaxResidentialLevel && NextRandom() < 0.12f)
+                         cell.Level < MaxResidentialLevel && CanUpgradeResidence(x, z, cell.Level) &&
+                         NextRandom() < 0.12f)
                 {
                     cell.Level++;
                     cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
                     CellChanged?.Invoke(x, z);
                 }
 
-                if (cell.Type == CellType.Residential) population += BuildingCatalog.Residents(cell);
+                if (cell.Type == CellType.Residential)
+                {
+                    population += BuildingCatalog.Residents(cell);
+                    happiness += (long)GetHappiness(x, z) * BuildingCatalog.Residents(cell);
+                }
+                else if (status == ZoneStatus.Developed)
+                {
+                    int cellJobs = ServiceCatalog.Jobs(cell);
+                    jobs += cellJobs;
+                    if (cell.Type == CellType.Commercial) commercialJobs += cellJobs;
+                }
                 if (operating)
-                    taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 : 15 * cell.Level;
+                    taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 :
+                        15 * cell.Level * EmploymentPercent / 100;
             }
 
             Population = population;
+            UpdateDemand(jobs, commercialJobs, happiness);
             LastTaxIncome = taxIncome;
             LastNetIncome = taxIncome + netIncome;
             Money += LastNetIncome;
@@ -441,6 +460,7 @@ namespace XCity
                 restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);
                 restored.DroppedCellsOnLoad++;
             }
+            restored.RecalculateEconomy();
             city = restored;
             return true;
         }

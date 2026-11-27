@@ -45,6 +45,9 @@ namespace XCity
         private float _camYaw = 45f;
 
         private float _simTimer;
+        private static readonly string[] SpeedLabels = { "Dừng", "1×", "2×", "3×" };
+        private readonly Image[] _speedButtons = new Image[SpeedLabels.Length];
+        private int _speed = 1;
 
         private Text _hudStatusText;
         private Button _undoButton;
@@ -248,6 +251,9 @@ namespace XCity
             _hudStatusText.fontSize = 21;
             _hudStatusText.color = Color.white;
             _hudStatusText.alignment = TextAnchor.MiddleLeft;
+            _hudStatusText.resizeTextForBestFit = true;
+            _hudStatusText.resizeTextMinSize = 13;
+            _hudStatusText.resizeTextMaxSize = 21;
 
             _undoButton = CreateHudButton(topBar.transform, font, "Hoàn tác", "UndoBuild");
             var undoRect = (RectTransform)_undoButton.transform;
@@ -274,7 +280,38 @@ namespace XCity
             AddToolButton(bottomBar.transform, font, "Nhà máy điện", BuildTool.PowerPlant);
             AddToolButton(bottomBar.transform, font, "Phá bỏ", BuildTool.Bulldoze);
 
+            SetupSpeedControls(font);
             SelectTool(BuildTool.Road);
+            RefreshHUD();
+        }
+
+        private void SetupSpeedControls(Font font)
+        {
+            var bar = CreatePanel(_safeAreaRoot, "SpeedBar", Vector2.one, Vector2.one,
+                new Vector2(-300, -118), new Vector2(-12, -70), new Color(0.08f, 0.10f, 0.14f, 0.85f));
+            bar.transform.SetAsFirstSibling();
+            var layout = bar.AddComponent<HorizontalLayoutGroup>();
+            layout.spacing = 6;
+            layout.padding = new RectOffset(6, 6, 5, 5);
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = true;
+            for (int i = 0; i < SpeedLabels.Length; i++)
+            {
+                int speed = i;
+                Button button = CreateHudButton(bar.transform, font, SpeedLabels[i], "Speed_" + i);
+                button.onClick.AddListener(() => SetSpeed(speed));
+                _speedButtons[i] = button.image;
+            }
+            SetSpeed(_speed);
+        }
+
+        // Scaling time pauses or speeds up the simulation together with traffic, citizens and construction.
+        private void SetSpeed(int speed)
+        {
+            _speed = speed;
+            Time.timeScale = speed;
+            for (int i = 0; i < _speedButtons.Length; i++)
+                _speedButtons[i].color = i == speed ? new Color(0.19f, 0.52f, 0.96f) : new Color(0.20f, 0.24f, 0.30f);
             RefreshHUD();
         }
 
@@ -1002,7 +1039,11 @@ namespace XCity
                 _ => "Ô trống"
             };
             if (type == CellType.Residential && cell.Level > 0)
-                label += $" · {BuildingCatalog.Residents(cell)} dân";
+                label += $" · Cấp {cell.Level} · {BuildingCatalog.Residents(cell)} dân · Hạnh phúc {_city.GetHappiness(point.x, point.y)}%" +
+                    $" · Dịch vụ: {DescribeCoverage(_city.GetCoverage(point.x, point.y))}";
+            var service = ServiceCatalog.Get(cell.Model);
+            if (service.Radius > 0)
+                label += $" · Bán kính {service.Radius} ô";
             if (type == CellType.School)
                 label += $" · {BuildingCatalog.Get(cell.Model).Seats:N0} chỗ · Phí: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
             if (type == CellType.CivicService)
@@ -1010,7 +1051,8 @@ namespace XCity
             return status switch
             {
                 ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",
-                ZoneStatus.WaitingForDevelopment => label + " · Đang chờ phát triển",
+                ZoneStatus.WaitingForDevelopment => label + (ZoneDemand(type) > 0
+                    ? " · Đang chờ phát triển" : " · Chưa có nhu cầu"),
                 ZoneStatus.DevelopedWithoutRoad => label + " · Mất kết nối đường",
                 ZoneStatus.NeedsPower or ZoneStatus.DevelopedWithoutPower => label + " · Thiếu điện",
                 ZoneStatus.Developed => label + (BuildingCatalog.IsPublicService(type) ? " · Đang hoạt động" : " · Đã phát triển"),
@@ -1021,11 +1063,26 @@ namespace XCity
             };
         }
 
-        private string _lastHudHint;
-        private int _lastHudMoney;
-        private int _lastHudPopulation;
-        private int _lastHudTax;
-        private int _lastHudNet;
+        private string _lastHudText;
+
+        private int ZoneDemand(CellType type) => type switch
+        {
+            CellType.Residential => _city.ResidentialDemand,
+            CellType.Commercial => _city.CommercialDemand,
+            CellType.Industrial => _city.IndustrialDemand,
+            _ => 1
+        };
+
+        private static string DescribeCoverage(ServiceCoverage coverage)
+        {
+            if (coverage == ServiceCoverage.None) return "chưa có";
+            var parts = new List<string>(4);
+            if ((coverage & ServiceCoverage.Education) != 0) parts.Add("giáo dục");
+            if ((coverage & ServiceCoverage.Health) != 0) parts.Add("y tế");
+            if ((coverage & ServiceCoverage.Police) != 0) parts.Add("an ninh");
+            if ((coverage & ServiceCoverage.Fire) != 0) parts.Add("cứu hỏa");
+            return string.Join(", ", parts);
+        }
 
         private string GetBridgeHint()
         {
@@ -1040,6 +1097,8 @@ namespace XCity
                 _ => "Kéo tiếp đến đất ở bờ đối diện"
             };
         }
+
+        private static string Signed(int value) => value.ToString("+0;-0;0");
 
         private void RefreshHUD()
         {
@@ -1076,15 +1135,13 @@ namespace XCity
                     hint = "Chạm vào ô đất sát mặt nước để đặt cảng";
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
-                if (_lastHudHint == hint && _lastHudMoney == _city.Money && _lastHudPopulation == _city.Population &&
-                    _lastHudTax == _city.LastTaxIncome && _lastHudNet == _city.LastNetIncome)
-                    return;
-                _lastHudHint = hint;
-                _lastHudMoney = _city.Money;
-                _lastHudPopulation = _city.Population;
-                _lastHudTax = _city.LastTaxIncome;
-                _lastHudNet = _city.LastNetIncome;
-                _hudStatusText.text = $"XCity  |  Ngân sách: ${_city.Money:N0}  |  Dân số: {_city.Population:N0}  |  Thuế: {_city.LastTaxIncome:N0}  |  Ròng: {_city.LastNetIncome:+#,##0;-#,##0;0}\n{hint}";
+                if (_speed == 0) hint = $"Đang tạm dừng  |  {hint}";
+                string text = $"${_city.Money:N0} ({_city.LastNetIncome:+#,##0;-#,##0;0})  |  Dân: {_city.Population:N0}" +
+                    $"  |  Việc làm: {_city.Jobs:N0}  |  Nhu cầu  Ở {Signed(_city.ResidentialDemand)}" +
+                    $" · TM {Signed(_city.CommercialDemand)} · CN {Signed(_city.IndustrialDemand)}\n{hint}";
+                if (text == _lastHudText) return;
+                _lastHudText = text;
+                _hudStatusText.text = text;
             }
         }
     }

@@ -1,0 +1,183 @@
+using System;
+using System.Linq;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace XCity.Tests
+{
+    public class EconomyTests
+    {
+        private readonly ITestOutputHelper _output;
+        public EconomyTests(ITestOutputHelper output) => _output = output;
+
+        private static (int X, int Z) FindLand(int width, int depth)
+        {
+            int center = CitySimulation.GridSize / 2;
+            for (int x = center - 60; x < CitySimulation.GridSize - width; x++)
+            for (int z = center - 60; z < CitySimulation.GridSize - depth; z++)
+            {
+                bool fits = true;
+                for (int dx = 0; dx < width && fits; dx++)
+                for (int dz = 0; dz < depth && fits; dz++)
+                    fits = CitySimulation.IsBuildable(x + dx, z + dz);
+                if (fits) return (x, z);
+            }
+            throw new InvalidOperationException("No land found");
+        }
+
+        // A road along z at column x, with a power plant at its south end on the east side.
+        private static CitySimulation PoweredStreet(int x, int z, int length, uint seed = 3)
+        {
+            var city = new CitySimulation(seed);
+            Assert.True(city.TryApplyBuild(Enumerable.Range(z, length).Select(dz => (x, dz)), CellType.Road));
+            Assert.True(city.TrySetCell(x + 1, z, CellType.PowerPlant));
+            return city;
+        }
+
+        [Fact]
+        public void NewCity_HasPositiveDemandForEveryZone()
+        {
+            var city = new CitySimulation();
+            Assert.True(city.ResidentialDemand > 0);
+            Assert.True(city.CommercialDemand > 0);
+            Assert.True(city.IndustrialDemand > 0);
+        }
+
+        [Fact]
+        public void HomesWithoutJobs_StopGrowingOnceResidentialDemandTurnsNegative()
+        {
+            var (x, z) = FindLand(3, 20);
+            var city = PoweredStreet(x, z, 20);
+            for (int dz = 1; dz < 20; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
+            for (int dz = 1; dz < 20; dz++) Assert.True(city.TrySetCell(x - 1, z + dz, CellType.Residential));
+            for (int i = 0; i < 200; i++) city.Tick();
+
+            Assert.True(city.ResidentialDemand <= 0);
+            int developed = Enumerable.Range(1, 19).Count(dz => city.GetCell(x + 1, z + dz).Level > 0) +
+                Enumerable.Range(1, 19).Count(dz => city.GetCell(x - 1, z + dz).Level > 0);
+            Assert.True(developed < 38, $"all {developed} homes developed without any jobs");
+        }
+
+        [Fact]
+        public void Jobs_RaiseResidentialDemand()
+        {
+            var (x, z) = FindLand(3, 10);
+            var city = PoweredStreet(x, z, 10);
+            for (int dz = 1; dz < 10; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Industrial));
+            int before = city.ResidentialDemand;
+            for (int i = 0; i < 100 && city.Jobs == 0; i++) city.Tick();
+
+            Assert.True(city.Jobs > 0);
+            Assert.True(city.ResidentialDemand > before);
+        }
+
+        [Fact]
+        public void UnderstaffedBusinesses_PayLessTax()
+        {
+            var (x, z) = FindLand(3, 10);
+            var city = PoweredStreet(x, z, 10);
+            for (int dz = 1; dz < 10; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Industrial));
+            for (int i = 0; i < 100 && city.Jobs < 100; i++) city.Tick();
+            city.Tick();
+
+            Assert.Equal(0, city.Population);
+            Assert.Equal(0, city.EmploymentPercent);
+            Assert.Equal(0, city.LastTaxIncome);
+        }
+
+        [Fact]
+        public void Services_CoverCellsWithinRadiusOnlyWhenOperating()
+        {
+            var (x, z) = FindLand(3, 4);
+            var city = new CitySimulation();
+            Assert.True(city.TrySetCell(x + 1, z + 1, CellType.CivicService, BuildingModel.PoliceStation));
+            Assert.Equal(ServiceCoverage.None, city.GetCoverage(x + 1, z + 1));
+
+            Assert.True(city.TryApplyBuild(Enumerable.Range(z, 4).Select(dz => (x, dz)), CellType.Road));
+            Assert.True(city.TrySetCell(x + 1, z, CellType.PowerPlant));
+            int radius = ServiceCatalog.Get(BuildingModel.PoliceStation).Radius;
+            Assert.Equal(ServiceCoverage.Police, city.GetCoverage(x + 1, z + 1));
+            Assert.Equal(ServiceCoverage.Police, city.GetCoverage(x + 1 + radius, z + 1));
+            Assert.Equal(ServiceCoverage.None, city.GetCoverage(x + 2 + radius, z + 1));
+            Assert.Equal(CitySimulation.BaseHappiness + CitySimulation.HappinessPerService, city.GetHappiness(x + 1, z + 2));
+        }
+
+        [Fact]
+        public void Homes_NeedServicesToReachHigherLevels()
+        {
+            var (x, z) = FindLand(3, 12);
+            var bare = BuildMixedStreet(x, z, withServices: false);
+            var served = BuildMixedStreet(x, z, withServices: true);
+            for (int i = 0; i < 300; i++)
+            {
+                bare.Tick();
+                served.Tick();
+            }
+
+            int MaxLevel(CitySimulation c) => Enumerable.Range(z + 1, 11)
+                .Where(dz => c.GetCell(x + 1, dz).Type == CellType.Residential)
+                .Max(dz => c.GetCell(x + 1, dz).Level);
+            Assert.Equal(1, MaxLevel(bare));
+            Assert.Equal(3, MaxLevel(served));
+        }
+
+        private static CitySimulation BuildMixedStreet(int x, int z, bool withServices)
+        {
+            var city = PoweredStreet(x, z, 12);
+            for (int dz = 1; dz < 6; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
+            for (int dz = 1; dz < 12; dz++) Assert.True(city.TrySetCell(x - 1, z + dz, CellType.Industrial));
+            Assert.True(city.TrySetCell(x + 1, z + 6, CellType.Commercial));
+            Assert.True(city.TrySetCell(x + 1, z + 7, CellType.PowerPlant));
+            if (withServices)
+            {
+                Assert.True(city.TrySetCell(x + 1, z + 8, CellType.School, BuildingModel.PrimarySchool));
+                Assert.True(city.TrySetCell(x + 1, z + 9, CellType.CivicService, BuildingModel.Hospital));
+            }
+            return city;
+        }
+
+        [Fact]
+        public void Restore_RecomputesDemandFromCells()
+        {
+            var (x, z) = FindLand(3, 10);
+            var city = PoweredStreet(x, z, 10);
+            for (int dz = 1; dz < 10; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Industrial));
+            for (int i = 0; i < 60; i++) city.Tick();
+
+            Assert.True(CitySimulation.TryRestore(city.CreateSnapshot(), out var restored));
+            Assert.Equal(city.Jobs, restored.Jobs);
+            Assert.Equal(city.ResidentialDemand, restored.ResidentialDemand);
+            Assert.Equal(city.IndustrialDemand, restored.IndustrialDemand);
+        }
+
+        // Not an assertion of exact balance: prints how a balanced starter town evolves, and checks it grows.
+        [Fact]
+        public void BalancedStarterTown_Grows()
+        {
+            var (x, z) = FindLand(5, 30);
+            var city = PoweredStreet(x, z, 30);
+            Assert.True(city.TryApplyBuild(Enumerable.Range(z, 30).Select(dz => (x + 3, dz)), CellType.Road));
+            for (int dz = 1; dz < 30; dz++)
+            {
+                city.TrySetCell(x + 1, z + dz, CellType.Residential);
+                city.TrySetCell(x + 2, z + dz, CellType.Residential);
+                city.TrySetCell(x - 1, z + dz, dz % 3 == 0 ? CellType.Commercial : CellType.Industrial);
+            }
+            city.TrySetCell(x + 4, z + 2, CellType.PowerPlant);
+            city.TrySetCell(x + 4, z + 4, CellType.PowerPlant);
+            city.TrySetCell(x + 4, z + 10, CellType.School, BuildingModel.PrimarySchool);
+            city.TrySetCell(x + 4, z + 20, CellType.CivicService, BuildingModel.PoliceStation);
+
+            for (int i = 0; i <= 400; i++)
+            {
+                if (i % 50 == 0)
+                    _output.WriteLine($"tick {i,3}: pop {city.Population,4} jobs {city.Jobs,4} emp {city.EmploymentPercent,3}% " +
+                        $"R {city.ResidentialDemand,4} C {city.CommercialDemand,4} I {city.IndustrialDemand,4} " +
+                        $"happy {city.AverageHappiness,3} net {city.LastNetIncome,5} money {city.Money}");
+                city.Tick();
+            }
+            Assert.True(city.Population > 300);
+            Assert.True(city.EmploymentPercent > 50);
+        }
+    }
+}
