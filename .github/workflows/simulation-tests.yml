@@ -24,3 +24,6 @@ jobs:
 
       - name: Test
         run: dotnet test Tests/XCity.Simulation.Tests/XCity.Simulation.Tests.csproj --nologo
+
+      - name: Compile all game scripts against Unity reference assemblies
+        run: dotnet build Tests/XCity.CompileCheck/XCity.CompileCheck.csproj --nologo
