@@ -28,6 +28,14 @@ namespace XCity
         public static readonly Color Commercial = new Color(0.27f, 0.64f, 0.96f);
         public static readonly Color Industrial = new Color(0.94f, 0.68f, 0.20f);
 
+        // Build bar category accents.
+        public static readonly Color RoadGray = new Color(0.66f, 0.72f, 0.80f);
+        public static readonly Color Education = new Color(0.66f, 0.55f, 0.96f);
+        public static readonly Color Services = new Color(0.95f, 0.48f, 0.48f);
+        public static readonly Color Utilities = new Color(0.96f, 0.84f, 0.28f);
+        public static readonly Color MapTeal = new Color(0.24f, 0.81f, 0.81f);
+        public static readonly Color Demolish = new Color(1f, 0.54f, 0.36f);
+
         // Type scale.
         public const int TitleSize = 22;
         public const int BodySize = 20;
