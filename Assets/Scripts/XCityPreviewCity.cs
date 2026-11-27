@@ -32,11 +32,40 @@ namespace XCity
                     if (x >= 7 && x < 12 && z >= 7 && z < 10)
                     {
                         BuildingModel model = displayBlock[x - 7, z - 7];
-                        if (model != BuildingModel.Default)
+                        cells[idx] = PreviewBuilding(model);
+                        continue;
+                    }
+
+                    if (x >= 19 && x <= 23 && z >= 7 && z <= 15)
+                    {
+                        cells[idx] = PreviewBuilding((x, z) switch
                         {
-                            var option = BuildingCatalog.Get(model);
-                            cells[idx] = new CityCell { Type = option.Type, Model = model, Height = option.Height, Level = 1 };
-                        }
+                            (19, 8) or (23, 9) => BuildingModel.OfficeTower,
+                            (19, 11) or (23, 13) => BuildingModel.Market,
+                            (20, 11) or (21, 11) or (22, 13) or (19, 14) => BuildingModel.HighStreet,
+                            (22, 11) or (20, 13) => BuildingModel.ShoppingMall,
+                            (23, 10) or (23, 15) => BuildingModel.Office,
+                            _ => BuildingModel.Default
+                        });
+                        continue;
+                    }
+
+                    if (x >= 25 && x <= 29 && z >= 7 && z <= 15)
+                    {
+                        if ((x, z) == (29, 14))
+                            cells[idx] = new CityCell { Type = CellType.PowerPlant, Level = 1, Height = CitySimulation.PowerPlantHeight };
+                        else
+                            cells[idx] = PreviewBuilding((x, z) switch
+                            {
+                                (26, 13) => BuildingModel.Preschool,
+                                (27, 13) => BuildingModel.PrimarySchool,
+                                (28, 13) => BuildingModel.HighSchool,
+                                (29, 13) => BuildingModel.University,
+                                (25, 11) => BuildingModel.PoliceStation,
+                                (27, 11) => BuildingModel.Hospital,
+                                (29, 11) => BuildingModel.FireStation,
+                                _ => BuildingModel.Default
+                            });
                         continue;
                     }
 
@@ -66,7 +95,7 @@ namespace XCity
                     {
                         if ((x == 8 && z == 20) || (x == 9 && z == 20) || (x == 2 && z == 26))
                         {
-                            cells[idx] = new CityCell { Type = CellType.PowerPlant, Level = 1, Height = 3.2f };
+                            cells[idx] = new CityCell { Type = CellType.PowerPlant, Level = 1, Height = CitySimulation.PowerPlantHeight };
                         }
                         else
                         {
@@ -86,7 +115,7 @@ namespace XCity
 
             var snapshot = new CitySnapshot
             {
-                schemaVersion = 4,
+                schemaVersion = CitySimulation.CurrentSchemaVersion,
                 money = 50000,
                 tick = 0,
                 randomState = 12345,
@@ -100,6 +129,13 @@ namespace XCity
 
             Debug.LogError("XCityPreviewCity snapshot failed TryRestore validation.");
             return new CitySimulation();
+        }
+
+        private static CityCell PreviewBuilding(BuildingModel model)
+        {
+            if (model == BuildingModel.Default) return default;
+            var option = BuildingCatalog.Get(model);
+            return new CityCell { Type = option.Type, Model = model, Height = option.Height, Level = 1 };
         }
     }
 }

@@ -14,7 +14,8 @@ namespace XCity
         Industrial,
         Bulldoze,
         PowerPlant,
-        School
+        School,
+        CivicService
     }
 
     public partial class XCityBootstrap : MonoBehaviour
@@ -317,7 +318,9 @@ namespace XCity
             AddCatalogCategory(root, tabs, font, "Văn phòng", BuildTool.Commercial,
                 BuildingModel.Office, BuildingModel.OfficeTower);
             AddCatalogCategory(root, tabs, font, "Thương mại", BuildTool.Commercial,
-                BuildingModel.Market, BuildingModel.ShoppingMall);
+                BuildingModel.Market, BuildingModel.HighStreet, BuildingModel.ShoppingMall);
+            AddCatalogCategory(root, tabs, font, "Dịch vụ", BuildTool.CivicService,
+                BuildingModel.PoliceStation, BuildingModel.Hospital, BuildingModel.FireStation);
             _catalog.SetActive(false);
         }
 
@@ -546,7 +549,8 @@ namespace XCity
             }
         }
 
-        private bool IsSinglePlacement => _activeTool == BuildTool.PowerPlant || _activeTool == BuildTool.School;
+        private bool IsSinglePlacement =>
+            _activeTool == BuildTool.PowerPlant || _activeTool == BuildTool.School || _activeTool == BuildTool.CivicService;
 
         private void BeginGesture(Vector2 position)
         {
@@ -611,7 +615,8 @@ namespace XCity
                 {
                     if (!IsPanMovement(position))
                     {
-                        CellType placement = _activeTool == BuildTool.School ? CellType.School : CellType.PowerPlant;
+                        CellType placement = _activeTool == BuildTool.PowerPlant
+                            ? CellType.PowerPlant : BuildingCatalog.Get(_activeBuildingModel).Type;
                         _cityDirty |= _city.TrySetCell(cell.x, cell.y, placement, _activeBuildingModel);
                     }
                     RefreshHUD();
@@ -878,14 +883,16 @@ namespace XCity
             if (type == CellType.Residential && cell.Level > 0)
                 label += $" · {BuildingCatalog.Residents(cell)} dân";
             if (type == CellType.School)
-                label += $" · {BuildingCatalog.Get(cell.Model).Seats:N0} chỗ · Phí: ${BuildingCatalog.SchoolUpkeep(cell.Model):N0}";
+                label += $" · {BuildingCatalog.Get(cell.Model).Seats:N0} chỗ · Phí: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
+            if (type == CellType.CivicService)
+                label += $" · Phí duy trì: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
             return status switch
             {
                 ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",
                 ZoneStatus.WaitingForDevelopment => label + " · Đang chờ phát triển",
                 ZoneStatus.DevelopedWithoutRoad => label + " · Mất kết nối đường",
                 ZoneStatus.NeedsPower or ZoneStatus.DevelopedWithoutPower => label + " · Thiếu điện",
-                ZoneStatus.Developed => label + (type == CellType.School ? " · Đang hoạt động" : " · Đã phát triển"),
+                ZoneStatus.Developed => label + (BuildingCatalog.IsPublicService(type) ? " · Đang hoạt động" : " · Đã phát triển"),
                 _ => type == CellType.PowerPlant
                     ? label + (_city.Roads.HasRoadAccess(point.x, point.y)
                         ? $" · Cấp {CitySimulation.PowerPlantCapacity} ô" : " · Cần đường liền kề")
@@ -913,7 +920,7 @@ namespace XCity
                     BuildTool.Road => "Kéo để vẽ đường · Thả để đặt",
                     BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
-                    BuildTool.School => "Chạm để đặt trường học",
+                    BuildTool.School or BuildTool.CivicService => "Chạm để đặt công trình",
                     _ => "Chạm hoặc kéo để phân khu"
                 };
                 if (_activeBuildingModel != BuildingModel.Default)

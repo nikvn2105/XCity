@@ -11,7 +11,8 @@ namespace XCity
         Commercial,
         Industrial,
         PowerPlant,
-        School
+        School,
+        CivicService
     }
 
     public enum BuildingModel
@@ -30,7 +31,11 @@ namespace XCity
         Office,
         OfficeTower,
         Market,
-        ShoppingMall
+        ShoppingMall,
+        HighStreet,
+        PoliceStation,
+        Hospital,
+        FireStation
     }
 
     internal static class BuildingCatalog
@@ -52,10 +57,22 @@ namespace XCity
                 BuildingModel.OfficeTower => (CellType.Commercial, "Tháp văn phòng", 200, 7.2f, 0),
                 BuildingModel.Market => (CellType.Commercial, "Chợ khu phố", 60, 2.3f, 0),
                 BuildingModel.ShoppingMall => (CellType.Commercial, "Trung tâm thương mại", 240, 4.5f, 0),
+                BuildingModel.HighStreet => (CellType.Commercial, "Phố cửa hàng", 95, 3.2f, 0),
+                BuildingModel.PoliceStation => (CellType.CivicService, "Sở cảnh sát", 900, 3.6f, 0),
+                BuildingModel.Hospital => (CellType.CivicService, "Bệnh viện", 1800, 5.0f, 0),
+                BuildingModel.FireStation => (CellType.CivicService, "Trạm cứu hỏa", 1150, 3.4f, 0),
                 _ => default
             };
 
-        public static int SchoolUpkeep(BuildingModel model) => Get(model).Seats / 15;
+        public static bool IsPublicService(CellType type) => type == CellType.School || type == CellType.CivicService;
+
+        public static int ServiceUpkeep(BuildingModel model) => model switch
+        {
+            BuildingModel.PoliceStation => 18,
+            BuildingModel.Hospital => 35,
+            BuildingModel.FireStation => 24,
+            _ => Get(model).Seats / 15
+        };
 
         public static int Residents(CityCell cell)
         {
@@ -112,7 +129,8 @@ namespace XCity
         public const int ResidentsPerLevel = 12;
         private const int MaxResidentialLevel = 3;
         private const int PowerPlantUpkeep = 60;
-        private const float PowerPlantHeight = 3.2f;
+        internal const float PowerPlantHeight = 3.2f;
+        internal const int CurrentSchemaVersion = 5;
         private readonly bool[,] _powered = new bool[GridSize, GridSize];
         private bool _powerDirty = true;
         private int _unpoweredZones;
@@ -201,9 +219,9 @@ namespace XCity
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
             List<(int X, int Z, CityCell Cell)> changed)
         {
-            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.School) return false;
+            if (!IsInBounds(x, z) || type < CellType.Empty || type > CellType.CivicService) return false;
             var option = BuildingCatalog.Get(model);
-            if (model == BuildingModel.Default ? type == CellType.School : option.Cost == 0 || option.Type != type)
+            if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;
             ref CityCell cell = ref _cells[x, z];
             if (cell.Type == type && cell.Model == model) return false;
@@ -222,7 +240,8 @@ namespace XCity
             cell = type switch
             {
                 CellType.PowerPlant => new CityCell { Type = type, Level = 1, Height = PowerPlantHeight },
-                CellType.School => new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
+                CellType.School or CellType.CivicService =>
+                    new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
                 _ => new CityCell { Type = type, Model = model }
             };
             _powerDirty = true;
@@ -256,9 +275,9 @@ namespace XCity
                         continue;
                     }
 
-                    if (cell.Type == CellType.School)
+                    if (BuildingCatalog.IsPublicService(cell.Type))
                     {
-                        netIncome -= BuildingCatalog.SchoolUpkeep(cell.Model);
+                        netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
                         continue;
                     }
 
@@ -302,7 +321,7 @@ namespace XCity
         {
             var snapshot = new CitySnapshot
             {
-                schemaVersion = 4,
+                schemaVersion = CurrentSchemaVersion,
                 money = Money,
                 tick = TickCount,
                 randomState = _randomState,
@@ -319,7 +338,7 @@ namespace XCity
         internal static bool TryRestore(CitySnapshot snapshot, out CitySimulation city)
         {
             city = null;
-            if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > 4) || snapshot.tick < 0 ||
+            if (snapshot == null || (snapshot.schemaVersion < 1 || snapshot.schemaVersion > CurrentSchemaVersion) || snapshot.tick < 0 ||
                 snapshot.randomState <= 0 || snapshot.randomState > uint.MaxValue ||
                 snapshot.cells == null || snapshot.cells.Length != GridSize * GridSize)
                 return false;
@@ -354,8 +373,10 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                if (version < 4 || option.Cost == 0 || option.Type != cell.Type) return false;
-                if (cell.Type == CellType.School) return cell.Level == 1 && cell.Height == option.Height;
+                int modelVersion = cell.Model >= BuildingModel.HighStreet ? 5 : 4;
+                if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
+                if (BuildingCatalog.IsPublicService(cell.Type))
+                    return cell.Level == 1 && cell.Height == option.Height;
             }
 
             if (cell.Type == CellType.PowerPlant)
@@ -438,7 +459,7 @@ namespace XCity
         }
 
         private static bool UsesPower(CellType type) =>
-            (type >= CellType.Residential && type <= CellType.Industrial) || type == CellType.School;
+            (type >= CellType.Residential && type <= CellType.Industrial) || BuildingCatalog.IsPublicService(type);
 
         private static bool IsInBounds(int x, int z) =>
             x >= 0 && x < GridSize && z >= 0 && z < GridSize;
