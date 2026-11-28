@@ -15,15 +15,13 @@
 - Repo github.com/nikvn2105/XCity. Nhánh làm việc của Claude: `claude/trusting-einstein-1p5whu`. Lộ trình: `docs/roadmap.md`. Cân bằng kinh tế: `docs/economy-report.md`.
 
 ## Kiểm tra bắt buộc trước khi đẩy
-- `dotnet test Tests/XCity.Simulation.Tests/XCity.Simulation.Tests.csproj` (hiện 94 test). File mô phỏng mới phải thêm tay vào `.csproj` của test.
+- `dotnet test Tests/XCity.Simulation.Tests/XCity.Simulation.Tests.csproj` (hiện 115 test). File mô phỏng mới phải thêm tay vào `.csproj` của test.
 - `dotnet build Tests/XCity.CompileCheck/XCity.CompileCheck.csproj` (biên dịch mọi script game với thư viện Unity tham chiếu). Không bao gồm `Assets/Editor/` (script đặt icon app).
 - Hai test "dấu vân tay" trong `UtilityPerfTests` ghi cứng tiền và trạng thái của một thành phố lớn: mỗi lần đổi kinh tế có chủ ý phải ghi lại giá trị mẫu (in ra rồi chép vào), kèm chú thích lý do; số ngẫu nhiên (`randomState`) phải giữ nguyên nếu tăng trưởng không đổi.
 
-## Build IPA
-1. Đẩy lên `main` → GitHub Actions `build-ios-ipa.yml`: bước "Build Unity Xcode Project" (~3 phút) tạo artifact `XCity-XcodeProject`. Bước đóng gói trên Mac luôn xếp hàng (GitHub không cấp máy Mac) — bỏ qua.
-2. Anh NiK chạy Codemagic workflow `ios-unsigned-ipa`: lấy artifact Xcode mới nhất, build, xuất `XCity-unsigned-ipa.zip`.
-3. Codex đang làm workflow build APK (Android) — chưa có trong lộ trình.
-- Workflow "Cleanup Old Workflow Runs" giữ 2 lần chạy mới nhất mỗi workflow.
+## Build IPA / APK
+- Tag `v…-demo.N` từ `main` (đẩy tag, hoặc Publish một release trên web) → `demo-release.yml` build APK + IPA (Mac GitHub; Codemagic dự phòng nếu Mac kẹt 20 phút, cần secret `CODEMAGIC_API_TOKEN`, `CODEMAGIC_APP_ID`) → pre-release có 2 nút tải. Phiên Claude không đẩy được tag: Anh NiK tạo.
+- `build-ios-ipa.yml`, `build-android-apk.yml`: chỉ chạy tay. "Cleanup Old Workflow Runs" giữ 2 lần chạy mới nhất.
 
 ## Trạng thái theo lộ trình
 - **Giai đoạn 0–1 (nền, giao diện): xong**, chờ Anh NiK chơi thử xác nhận.
@@ -37,7 +35,9 @@
   - 2c mật độ theo loại nhà: vừa cần đất ≥ 30, cao ≥ 60; công nghiệp không xét; không xuống cấp.
   - 2d rác: bãi rác, lò đốt, kinh phí rác, lớp phủ; ân hạn dưới 300 dân (save 13).
   - 2e cân bằng: phạt thuế cao (−4 nhu cầu, −2 hài lòng mỗi điểm trên 10%), thu giảm dần trên 12%, trạm nước 80 ô, chi phí hành chính (dân²/20.000, từ 10.000 dân là 0,5/dân).
-- `codex/post-processing` (hiệu ứng hình ảnh) để dành giai đoạn 7, chưa gộp.
+- **Giai đoạn 3 (địa hình): xong.** 3a bản đồ theo kiểu + seed (save 14); 3b sông, hồ uốn lượn; 3c bậc thềm 4 tầng (bước 2,0; ô sườn chỉ làm đường dốc; Quần đảo phẳng); 3d ô nhiễm sông (không lưu). Save cũ có nhà trên ô nay là sườn: bỏ nhà đó khi tải.
+- Cân bằng cuối game (28/11): dịch vụ lớn ×5, nhỏ ×2, hành chính 1,2/dân trên 10.000, đồn công an mở ở 2.000. Đô thị lớn 20.200 dân lãi +11.800/tick.
+- `codex/post-processing` đã nằm trong `main` (Codex gộp sớm); chưa chốt giữ hay gỡ.
 
 ## Còn mở / rủi ro
 1. Nhiều tính năng mới chưa chạy trên máy thật (ngân sách, công viên, rác, mật độ, hoạt ảnh mở game, icon app). Script đặt icon chưa từng chạy trong build.

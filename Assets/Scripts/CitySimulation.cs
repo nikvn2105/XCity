@@ -692,7 +692,8 @@ namespace XCity
                 if (cell.Type == CellType.Empty) continue;
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (cell.IsBridge == IsBuildable(x, z))
+                // Saves from before terraces can hold buildings on what is now a slope; drop those too.
+                if (cell.IsBridge ? IsBuildable(x, z) : !IsBuildable(x, z, cell.Type))
                 {
                     restored.DroppedCellsOnLoad++;
                     continue;

@@ -252,6 +252,14 @@ namespace XCity.Tests
                 Assert.Equal(joint, east.Sample(-0.5f, 0f));
                 Assert.Equal(west.Sample(0.5f, 0.39f), east.Sample(-0.5f, 0.39f));
                 Assert.Equal(joint, city.RoadSurfaceY((ex + 1) * 4f, (ez + 0.5f) * 4f, 4f));
+
+                // A save from before terraces with a house on what is now a slope drops that house on load.
+                CitySnapshot snapshot = city.CreateSnapshot();
+                int slot = System.Array.IndexOf(snapshot.cellIndices, CitySimulation.CellIndex(ex, ez));
+                snapshot.cells[slot] = new CityCell { Type = CellType.Residential };
+                Assert.True(CitySimulation.TryRestore(snapshot, out var restored));
+                Assert.Equal(1, restored.DroppedCellsOnLoad);
+                Assert.Equal(CellType.Empty, restored.GetCell(ex, ez).Type);
             }
             finally
             {
