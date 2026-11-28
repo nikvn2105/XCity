@@ -263,16 +263,21 @@ namespace XCity
                     }
                     if (!WorldTerrain.IsLand(x, z)) continue;
                     RoadGrade grade = _city.GetRoadGrade(x, z);
-                    AddTerraceWalls(_surface, x, z, grade, includeBanks: false);
+                    var cliff = new SoftCliff(x, z);
                     AddCoast(x, z, cell.Type);
                     if (cell.Type == CellType.Road)
                     {
-                        if (grade.IsRamp) AddRamp(_surface, grade, x, z);
+                        if (grade.IsRamp || cliff.Active)
+                        {
+                            AddRamp(_surface, grade, cliff, x, z);
+                            if (emitScenery && !grade.IsRamp)
+                                AddStreetScenery(center, x, z, _cellSize * 0.39f);
+                        }
                         else if (full) AddStreet(center, x, z, emitScenery);
                         else AddOverviewStreet(center, x, z);
                     }
                     else
-                        AddLot(cell, x, z, full, emitScenery);
+                        AddLot(cell, x, z, full, emitScenery, cliff);
                 }
             }
 
@@ -331,16 +336,19 @@ namespace XCity
                     _farSurface.SetFrame(new Vector3(x0 + half, elevation, z0 + half), 0);
                     AddFreshWater(_farSurface, x, z, elevation);
                     RoadGrade grade = _city.GetRoadGrade(x, z);
-                    if (WorldTerrain.IsLand(x, z)) AddTerraceWalls(_farSurface, x, z, grade, includeBanks: true);
-                    if (grade.IsRamp && !cell.IsBridge)
+                    var cliff = new SoftCliff(x, z);
+                    bool shaped = !cell.IsBridge && (grade.IsRamp || cliff.Active);
+                    if (WorldTerrain.IsLand(x, z)) AddFarWaterBank(_farSurface, x, z, grade);
+                    if (shaped)
                     {
                         _farSurface.SetFrame(Vector3.zero, 0);
                         FlushSpan();
                         _farSurface.SetFrame(new Vector3(x0 + half, elevation, z0 + half), 0);
-                        AddRamp(_farSurface, grade, x, z);
+                        if (cell.Type == CellType.Road) AddRamp(_farSurface, grade, cliff, x, z);
+                        else AddSoftGround(_farSurface, cliff, GetFarTileColor(cell, x, z), x, z);
                     }
                     _farSurface.SetFrame(Vector3.zero, 0);
-                    if (grade.IsRamp && !cell.IsBridge) continue;
+                    if (shaped) continue;
 
                     if (_city.TryGetBridgeProfile(x, z, out BridgeProfile bridge))
                     {
@@ -698,7 +706,7 @@ namespace XCity
             }
         }
 
-        private void AddTerraceWalls(MeshBuilder mesh, int x, int z, RoadGrade grade, bool includeBanks)
+        private void AddFarWaterBank(MeshBuilder mesh, int x, int z, RoadGrade grade)
         {
             if (!WorldTerrain.IsSlope(x, z)) return;
             Edge(x + 1, z, true, 0.5f, Vector3.right);
@@ -710,7 +718,7 @@ namespace XCity
             {
                 bool land = WorldTerrain.IsLand(nx, nz);
                 float lower = WorldTerrain.SurfaceY(nx, nz);
-                if (lower >= grade.Base || (!land && !includeBanks)) return;
+                if (land || lower >= grade.Base) return;
                 RoadGrade other = land ? _city.GetRoadGrade(nx, nz) : new RoadGrade(lower + BridgeProfile.WaterSurface);
                 float offset = land ? 0.007f : 0f;
                 var stone = new Color32(108, 103, 91, 255);
@@ -735,7 +743,40 @@ namespace XCity
             }
         }
 
-        private void AddRamp(MeshBuilder mesh, RoadGrade grade, int x, int z)
+        private void AddSoftGround(MeshBuilder mesh, SoftCliff cliff, Color32 grass, int x, int z)
+        {
+            for (int ix = 0; ix < RoadGrade.PatchCount; ix++)
+            for (int iz = 0; iz < RoadGrade.PatchCount; iz++)
+            {
+                float x0 = RoadGrade.Boundary(ix), x1 = RoadGrade.Boundary(ix + 1);
+                float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
+                AddCliffPatch(mesh, ix, iz, Point(x0, z0), Point(x0, z1), Point(x1, z1), Point(x1, z0), grass, x, z);
+            }
+
+            Vector3 Point(float u, float v) => new Vector3(u * _cellSize, cliff.Vertex(u, v) + 0.007f, v * _cellSize);
+        }
+
+        private void AddCliffPatch(MeshBuilder mesh, int ix, int iz, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+            Color32 grass, int x, int z)
+        {
+            Color32 ca = Shade(a), cb = Shade(b), cc = Shade(c), cd = Shade(d);
+            if (RoadGrade.FlipDiagonal(ix, iz))
+                mesh.AddQuadColors(b, c, d, a, cb, cc, cd, ca, Vector3.up);
+            else
+                mesh.AddQuadColors(a, b, c, d, ca, cb, cc, cd, Vector3.up);
+
+            Color32 Shade(Vector3 p)
+            {
+                if (p.y >= -0.03f) return grass;
+                float n = WorldTerrain.Noise(x * 10 + 128 + Mathf.RoundToInt(p.x * 2f),
+                    z * 10 + 128 + Mathf.RoundToInt(p.z * 2f), 14);
+                var soil = Color32.Lerp(new Color32(139, 115, 86, 255), new Color32(114, 111, 101, 255), n);
+                var baseColor = Color32.Lerp(soil, new Color32(75, 68, 57, 255), Mathf.Clamp01(-p.y / 3f) * 0.46f);
+                return Color32.Lerp(grass, baseColor, Mathf.Clamp01(-p.y / 0.38f));
+            }
+        }
+
+        private void AddRamp(MeshBuilder mesh, RoadGrade grade, SoftCliff cliff, int x, int z)
         {
             Color32 paving = _infoView ? GetInfoGroundColor(_city.GetCell(x, z), x, z) : Paving;
             Color32 road = _infoView ? GetInfoRoadColor(x, z) : Asphalt;
@@ -750,14 +791,16 @@ namespace XCity
                 float x0 = RoadGrade.Boundary(ix), x1 = RoadGrade.Boundary(ix + 1);
                 float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
                 Vector3 a = Point(x0, z0), b = Point(x0, z1), c = Point(x1, z1), d = Point(x1, z0);
-                if (RoadGrade.FlipDiagonal(ix, iz))
+                if (cliff.Active && !driveable)
+                    AddCliffPatch(mesh, ix, iz, a, b, c, d, GetNaturalGroundColor(x, z), x, z);
+                else if (RoadGrade.FlipDiagonal(ix, iz))
                     mesh.AddQuad(b, c, d, a, Vector3.up, paving);
                 else
                     mesh.AddQuad(a, b, c, d, Vector3.up, driveable ? road : paving);
             }
 
             Vector3 Point(float u, float v) => new Vector3(u * _cellSize,
-                grade.Sample(u, v) - grade.Base + RoadY, v * _cellSize);
+                cliff.RoadY(grade, links, u, v) - grade.Base + RoadY, v * _cellSize);
         }
 
         private void AddOverviewStreet(Vector3 center, int x, int z)
@@ -821,8 +864,15 @@ namespace XCity
                         CurbY + 0.003f, Curb);
             }
 
-            if (!emitScenery) return;
+            if (emitScenery) AddStreetScenery(center, x, z, shoulder);
+        }
 
+        private void AddStreetScenery(Vector3 center, int x, int z, float shoulder)
+        {
+            RoadConnections links = _city.Roads.GetConnections(x, z);
+            int degree = 0;
+            foreach (RoadConnections direction in Directions)
+                if ((links & direction) != 0) degree++;
             uint seed = BuildingMeshFactory.Hash(x, z, 412);
             if (degree > 1 && seed % 5u == 0)
             {
@@ -865,14 +915,15 @@ namespace XCity
             _props.AddBox(new Vector3(offset - 0.39f, 2.02f, offset), new Vector3(0.24f, 0.10f, 0.16f), lampWarm, metal);
         }
 
-        private void AddLot(CityCell cell, int x, int z, bool full, bool emitScenery)
+        private void AddLot(CityCell cell, int x, int z, bool full, bool emitScenery, SoftCliff cliff)
         {
             CellType type = cell.Type;
             float half = _cellSize * 0.5f;
             Color32 ground = _infoView
                 ? GetInfoGroundColor(cell, x, z)
                 : GetNaturalGroundColor(x, z);
-            Rect(_surface, -half, -half, half, half, 0.007f, ground);
+            if (cliff.Active) AddSoftGround(_surface, cliff, ground, x, z);
+            else Rect(_surface, -half, -half, half, half, 0.007f, ground);
 
             if (type != CellType.Empty)
             {
@@ -885,7 +936,7 @@ namespace XCity
 
             if (!full) return;
             uint seed = BuildingMeshFactory.Hash(x, z, 921);
-            if (_city.Roads.HasRoadAccess(x, z) && CountAdjacentBuildings(x, z) >= 2)
+            if (!cliff.Active && _city.Roads.HasRoadAccess(x, z) && CountAdjacentBuildings(x, z) >= 2)
             {
                 AddPocketPark(half, seed, emitScenery);
                 return;
@@ -899,18 +950,18 @@ namespace XCity
                 float dx = ((seed >> 8 & 255u) / 255f - 0.5f) * half * 0.85f;
                 float dz = ((seed >> 16 & 255u) / 255f - 0.5f) * half * 0.85f;
                 float size = 0.78f + (seed >> 24 & 255u) / 255f * 0.44f;
-                TreeMeshFactory.AddWildTree(_props, new Vector3(dx, 0.008f, dz), size, seed, grove);
+                TreeMeshFactory.AddWildTree(_props, new Vector3(dx, cliff.Sample(dx / _cellSize, dz / _cellSize) + 0.008f, dz), size, seed, grove);
                 if (grove > 0.62f && seed % 3u == 0)
                 {
                     float sdx = dx * -0.55f;
                     float sdz = dz * -0.55f + (dz > 0 ? -0.67f : 0.67f);
-                    TreeMeshFactory.AddWildTree(_props, new Vector3(sdx, 0.008f, sdz), size * 0.64f, seed ^ 0x9E3779B9u, grove + 0.12f);
+                    TreeMeshFactory.AddWildTree(_props, new Vector3(sdx, cliff.Sample(sdx / _cellSize, sdz / _cellSize) + 0.008f, sdz), size * 0.64f, seed ^ 0x9E3779B9u, grove + 0.12f);
                 }
             }
             else if (seed % 19u == 0)
             {
                 var rock = new Color32(138, 149, 132, 255);
-                _props.AddCylinder(new Vector3(0.37f, 0.01f, -0.44f), 0.34f, 0.22f, 0.22f, 5, rock, true, Paving);
+                _props.AddCylinder(new Vector3(0.37f, cliff.Sample(0.37f / _cellSize, -0.44f / _cellSize) + 0.01f, -0.44f), 0.34f, 0.22f, 0.22f, 5, rock, true, Paving);
             }
         }
 
