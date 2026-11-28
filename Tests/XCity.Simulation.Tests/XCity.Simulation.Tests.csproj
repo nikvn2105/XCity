@@ -17,6 +17,7 @@
     <Compile Include="../../Assets/Scripts/CitySimulation.Budget.cs" Link="Simulation/CitySimulation.Budget.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Waterfront.cs" Link="Simulation/CitySimulation.Waterfront.cs" />
     <Compile Include="../../Assets/Scripts/RoadGraph.cs" Link="Simulation/RoadGraph.cs" />
+    <Compile Include="../../Assets/Scripts/RoadCatalog.cs" Link="Simulation/RoadCatalog.cs" />
     <Compile Include="../../Assets/Scripts/VehicleLaneRules.cs" Link="Simulation/VehicleLaneRules.cs" />
     <Compile Include="../../Assets/Scripts/WorldTerrain.cs" Link="Simulation/WorldTerrain.cs" />
     <Compile Include="../../Assets/Scripts/MapGenerator.cs" Link="Simulation/MapGenerator.cs" />

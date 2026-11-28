@@ -69,9 +69,26 @@ namespace XCity
             if ((features & NearWater) != 0) value += 12;
             if ((features & NearPollution) != 0) value -= 18;
             else if ((features & NearIncinerator) != 0) value -= 10;
+            bool residential = _cells[x, z].Type == CellType.Residential;
+            bool avenue = false, boulevard = false;
+            CheckRoad(x - 1, z);
+            CheckRoad(x + 1, z);
+            CheckRoad(x, z - 1);
+            CheckRoad(x, z + 1);
+            if (avenue) value -= RoadCatalog.AvenueResidentialNoise;
+            if (boulevard) value += RoadCatalog.BoulevardLandBonus;
             if (NeedsGarbageCollection(x, z)) value -= 10;
             if (GetTrafficLoad(x, z) > 100) value -= 12;
             return Math.Max(0, Math.Min(100, value));
+
+            void CheckRoad(int nx, int nz)
+            {
+                if (!IsInBounds(nx, nz)) return;
+                CityCell adjacent = _cells[nx, nz];
+                if (adjacent.Type != CellType.Road) return;
+                avenue |= residential && adjacent.RoadType == RoadType.Avenue;
+                boulevard |= adjacent.RoadType == RoadType.Boulevard;
+            }
         }
 
         internal int LandValueTaxPercent(int x, int z) => 50 + GetLandValue(x, z);

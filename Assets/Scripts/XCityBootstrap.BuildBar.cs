@@ -16,9 +16,10 @@ namespace XCity
             public readonly BuildingModel Model;
             public readonly CityOverlayMode Overlay;
             public readonly bool WorldMap;
+            public readonly RoadType RoadType;
 
             public BuildOption(string name, BuildTool tool, BuildingModel model = BuildingModel.Default,
-                CityOverlayMode overlay = CityOverlayMode.None, bool worldMap = false)
+                CityOverlayMode overlay = CityOverlayMode.None, bool worldMap = false, RoadType roadType = RoadType.Street)
             {
                 Name = name;
                 ShortName = UiText.ShortModel(model, name);
@@ -26,6 +27,7 @@ namespace XCity
                 Model = model;
                 Overlay = overlay;
                 WorldMap = worldMap;
+                RoadType = roadType;
             }
 
             public int UnlockPopulation => BuildingCatalog.UnlockPopulation(Model);
@@ -66,6 +68,10 @@ namespace XCity
         private BuildTool _buildBarTool;
         private BuildingModel _buildBarModel;
         private CityOverlayMode _buildBarOverlay;
+
+        private RoadType _activeRoadType, _buildBarRoadType;
+
+        private static BuildOption RoadOption(RoadType type) => new BuildOption(UiText.RoadName(type), BuildTool.Road, roadType: type);
 
         private static BuildOption ModelOption(BuildTool tool, BuildingModel model) =>
             new BuildOption(BuildingCatalog.Get(model).Name, tool, model);
@@ -131,7 +137,9 @@ namespace XCity
             _buildCategories = new[]
             {
                 Category(UiText.View, UiIcon.Pointer, UiTheme.TextSoft, new BuildOption(UiText.View, BuildTool.Pan)),
-                Category(UiText.Road, UiIcon.Road, UiTheme.RoadGray, new BuildOption(UiText.Road, BuildTool.Road),
+                Category(UiText.Road, UiIcon.Road, UiTheme.RoadGray,
+                    RoadOption(RoadType.Street), RoadOption(RoadType.Avenue),
+                    RoadOption(RoadType.OneWay), RoadOption(RoadType.Boulevard),
                     new BuildOption(UiText.Bridge, BuildTool.Bridge)),
                 Category(UiText.Residential, UiIcon.Home, UiTheme.Residential,
                     ModelOption(BuildTool.Residential, BuildingModel.RowHouse),
@@ -313,14 +321,15 @@ namespace XCity
             category.Content.gameObject.SetActive(false);
         }
 
-        private static string BuildOptionStats(BuildOption option, bool isMap)
+        private string BuildOptionStats(BuildOption option, bool isMap)
         {
             if (isMap) return "";
             if (option.Tool == BuildTool.Bridge)
-                return UiText.BridgePrice(CitySimulation.BridgeTileCost, CitySimulation.RoadCost) + "\n" +
-                    UiText.Upkeep(CitySimulation.RoadUpkeep);
+                return UiText.BridgePrice(CitySimulation.BridgeTileCost + RoadCatalog.UpgradeCost(RoadType.Street, _activeRoadType),
+                    RoadCatalog.Cost(_activeRoadType)) + "\n" + UiText.Upkeep(RoadCatalog.Upkeep(_activeRoadType));
             if (option.Tool == BuildTool.Road)
-                return UiText.Price(CitySimulation.RoadCost, true) + "\n" + UiText.Upkeep(CitySimulation.RoadUpkeep);
+                return UiText.Price(RoadCatalog.Cost(option.RoadType), true) + "\n" +
+                    UiText.Upkeep(RoadCatalog.Upkeep(option.RoadType)) + "\n" + UiText.RoadCapacity(RoadCatalog.Capacity(option.RoadType));
             if (option.Tool == BuildTool.PowerPlant)
                 return UiText.Price(option.Model == BuildingModel.Default ? CitySimulation.PowerPlantCost : BuildingCatalog.Get(option.Model).Cost, false) +
                     "\n" + UiText.Upkeep(CitySimulation.PowerUpkeep(option.Model)) + "\n" + UiText.PowerSupply(CitySimulation.PowerCapacity(option.Model));
@@ -414,6 +423,7 @@ namespace XCity
 
             category.Pick = option;
             _activeBuildingModel = option.Model;
+            if (option.Tool == BuildTool.Road) _activeRoadType = option.RoadType;
             SelectTool(option.Tool);
         }
 
@@ -456,7 +466,7 @@ namespace XCity
                         tier = Mathf.Max(tier, option.UnlockPopulation);
 
             CityOverlayMode overlay = _overlays.Mode;
-            if (tier == _buildUnlockTier && _activeTool == _buildBarTool &&
+            if (tier == _buildUnlockTier && _activeTool == _buildBarTool && _activeRoadType == _buildBarRoadType &&
                 _activeBuildingModel == _buildBarModel && overlay == _buildBarOverlay) return;
 
             if (_buildUnlockTier >= 0 && tier > _buildUnlockTier)
@@ -473,6 +483,7 @@ namespace XCity
             }
             _buildUnlockTier = tier;
             _buildBarTool = _activeTool;
+            _buildBarRoadType = _activeRoadType;
             _buildBarModel = _activeBuildingModel;
             _buildBarOverlay = overlay;
             foreach (BuildCategory category in _buildCategories)
@@ -520,7 +531,7 @@ namespace XCity
                 card.Glyph.text = unlocked ? card.Icon : UiIcon.Lock;
                 card.Glyph.color = unlocked ? tint : UiTheme.TextMuted;
                 card.Details.color = unlocked ? UiTheme.TextSoft : UiTheme.TextMuted;
-                card.Details.text = unlocked ? card.Stats : card.LockedStats;
+                card.Details.text = unlocked ? (option.Tool == BuildTool.Bridge ? BuildOptionStats(option, false) : card.Stats) : card.LockedStats;
             }
         }
 

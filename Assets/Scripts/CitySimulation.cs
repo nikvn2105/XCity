@@ -174,6 +174,8 @@ namespace XCity
         public int Level;
         public float Height;
         public RoadConnections BridgeAxis;
+        public RoadType RoadType;
+        public RoadConnections OneWayExit;
         internal bool IsBridge => BridgeAxis != RoadConnections.None;
     }
 
@@ -225,7 +227,7 @@ namespace XCity
         internal const float PowerPlantHeight = 3.2f;
         // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding; 14: map style and seed;
         // 15: gas power plant.
-        internal const int CurrentSchemaVersion = 15;
+        internal const int CurrentSchemaVersion = 16;
         public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -332,7 +334,9 @@ namespace XCity
                 _coverageDirty = true;
 
             RoadConnections axis = current.BridgeAxis;
-            Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis);
+            Roads.SetRoad(x, z, type == CellType.Road, axis == RoadConnections.None ? RoadConnections.All : axis, current.OneWayExit);
+            if (type == CellType.Road && previous.Type == CellType.Road && previous.RoadType != current.RoadType)
+                _componentRoadVersion = -1;
         }
 
         public CityCell GetCell(int x, int z) => _cells[x, z];
@@ -356,6 +360,7 @@ namespace XCity
 
         public bool TryApplyBuild(IEnumerable<(int X, int Z)> points, CellType type, BuildingModel model = BuildingModel.Default)
         {
+            if (type == CellType.Road && model == BuildingModel.Default) return TryBuildRoad(points, RoadType.Street);
             if (IsBankrupt) return false;
             if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation) return false;
             int moneyBefore = Money;
@@ -363,6 +368,29 @@ namespace XCity
             foreach (var point in points)
                 TrySetCell(point.X, point.Z, type, model, changed);
 
+            if (changed.Count == 0) return false;
+            PushUndo(changed, moneyBefore - Money);
+            return true;
+        }
+
+        public bool TryBuildRoad(IEnumerable<(int X, int Z)> points, RoadType roadType)
+        {
+            if (IsBankrupt || roadType > RoadType.Boulevard) return false;
+            using var path = points.GetEnumerator();
+            if (!path.MoveNext()) return false;
+
+            int moneyBefore = Money;
+            var changed = new List<(int X, int Z, CityCell Cell)>();
+            var point = path.Current;
+            var exit = RoadConnections.None;
+            while (path.MoveNext())
+            {
+                var next = path.Current;
+                exit = RoadCatalog.ExitForStep(roadType, next.X - point.X, next.Z - point.Z, exit);
+                TrySetCell(point.X, point.Z, CellType.Road, BuildingModel.Default, changed, roadType, exit);
+                point = next;
+            }
+            TrySetCell(point.X, point.Z, CellType.Road, BuildingModel.Default, changed, roadType, exit);
             if (changed.Count == 0) return false;
             PushUndo(changed, moneyBefore - Money);
             return true;
@@ -405,7 +433,8 @@ namespace XCity
 
         // Placement quotes exclude affordability. Demolition charges at most the remaining cash.
         internal bool TryQuoteCell(int x, int z, CellType type, BuildingModel model, out int cost,
-            out int bridgeGroup, int? budget = null)
+            out int bridgeGroup, int? budget = null, RoadType roadType = RoadType.Street,
+            RoadConnections exit = RoadConnections.None)
         {
             cost = 0;
             bridgeGroup = -1;
@@ -439,11 +468,13 @@ namespace XCity
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;
             if (type != CellType.Empty && BuildingCatalog.UnlockPopulation(model) > PeakPopulation) return false;
-            if (cell.Type == type && cell.Model == model) return false;
+            if (type == CellType.Road && !RoadCatalog.IsValid(roadType, exit)) return false;
+            if (cell.Type == type && cell.Model == model &&
+                (type != CellType.Road || (cell.RoadType == roadType && cell.OneWayExit == exit))) return false;
 
             cost = type switch
             {
-                CellType.Road => RoadCost,
+                CellType.Road => cell.Type == CellType.Road ? RoadCatalog.UpgradeCost(cell.RoadType, roadType) : RoadCatalog.Cost(roadType),
                 CellType.Empty => AffordableDemolition(1, budget),
                 CellType.PowerPlant => model == BuildingModel.Default ? PowerPlantCost : option.Cost,
                 _ => model == BuildingModel.Default ? ZoneCost : option.Cost
@@ -452,9 +483,10 @@ namespace XCity
         }
 
         private bool TrySetCell(int x, int z, CellType type, BuildingModel model,
-            List<(int X, int Z, CityCell Cell)> changed)
+            List<(int X, int Z, CityCell Cell)> changed, RoadType roadType = RoadType.Street,
+            RoadConnections exit = RoadConnections.None)
         {
-            if (!TryQuoteCell(x, z, type, model, out int cost, out int bridgeGroup)) return false;
+            if (!TryQuoteCell(x, z, type, model, out int cost, out int bridgeGroup, roadType: roadType, exit: exit)) return false;
             if (bridgeGroup >= 0) return RemoveBridge(x, z, changed);
             if (cost > 0 && Money < cost) return false;
 
@@ -465,6 +497,7 @@ namespace XCity
             if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
             cell = type switch
             {
+                CellType.Road => new CityCell { Type = type, RoadType = roadType, OneWayExit = exit },
                 CellType.PowerPlant => new CityCell { Type = type, Model = model, Level = 1, Height = PowerPlantHeight },
                 CellType.School or CellType.CivicService =>
                     new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
@@ -488,7 +521,7 @@ namespace XCity
             RefreshTraffic();
             RefreshGarbage();
             _garbageTickSnapshot = true;
-            int networks = _componentRoads.Count;
+            int networks = _componentRoadCapacity.Count;
             ClearCapacity(ref _tickWorkers, networks);
             ClearCapacity(ref _tickJobs, networks);
             int[] networkWorkers = _tickWorkers;
@@ -508,8 +541,9 @@ namespace XCity
                 ref CityCell cell = ref _cells[x, z];
                 if (cell.Type == CellType.Road)
                 {
-                    netIncome -= RoadUpkeep;
-                    budget.Roads += RoadUpkeep;
+                    int upkeep = RoadCatalog.Upkeep(cell.RoadType);
+                    netIncome -= upkeep;
+                    budget.Roads += upkeep;
                     continue;
                 }
 
@@ -683,6 +717,11 @@ namespace XCity
             for (int i = 0; i < snapshot.cells.Length; i++)
             {
                 CityCell cell = snapshot.cells[i];
+                if (snapshot.schemaVersion < 16)
+                {
+                    cell.RoadType = RoadType.Street;
+                    cell.OneWayExit = RoadConnections.None;
+                }
                 if (!IsValidSavedCell(cell, snapshot.schemaVersion)) return false;
                 int index = legacy ? CellIndex(i / LegacySize + LegacyOffset, i % LegacySize + LegacyOffset) :
                     snapshot.cellIndices[i];
@@ -727,6 +766,13 @@ namespace XCity
 
         private static bool IsValidSavedCell(CityCell cell, int version)
         {
+            if (cell.Type == CellType.Road)
+            {
+                if (!RoadCatalog.IsValid(cell.RoadType, cell.OneWayExit) ||
+                    (cell.IsBridge && cell.RoadType == RoadType.OneWay && (cell.BridgeAxis & cell.OneWayExit) == 0))
+                    return false;
+            }
+            else if (cell.RoadType != RoadType.Street || cell.OneWayExit != RoadConnections.None) return false;
             if (cell.IsBridge)
                 return version >= 7 && cell.Type == CellType.Road && cell.Model == BuildingModel.Default &&
                     cell.Height == 0f && cell.Level == 0 &&
@@ -761,7 +807,7 @@ namespace XCity
             if (!_powerDirty && !topologyChanged) return;
             if (topologyChanged) RebuildRoadComponents();
 
-            int networks = _componentRoads.Count;
+            int networks = _componentRoadCapacity.Count;
             ClearCapacity(ref _powerCapacity, networks);
             ClearCapacity(ref _waterCapacity, networks);
             ClearCapacity(ref _sewageCapacity, networks);
@@ -830,29 +876,31 @@ namespace XCity
             _componentRoadVersion = Roads.Version;
             int[] components = _roadComponent;
             Array.Clear(components, 0, components.Length);
-            _componentRoads.Clear();
-            _componentRoads.Add(0);
+            _componentRoadCapacity.Clear();
+            _componentRoadCapacity.Add(0);
             int[] pending = _pendingRoads;
 
             foreach (int index in _utilityRoads)
             {
                 if (components[index] != 0) continue;
-                int component = _componentRoads.Count;
+                int component = _componentRoadCapacity.Count;
                 int head = 0;
                 int tail = 1;
                 components[index] = component;
                 pending[0] = index;
 
+                int capacity = 0;
                 while (head < tail)
                 {
                     int road = pending[head++];
+                    capacity += RoadCatalog.Capacity(_cells[road / GridSize, road % GridSize].RoadType);
                     RoadConnections edges = Roads.GetConnections(road / GridSize, road % GridSize);
                     if ((edges & RoadConnections.West) != 0) Visit(road - GridSize);
                     if ((edges & RoadConnections.East) != 0) Visit(road + GridSize);
                     if ((edges & RoadConnections.South) != 0) Visit(road - 1);
                     if ((edges & RoadConnections.North) != 0) Visit(road + 1);
                 }
-                _componentRoads.Add(tail);
+                _componentRoadCapacity.Add(capacity);
 
                 void Visit(int next)
                 {

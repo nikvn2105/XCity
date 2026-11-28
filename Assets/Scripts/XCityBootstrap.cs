@@ -80,6 +80,9 @@ namespace XCity
         private readonly List<RaycastResult> _hudHits = new List<RaycastResult>();
         private const int PreviewPoolCapacity = 256;
         private readonly List<Vector2Int> _stroke = new List<Vector2Int>(PreviewPoolCapacity);
+        private readonly List<Vector2Int> _roadTrace = new List<Vector2Int>(PreviewPoolCapacity);
+        private readonly Dictionary<Vector2Int, RoadConnections> _strokeRoadExits =
+            new Dictionary<Vector2Int, RoadConnections>(PreviewPoolCapacity);
         private readonly HashSet<Vector2Int> _strokeCells = new HashSet<Vector2Int>(PreviewPoolCapacity);
         private readonly List<MeshRenderer> _roadMarkers = new List<MeshRenderer>(PreviewPoolCapacity);
         private readonly HashSet<int> _quotedBridges = new HashSet<int>(PreviewPoolCapacity);
@@ -559,7 +562,7 @@ namespace XCity
                     if (_bridgeStart.HasValue && _bridgeQuote == BridgeQuote.Ready)
                     {
                         Vector2Int start = _bridgeStart.Value;
-                        if (_city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y))
+                        if (_city.TryBuildBridge(start.x, start.y, _bridgeEnd.x, _bridgeEnd.y, _activeRoadType))
                         {
                             _cityDirty = true;
                             _audio?.PlayBridge();
@@ -609,6 +612,8 @@ namespace XCity
             HideStreetPreview();
             _stroke.Clear();
             _strokeCells.Clear();
+            _roadTrace.Clear();
+            _strokeRoadExits.Clear();
             _quotedBridges.Clear();
             _strokeCost = 0;
             _strokeOverBudget = false;
@@ -843,7 +848,7 @@ namespace XCity
                 AddStrokeCell(cursor);
             }
             _lastStrokeSample = destination;
-            if (_activeTool == BuildTool.Road && !wasOverBudget && _strokeOverBudget)
+            if (_activeTool == BuildTool.Road && (_activeRoadType == RoadType.OneWay || (!wasOverBudget && _strokeOverBudget)))
                 RefreshStrokePreview();
             if (firstSample || changedSlope) RefreshHUD();
             else UpdateStrokeCost();
@@ -866,17 +871,34 @@ namespace XCity
 
         private void AddStrokeCell(Vector2Int cell)
         {
+            if (_activeTool == BuildTool.Road && _activeRoadType == RoadType.OneWay)
+            {
+                if (_roadTrace.Count == 0) _roadTrace.Add(cell);
+                else
+                {
+                    Vector2Int previous = _roadTrace[_roadTrace.Count - 1];
+                    if (previous != cell)
+                    {
+                        RoadConnections exit = RoadCatalog.Direction(cell.x - previous.x, cell.y - previous.y);
+                        _strokeRoadExits[previous] = _strokeRoadExits[cell] = exit;
+                        _roadTrace.Add(cell);
+                    }
+                }
+            }
             if (!_strokeCells.Add(cell)) return;
 
             int index = _stroke.Count;
             _stroke.Add(cell);
-            Material material = QuoteStrokeMarker(cell);
+            Material material = _activeTool == BuildTool.Road && _activeRoadType == RoadType.OneWay
+                ? _invalidPreviewMat : QuoteStrokeMarker(cell);
             ShowStreetPreview(index, cell, material, PreviewRise(cell));
         }
 
         private Material QuoteStrokeMarker(Vector2Int cell)
         {
-            if (!_city.TryQuoteCell(cell.x, cell.y, StrokeType, _activeBuildingModel, out int cost, out int bridge, _strokeBudget))
+            _strokeRoadExits.TryGetValue(cell, out RoadConnections exit);
+            if (!_city.TryQuoteCell(cell.x, cell.y, StrokeType, _activeBuildingModel, out int cost, out int bridge, _strokeBudget,
+                _activeRoadType, exit))
                 return _invalidPreviewMat;
 
             if (_activeTool == BuildTool.Bulldoze)
@@ -936,7 +958,7 @@ namespace XCity
             Vector2Int delta = pointer - start;
             bool alongX = Mathf.Abs(delta.x) >= Mathf.Abs(delta.y);
             var end = alongX ? new Vector2Int(pointer.x, start.y) : new Vector2Int(start.x, pointer.y);
-            BridgeQuote quote = _city.QuoteBridge(start.x, start.y, end.x, end.y, out int cost);
+            BridgeQuote quote = _city.QuoteBridge(start.x, start.y, end.x, end.y, out int cost, _activeRoadType);
             bool sameQuote = _stroke.Count > 0 && quote == _bridgeQuote;
             if (sameQuote && end == _bridgeEnd && cost == _strokeCost) return;
             bool hintChanged = !sameQuote && !(HasBridgePrice &&
@@ -1006,7 +1028,10 @@ namespace XCity
         {
             if (_activeTool == BuildTool.Road && _strokeOverBudget) return false;
             CellType type = StrokeType;
-            if (!_city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel)) return false;
+            bool applied = type == CellType.Road
+                ? _city.TryBuildRoad(GetStrokeCells(), _activeRoadType)
+                : _city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel);
+            if (!applied) return false;
             _cityDirty = true;
             if (_activeTool == BuildTool.Bulldoze) _audio?.PlayBulldoze();
             else _audio?.PlayBuild();
@@ -1015,7 +1040,8 @@ namespace XCity
 
         private IEnumerable<(int X, int Z)> GetStrokeCells()
         {
-            foreach (Vector2Int point in _stroke)
+            var path = _activeTool == BuildTool.Road && _activeRoadType == RoadType.OneWay ? _roadTrace : _stroke;
+            foreach (Vector2Int point in path)
                 yield return (point.x, point.y);
         }
 
@@ -1202,7 +1228,7 @@ namespace XCity
 
             string label = cell.Model != BuildingModel.Default ? BuildingCatalog.Get(cell.Model).Name : type switch
             {
-                CellType.Road => cell.IsBridge ? "Cầu đường bộ" : "Đường",
+                CellType.Road => cell.IsBridge ? UiText.Bridge : UiText.RoadName(cell.RoadType),
                 CellType.Residential => "Nhà ở",
                 CellType.Commercial => "Thương mại",
                 CellType.Industrial => "Công nghiệp",

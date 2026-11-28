@@ -18,6 +18,7 @@ namespace XCity
     {
         private readonly RoadConnections[,] _allowed;
         private readonly RoadConnections[,] _connections;
+        private readonly RoadConnections[,] _oneWayExits;
         private readonly int _size;
 
         public RoadGraph(int size)
@@ -25,10 +26,24 @@ namespace XCity
             _size = size;
             _allowed = new RoadConnections[size, size];
             _connections = new RoadConnections[size, size];
+            _oneWayExits = new RoadConnections[size, size];
         }
 
         public int Version { get; private set; }
         public RoadConnections GetConnections(int x, int z) => _connections[x, z];
+
+        public RoadConnections GetVehicleExits(int x, int z)
+        {
+            RoadConnections exits = _connections[x, z];
+            RoadConnections oneWay = _oneWayExits[x, z];
+            if (oneWay != RoadConnections.None) exits &= oneWay;
+            // A one-way tile accepts a turning approach, but never an entry from its exit side.
+            if ((exits & RoadConnections.West) != 0 && _oneWayExits[x - 1, z] == RoadConnections.East) exits &= ~RoadConnections.West;
+            if ((exits & RoadConnections.East) != 0 && _oneWayExits[x + 1, z] == RoadConnections.West) exits &= ~RoadConnections.East;
+            if ((exits & RoadConnections.South) != 0 && _oneWayExits[x, z - 1] == RoadConnections.North) exits &= ~RoadConnections.South;
+            if ((exits & RoadConnections.North) != 0 && _oneWayExits[x, z + 1] == RoadConnections.South) exits &= ~RoadConnections.North;
+            return exits;
+        }
 
         public bool HasRoadAccess(int x, int z) => GetAccess(x, z) != RoadConnections.None;
 
@@ -42,10 +57,21 @@ namespace XCity
             return access;
         }
 
-        internal void SetRoad(int x, int z, bool present, RoadConnections directions = RoadConnections.All)
+        internal void SetRoad(int x, int z, bool present, RoadConnections directions = RoadConnections.All,
+            RoadConnections oneWayExit = RoadConnections.None)
         {
             RoadConnections allowed = present ? directions : RoadConnections.None;
-            if (_allowed[x, z] == allowed) return;
+            RoadConnections exit = present ? oneWayExit : RoadConnections.None;
+            if (_allowed[x, z] == allowed)
+            {
+                if (_oneWayExits[x, z] != exit)
+                {
+                    _oneWayExits[x, z] = exit;
+                    Version++;
+                }
+                return;
+            }
+            _oneWayExits[x, z] = exit;
 
             _allowed[x, z] = allowed;
             _connections[x, z] = RoadConnections.None;
@@ -91,7 +117,7 @@ namespace XCity
             while (frontier.Count > 0 && _visited[goal] != _search && seen < maxCells)
             {
                 int cell = frontier.Dequeue();
-                RoadConnections edges = _connections[cell / _size, cell % _size];
+                RoadConnections edges = GetVehicleExits(cell / _size, cell % _size);
                 for (int d = 0; d < 4; d++)
                 {
                     if (((int)edges & (1 << d)) == 0) continue;

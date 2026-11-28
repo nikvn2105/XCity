@@ -130,7 +130,7 @@ namespace XCity
 
         private Vector3 ComputeWorldPos(Vehicle v)
         {
-            ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
+            ComputeCurve(v, out Vector3 p0, out Vector3 p1, out Vector3 p2);
             float u = 1f - v.T;
             Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
             Vector3 tangent = 2f * u * (p1 - p0) + 2f * v.T * (p2 - p1);
@@ -302,7 +302,7 @@ namespace XCity
                     blocker = other;
                 }
 
-                ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
+                ComputeCurve(v, out Vector3 p0, out Vector3 p1, out Vector3 p2);
                 float length = (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f;
                 float distMoved = v.CurrentSpeed * dt;
                 v.T += distMoved / Mathf.Max(length, 0.1f);
@@ -342,6 +342,7 @@ namespace XCity
                         continue;
                     }
                     v.OutDir = v.Route != null ? v.Route[v.RouteStep] : ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir, v.Template.IsFireTruck);
+                    if (v.OutDir < 0) RemoveVehicleAt(i);
                 }
             }
 
@@ -447,7 +448,7 @@ namespace XCity
                 Vector2Int cell = cand.Cell;
                 if (_occupied.Contains(cell)) continue;
 
-                RoadConnections conns = _city.Roads.GetConnections(cell.x, cell.y);
+                RoadConnections conns = _city.Roads.GetVehicleExits(cell.x, cell.y);
                 int count = 0;
                 for (int d = 0; d < 4; d++)
                 {
@@ -463,7 +464,7 @@ namespace XCity
                 {
                     Route = route,
                     Cell = cell,
-                    InDir = VehicleLaneRules.SpawnHeading(outDir, (int)conns, count),
+                    InDir = SpawnHeading(cell, outDir),
                     OutDir = outDir,
                     T = 0.5f,
                     Speed = tpl.Speed,
@@ -505,18 +506,19 @@ namespace XCity
                     continue;
                 }
 
-                RoadConnections conns = _city.Roads.GetConnections(v.Cell.x, v.Cell.y);
+                RoadConnections conns = _city.Roads.GetVehicleExits(v.Cell.x, v.Cell.y);
                 v.BlockedBy = null;
                 v.WaitSeconds = 0f;
                 v.Route = null; // the road network changed, so the planned route may be cut; wander instead
                 if (((int)conns & (1 << v.OutDir)) == 0)
                     v.OutDir = ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir);
+                if (v.OutDir < 0) RemoveVehicleAt(i);
             }
         }
 
         private int ChooseOutDir(int x, int z, int inDir, bool seekFire = false)
         {
-            RoadConnections conns = _city.Roads.GetConnections(x, z);
+            RoadConnections conns = _city.Roads.GetVehicleExits(x, z);
             int reverse = inDir ^ 1;
             int count = 0;
 
@@ -550,24 +552,44 @@ namespace XCity
                     _dirScratch[count++] = d;
             }
 
-            return count == 0 ? reverse : _dirScratch[_rng.Next(count)];
+            return count != 0 ? _dirScratch[_rng.Next(count)] : ((int)conns & (1 << reverse)) != 0 ? reverse : -1;
         }
 
-        private void ComputeCurve(Vector2Int cell, int inDir, int outDir, out Vector3 p0, out Vector3 p1, out Vector3 p2)
+        private int SpawnHeading(Vector2Int cell, int exit)
         {
+            RoadConnections links = _city.Roads.GetConnections(cell.x, cell.y);
+            int degree = 0;
+            for (int direction = 0; direction < 4; direction++)
+                if (((int)links & (1 << direction)) != 0) degree++;
+            return VehicleLaneRules.SpawnHeading(exit, (int)links, degree);
+        }
+
+        private void ComputeCurve(Vehicle vehicle, out Vector3 p0, out Vector3 p1, out Vector3 p2)
+        {
+            Vector2Int cell = vehicle.Cell;
+            int inDir = vehicle.InDir, outDir = vehicle.OutDir;
             float half = _cellSize * 0.5f;
-            float offset = 0.17f * _cellSize;
+            float enterOffset = 0.17f * _cellSize, exitOffset = enterOffset;
+            if (_city.GetCell(cell.x, cell.y).RoadType == RoadType.Avenue)
+            {
+                float avenueOffset = (vehicle.Phase < Mathf.PI ? 0.10f : 0.29f) * _cellSize;
+                if (IsAvenue(cell - Dir2D[inDir])) enterOffset = avenueOffset;
+                if (IsAvenue(cell + Dir2D[outDir])) exitOffset = avenueOffset;
+            }
             Vector3 center = new Vector3((cell.x + 0.5f) * _cellSize, 0.05f, (cell.y + 0.5f) * _cellSize);
 
-            p0 = center - Dir3D[inDir] * half + Right3D[inDir] * offset;
-            p2 = center + Dir3D[outDir] * half + Right3D[outDir] * offset;
+            p0 = center - Dir3D[inDir] * half + Right3D[inDir] * enterOffset;
+            p2 = center + Dir3D[outDir] * half + Right3D[outDir] * exitOffset;
 
             if (inDir == outDir)
                 p1 = (p0 + p2) * 0.5f;
             else if (outDir == (inDir ^ 1))
                 p1 = center;
             else
-                p1 = center + Right3D[inDir] * offset + Right3D[outDir] * offset;
+                p1 = center + Right3D[inDir] * enterOffset + Right3D[outDir] * exitOffset;
+
+            bool IsAvenue(Vector2Int point) => (uint)point.x < CitySimulation.GridSize &&
+                (uint)point.y < CitySimulation.GridSize && _city.GetCell(point.x, point.y).RoadType == RoadType.Avenue;
         }
 
         private void RenderVehicles()
@@ -630,7 +652,7 @@ namespace XCity
             {
                 Vehicle v = _vehicles[i];
                 VehicleTemplate tpl = v.Template;
-                ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
+                ComputeCurve(v, out Vector3 p0, out Vector3 p1, out Vector3 p2);
 
                 float u = 1f - v.T;
                 Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
