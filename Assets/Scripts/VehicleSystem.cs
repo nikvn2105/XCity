@@ -7,6 +7,8 @@ namespace XCity
 {
     internal sealed class VehicleSystem : IDisposable
     {
+        private const float DeadlockSeconds = 4f;
+        private const float StoppedSpeed = 0.05f;
         private const int MaxVehicles = 76;
         private const float RecountInterval = 1.0f;
         private const float SpawnInterval = 0.20f;
@@ -51,6 +53,8 @@ namespace XCity
             public float T;
             public float Speed;
             public float CurrentSpeed;
+            public Vehicle BlockedBy;
+            public float WaitSeconds;
             public float WheelAngle;
             public float Pitch;
             public float Roll;
@@ -177,8 +181,7 @@ namespace XCity
             {
                 var cell = _vehicles[i].Cell;
                 if (view.Contains(cell.x, cell.y)) continue;
-                _vehicles.RemoveAt(i);
-                _topologyDirty = true;
+                RemoveVehicleAt(i);
             }
         }
 
@@ -209,8 +212,7 @@ namespace XCity
 
             while (_vehicles.Count > _targetCount)
             {
-                _vehicles.RemoveAt(_vehicles.Count - 1);
-                _topologyDirty = true;
+                RemoveVehicleAt(_vehicles.Count - 1);
             }
 
             if (_vehicles.Count < _targetCount)
@@ -243,6 +245,7 @@ namespace XCity
                     }
                 }
 
+                Vehicle blocker = null;
                 Vector2Int nextCell = v.Cell + Dir2D[v.OutDir];
                 for (int j = 0; j < _vehicles.Count; j++)
                 {
@@ -255,11 +258,11 @@ namespace XCity
                         {
                             float gap = other.T - v.T;
                             if (gap < minGapSame)
-                                desiredSpeed = gap < minGapSame * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                                LimitSpeed(gap < minGapSame * 0.60f ? 0f : other.CurrentSpeed * 0.82f, other);
                         }
-                        else if (other.OutDir != v.OutDir && other.InDir != (v.OutDir ^ 1) && v.T < 0.42f && other.T >= 0.25f && other.T <= 0.78f)
+                        else if (VehicleLaneRules.BlocksAcrossCell(v.OutDir, other.InDir, other.OutDir, v.T, other.T))
                         {
-                            desiredSpeed = 0f;
+                            LimitSpeed(0f, other);
                         }
                     }
                     else if (other.Cell == nextCell)
@@ -269,18 +272,35 @@ namespace XCity
                             float gap = (1f - v.T) + other.T;
                             float minGapNext = minGapSame - 0.04f;
                             if (gap < minGapNext)
-                                desiredSpeed = gap < minGapNext * 0.60f ? 0f : Mathf.Min(desiredSpeed, other.CurrentSpeed * 0.82f);
+                                LimitSpeed(gap < minGapNext * 0.60f ? 0f : other.CurrentSpeed * 0.82f, other);
                         }
-                        else if (other.InDir != (v.OutDir ^ 1) && (1f - v.T) < 0.38f && other.T >= 0.12f && other.T <= 0.88f)
+                        else if (VehicleLaneRules.BlocksEntry(v.OutDir, other.InDir, other.OutDir, v.T, other.T,
+                            (int)_city.Roads.GetConnections(nextCell.x, nextCell.y)))
                         {
-                            desiredSpeed = 0f;
+                            LimitSpeed(0f, other);
                         }
                     }
                 }
 
                 float prevSpeed = v.CurrentSpeed;
                 v.CurrentSpeed = Mathf.MoveTowards(v.CurrentSpeed, desiredSpeed, 9f * dt);
+                v.BlockedBy = blocker;
+                v.WaitSeconds = blocker != null && v.CurrentSpeed <= StoppedSpeed ? v.WaitSeconds + dt : 0f;
+                if (v.WaitSeconds >= DeadlockSeconds && IsWaitingInCycle(v))
+                {
+                    // shortcut: clear one vehicle in a closed wait cycle; normal spawning fills the slot.
+                    // Never force a car through a blocker or remove traffic that's merely queued.
+                    RemoveVehicleAt(i);
+                    continue;
+                }
                 float accel = (v.CurrentSpeed - prevSpeed) / dt;
+
+                void LimitSpeed(float limit, Vehicle other)
+                {
+                    if (limit >= desiredSpeed) return;
+                    desiredSpeed = limit;
+                    blocker = other;
+                }
 
                 ComputeCurve(v.Cell, v.InDir, v.OutDir, out Vector3 p0, out Vector3 p1, out Vector3 p2);
                 float length = (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f;
@@ -309,8 +329,7 @@ namespace XCity
 
                     if (!_view.Contains(v.Cell.x, v.Cell.y) || !IsRoad(v.Cell.x, v.Cell.y))
                     {
-                        _vehicles.RemoveAt(i);
-                        _topologyDirty = true;
+                        RemoveVehicleAt(i);
                         continue;
                     }
 
@@ -319,8 +338,7 @@ namespace XCity
                     if (v.Route != null && ++v.RouteStep >= v.Route.Count)
                     {
                         // Arrived: the car parks at its destination and frees a slot for a new trip.
-                        _vehicles.RemoveAt(i);
-                        _topologyDirty = true;
+                        RemoveVehicleAt(i);
                         continue;
                     }
                     v.OutDir = v.Route != null ? v.Route[v.RouteStep] : ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir, v.Template.IsFireTruck);
@@ -394,6 +412,26 @@ namespace XCity
             return fallback;
         }
 
+        private void RemoveVehicleAt(int index)
+        {
+            Vehicle vehicle = _vehicles[index];
+            vehicle.BlockedBy = null;
+            vehicle.WaitSeconds = 0f;
+            _vehicles.RemoveAt(index);
+            _topologyDirty = true;
+        }
+
+        private static bool IsWaitingInCycle(Vehicle start)
+        {
+            Vehicle current = start.BlockedBy;
+            for (int i = 0; i < MaxVehicles && current != null && current.WaitSeconds > 0f; i++)
+            {
+                if (current == start) return true;
+                current = current.BlockedBy;
+            }
+            return false;
+        }
+
         private bool TrySpawn()
         {
             if (_candidates.Count == 0 || _vehicles.Count >= MaxVehicles) return false;
@@ -425,7 +463,7 @@ namespace XCity
                 {
                     Route = route,
                     Cell = cell,
-                    InDir = outDir,
+                    InDir = VehicleLaneRules.SpawnHeading(outDir, (int)conns, count),
                     OutDir = outDir,
                     T = 0.5f,
                     Speed = tpl.Speed,
@@ -463,12 +501,13 @@ namespace XCity
                 Vehicle v = _vehicles[i];
                 if (!_view.Contains(v.Cell.x, v.Cell.y) || !IsRoad(v.Cell.x, v.Cell.y))
                 {
-                    _vehicles.RemoveAt(i);
-                    _topologyDirty = true;
+                    RemoveVehicleAt(i);
                     continue;
                 }
 
                 RoadConnections conns = _city.Roads.GetConnections(v.Cell.x, v.Cell.y);
+                v.BlockedBy = null;
+                v.WaitSeconds = 0f;
                 v.Route = null; // the road network changed, so the planned route may be cut; wander instead
                 if (((int)conns & (1 << v.OutDir)) == 0)
                     v.OutDir = ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir);
