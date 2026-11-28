@@ -144,11 +144,14 @@ namespace XCity
             {
                 for (int z = _view.MinZ; z <= _view.MaxZ; z++)
                 {
-                    if (!WorldTerrain.IsLand(x, z)) continue;
                     CityCell cell = _city.GetCell(x, z);
-                    if (cell.Type == CellType.Road) continue;
-
-                    if (!TryPickOverlayColor(x, z, cell, out Color32 color)) continue;
+                    Color32 color;
+                    if (!WorldTerrain.IsLand(x, z))
+                    {
+                        if (Mode != CityOverlayMode.Environment || cell.IsBridge || !_city.IsPollutedWater(x, z)) continue;
+                        color = new Color32(124, 92, 52, 255); // Dirty river or lake water.
+                    }
+                    else if (cell.Type == CellType.Road || !TryPickOverlayColor(x, z, cell, out color)) continue;
 
                     Vector3 center = new Vector3((x + 0.5f) * _cellSize, 0f, (z + 0.5f) * _cellSize);
                     float y = cell.Height > 0f ? CityChunkRenderer.BuildingBase + cell.Height + 0.14f : OverlayY;

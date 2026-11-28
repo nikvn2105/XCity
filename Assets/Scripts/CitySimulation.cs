@@ -763,6 +763,8 @@ namespace XCity
             ClearCapacity(ref _powerCapacity, networks);
             ClearCapacity(ref _waterCapacity, networks);
             ClearCapacity(ref _sewageCapacity, networks);
+            ClearCapacity(ref _dirtyWaterCapacity, networks);
+            RebuildRiverPollution();
             foreach (int index in _utilitySources)
                 if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
                     _powerCapacity[AdjacentComponent(index)] += PowerCapacity(_cells[index / GridSize, index % GridSize].Model);
@@ -795,18 +797,25 @@ namespace XCity
                 if (!_powered[index]) continue;
                 BuildingModel model = _cells[index / GridSize, index % GridSize].Model;
                 int network = _cellComponent[index];
-                if (model == BuildingModel.WaterPump) _waterCapacity[network] += UtilityCapacity;
+                if (model == BuildingModel.WaterPump)
+                {
+                    if (PumpDrawsPollutedWater(index)) _dirtyWaterCapacity[network] += UtilityCapacity;
+                    else _waterCapacity[network] += UtilityCapacity;
+                }
                 else if (model == BuildingModel.SewagePlant) _sewageCapacity[network] += UtilityCapacity;
             }
 
             foreach (int index in _orderedConsumers)
             {
                 int network = _cellComponent[index];
-                bool water = _waterCapacity[network] > 0;
+                bool clean = _waterCapacity[network] > 0;
+                bool water = clean || _dirtyWaterCapacity[network] > 0;
                 bool sewage = _sewageCapacity[network] > 0;
                 _watered[index] = water;
+                _dirtyWater[index] = water && !clean;
                 _sewered[index] = sewage;
-                if (water) _waterCapacity[network]--;
+                if (clean) _waterCapacity[network]--;
+                else if (water) _dirtyWaterCapacity[network]--;
                 if (sewage) _sewageCapacity[network]--;
             }
 

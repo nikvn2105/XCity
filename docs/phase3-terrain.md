@@ -23,7 +23,7 @@
 | 3a | Hệ thống bản đồ: lưới tính trước, seed 0 = Quần đảo, save `mapSeed`/`mapStyle`, hộp "Thành phố mới" chọn kiểu + seed (nút ngẫu nhiên) + bản đồ thu nhỏ xem trước, bộ sinh bản đồ **phẳng** (bờ biển, đảo đa dạng) + kiểm tra chất lượng | M | Claude |
 | 3b | Sông và hồ: khắc sông/hồ, trạm bơm nước ngọt, giá trị đất ven nước, kiểm tra luôn có sông | M | Codex |
 | 3c | Bậc thềm: tầng cao, sườn chỉ cho đường, `SurfaceY` ở mọi hệ thống, vách đá, đường dốc | L (nặng nhất) | Codex |
-| 3d | Ô nhiễm sông: hướng chảy, nguồn bẩn, nước bẩn ở trạm bơm, lớp phủ | S–M | Claude |
+| 3d | Ô nhiễm sông: hướng chảy, nguồn bẩn, nước bẩn ở trạm bơm, lớp phủ — **xong** (bẩn 60 ô hạ lưu, hồ tối đa 150 ô; nước bẩn −5 hài lòng) | S–M | Claude |
 
 Thứ tự 3a → 3b → 3c → 3d: mỗi bước dựa trên bước trước; 3c chạm nhiều file nhất nên làm khi bản đồ và sông đã ổn.
 

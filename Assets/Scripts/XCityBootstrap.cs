@@ -1087,9 +1087,11 @@ namespace XCity
             if (type == CellType.Residential && cell.Level > 0)
                 label += $" · Cấp {cell.Level} · {BuildingCatalog.Residents(cell)} dân · Hạnh phúc {_city.GetHappiness(point.x, point.y)}%" +
                     $" · Dịch vụ: {DescribeCoverage(_city.GetCoverage(point.x, point.y))}" +
-                    (_city.HasWater(point.x, point.y) ? "" : " · Thiếu nước") +
+                    (!_city.HasWater(point.x, point.y) ? " · Thiếu nước" : _city.HasDirtyWater(point.x, point.y) ? " · Thiếu nước sạch" : "") +
                     (_city.HasSewage(point.x, point.y) ? "" : " · Thiếu thoát nước") +
                     (_city.GetTrafficLoad(point.x, point.y) > 100 ? " · Kẹt xe" : "");
+            if (cell.Model == BuildingModel.WaterPump && _city.PumpOnPollutedWater(point.x, point.y))
+                label += " · Mất nước sạch: nguồn bị ô nhiễm";
             if (type == CellType.Residential || type == CellType.Commercial)
             {
                 label += " · " + UiText.LandValueFact(_city.GetLandValue(point.x, point.y));

@@ -138,7 +138,7 @@ namespace XCity
 
         public int GetHappiness(int x, int z) =>
             Math.Min(100, CalculateHappiness(GetCoverage(x, z), HasWater(x, z), HasSewage(x, z), GetTrafficLoad(x, z))
-                + ParkBonusAt(x, z) - GarbageHappinessPenalty(x, z));
+                + ParkBonusAt(x, z) - GarbageHappinessPenalty(x, z) - (HasDirtyWater(x, z) ? DirtyWaterPenalty : 0));
 
         private int GarbageHappinessPenalty(int x, int z) =>
             IsInBounds(x, z) && _cells[x, z].Type == CellType.Residential && NeedsGarbageCollection(x, z) ? 10 : 0;
@@ -254,7 +254,8 @@ namespace XCity
                 if (cell.Type == CellType.Residential)
                 {
                     int local = Math.Min(100, CalculateHappiness(_coverage[index], _watered[index], _sewered[index],
-                        _componentTraffic[_cellComponent[index]]) + ParkBonusAt(x, z) - GarbageHappinessPenalty(x, z));
+                        _componentTraffic[_cellComponent[index]]) + ParkBonusAt(x, z) - GarbageHappinessPenalty(x, z) -
+                        (_watered[index] && _dirtyWater[index] ? DirtyWaterPenalty : 0));
                     happiness += (long)local * BuildingCatalog.Residents(cell);
                 }
             }
