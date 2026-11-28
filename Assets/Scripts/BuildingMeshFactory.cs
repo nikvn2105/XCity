@@ -102,7 +102,7 @@ namespace XCity
                 CellType.Residential => LotGrass,
                 CellType.Commercial => LotPaving,
                 CellType.School => new Color32(157, 170, 140, 255),
-                CellType.CivicService => LotPaving,
+                CellType.CivicService => ParkCatalog.IsPark(cell.Model) ? LotGrass : LotPaving,
                 _ => LotAsphalt
             };
             b.AddBox(new Vector3(0f, 0.02f, 0f), new Vector3(3.7f, 0.04f, 3.7f), lotColor, lotColor);
@@ -128,6 +128,16 @@ namespace XCity
         public static void BuildOverview(MeshBuilder builder, CityCell cell, int quarterTurns, Vector3 center)
         {
             builder.SetFrame(center + Vector3.up * CityChunkRenderer.BuildingBase, quarterTurns);
+            if (ParkCatalog.IsPark(cell.Model))
+            {
+                builder.AddFlatQuad(-1.85f, -1.85f, 1.85f, 1.85f, 0.04f, LotGrass);
+                builder.AddFlatQuad(-0.29f, -1.72f, 0.29f, 1.72f, 0.05f, ConcreteLight);
+                builder.AddSimpleBox(new Vector3(-0.94f, 0.47f, -0.75f), new Vector3(0.56f, 0.86f, 0.56f),
+                    LotGrass, LotGrass);
+                builder.AddSimpleBox(new Vector3(0.94f, 0.42f, 0.70f), new Vector3(0.55f, 0.76f, 0.55f),
+                    LotGrass, LotGrass);
+                return;
+            }
             var (walls, roof, width) = cell.Type switch
             {
                 CellType.Residential => (new Color32(173, 156, 131, 255), new Color32(116, 86, 73, 255), 2.65f),
@@ -228,11 +238,74 @@ namespace XCity
                 case BuildingModel.ShoppingMall:
                     BuildMall(b, height, CatalogVariant(x, z));
                     break;
+                case BuildingModel.SmallPark:
+                case BuildingModel.Plaza:
+                case BuildingModel.LargePark:
+                    BuildPark(b, cell.Model, CatalogVariant(x, z), Hash(x, z, 1283));
+                    break;
                 case BuildingModel.WaterPump:
                 case BuildingModel.SewagePlant:
                     BuildUtility(b, cell.Model, height, CatalogVariant(x, z));
                     break;
             }
+        }
+
+        private static void BuildPark(MeshBuilder b, BuildingModel model, int variant, uint seed)
+        {
+            var gravel = new Color32(197, 183, 146, 255);
+            var stone = new Color32(180, 187, 177, 255);
+            const float y = 0.06f;
+            bool plaza = model == BuildingModel.Plaza;
+            bool large = model == BuildingModel.LargePark;
+
+            if (variant != 1)
+                b.AddFlatQuad(-0.22f, -1.72f, 0.22f, 1.75f, y, gravel);
+            if (variant != 0)
+                b.AddFlatQuad(-1.72f, -0.22f, 1.72f, 0.22f, y + 0.001f, gravel);
+
+            if (plaza)
+            {
+                float fountainX = variant == 1 ? 0.47f : 0f;
+                float fountainZ = variant == 0 ? -0.32f : 0f;
+                if (variant == 2)
+                    b.AddFlatQuad(-1.18f, -0.85f, 1.18f, 0.85f, y + 0.003f, stone);
+                else
+                    b.AddCylinder(new Vector3(fountainX, y, fountainZ), 0.95f, 0.86f, 0.04f, 10, stone, true, stone);
+
+                var water = new Color32(84, 159, 176, 255);
+                b.AddCylinder(new Vector3(fountainX, y + 0.04f, fountainZ), 0.56f, 0.52f, 0.16f, 10, stone, true, water);
+                b.AddCylinder(new Vector3(fountainX, y + 0.20f, fountainZ), 0.13f, 0.10f, 0.42f, 6, stone, true, water);
+                AddParkBench(b, -0.94f, 0.96f, stone);
+                AddParkBench(b, 0.94f, 0.96f, stone);
+            }
+            else
+            {
+                float benchX = variant == 1 ? 1.06f : -0.71f;
+                float benchZ = variant == 1 ? 0.55f : 1.04f;
+                AddParkBench(b, benchX, benchZ, stone);
+                if (large)
+                {
+                    b.AddFlatQuad(-0.76f, -0.68f, 0.76f, 0.68f, y + 0.003f, stone);
+                    AddParkBench(b, -benchX, -benchZ, stone);
+                }
+            }
+
+            // Alternate planting beds as well as path shapes. Tree seeds are tied to the cell.
+            float treeZ = variant == 1 ? -0.91f : -1.12f;
+            TreeMeshFactory.AddYardTree(b, new Vector3(-1.14f, y, treeZ), 0.40f, seed);
+            TreeMeshFactory.AddYardTree(b, new Vector3(1.14f, y, variant == 0 && !plaza ? 0.90f : treeZ),
+                0.39f, seed + 17u);
+            if (large)
+                TreeMeshFactory.AddYardTree(b, new Vector3(variant == 1 ? 1.14f : -1.14f, y, 1.13f),
+                    0.38f, seed + 39u);
+        }
+
+        private static void AddParkBench(MeshBuilder b, float x, float z, Color32 stone)
+        {
+            var wood = new Color32(155, 108, 69, 255);
+            b.AddBox(new Vector3(x, 0.22f, z), new Vector3(0.60f, 0.08f, 0.25f), wood, wood);
+            b.AddBox(new Vector3(x, 0.33f, z - 0.10f), new Vector3(0.60f, 0.15f, 0.05f), wood, wood);
+            b.AddBox(new Vector3(x, 0.12f, z), new Vector3(0.44f, 0.14f, 0.13f), stone, stone);
         }
 
         private static void BuildUtility(MeshBuilder b, BuildingModel model, float h, int variant)

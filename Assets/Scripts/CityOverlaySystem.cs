@@ -12,7 +12,8 @@ namespace XCity
         Services,
         Education,
         Environment,
-        Happiness
+        Happiness,
+        LandValue
     }
 
     internal sealed class CityOverlaySystem : IDisposable
@@ -75,6 +76,7 @@ namespace XCity
                 CityOverlayMode.Services => CityOverlayMode.Education,
                 CityOverlayMode.Education => CityOverlayMode.Environment,
                 CityOverlayMode.Environment => CityOverlayMode.Happiness,
+                CityOverlayMode.Happiness => CityOverlayMode.LandValue,
                 _ => CityOverlayMode.None
             };
             SetMode(next);
@@ -87,6 +89,7 @@ namespace XCity
             CityOverlayMode.Education => "Giáo dục",
             CityOverlayMode.Environment => "Môi trường",
             CityOverlayMode.Happiness => "Hạnh phúc",
+            CityOverlayMode.LandValue => UiText.LandValue,
             _ => "Tắt"
         };
 
@@ -206,6 +209,15 @@ namespace XCity
                     // A home counts as schooled only if a school in reach still had a seat for it.
                     bool schooled = (_city.GetCoverage(x, z) & ServiceCoverage.Education) != 0;
                     color = schooled ? new Color32(72, 208, 122, 255) : new Color32(236, 138, 48, 255);
+                    return true;
+
+                case CityOverlayMode.LandValue:
+                    float value = _city.GetLandValue(x, z) / 100f;
+                    var poor = new Color32(227, 69, 62, 255);
+                    var fair = new Color32(237, 190, 66, 255);
+                    var rich = new Color32(65, 209, 118, 255);
+                    color = value < 0.5f ? Color32.Lerp(poor, fair, value * 2f) :
+                        Color32.Lerp(fair, rich, (value - 0.5f) * 2f);
                     return true;
 
                 case CityOverlayMode.Environment:
