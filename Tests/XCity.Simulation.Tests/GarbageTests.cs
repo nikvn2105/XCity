@@ -140,7 +140,7 @@ namespace XCity.Tests
             var incinerator = Restore((1, 0, Building(BuildingModel.Incinerator)));
             Assert.Equal(initial - 10, incinerator.GetLandValue(Center, Center));
             var snapshot = incinerator.CreateSnapshot();
-            Assert.Equal(13, snapshot.schemaVersion);
+            Assert.True(snapshot.schemaVersion >= 13);
             snapshot.schemaVersion = 12;
             Assert.False(CitySimulation.TryRestore(snapshot, out _));
         }

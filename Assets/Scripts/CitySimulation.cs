@@ -188,6 +188,8 @@ namespace XCity
         public int peakPopulation;
         public int[] taxRates;
         public int[] serviceFunding;
+        public int mapStyle;
+        public int mapSeed;
         public CityCell[] cells;
         public int[] cellIndices;
     }
@@ -208,8 +210,8 @@ namespace XCity
         internal const int PowerPlantUpkeep = 60;
         internal const int RoadUpkeep = 2;
         internal const float PowerPlantHeight = 3.2f;
-        // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding.
-        internal const int CurrentSchemaVersion = 13;
+        // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding; 14: map style and seed.
+        internal const int CurrentSchemaVersion = 14;
         public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -252,6 +254,9 @@ namespace XCity
                 return _unpoweredZones;
             }
         }
+
+        /// <summary>The map this city is built on: the world map active when it was created or restored.</summary>
+        public MapSpec Map { get; private set; } = WorldTerrain.Current;
 
         public CitySimulation(uint seed = 1)
         {
@@ -615,6 +620,8 @@ namespace XCity
                 peakPopulation = PeakPopulation,
                 taxRates = (int[])_taxRates.Clone(),
                 serviceFunding = (int[])_funding.Clone(),
+                mapStyle = (int)Map.Style,
+                mapSeed = Map.Seed,
                 cells = new CityCell[_occupied.Count],
                 cellIndices = new int[_occupied.Count]
             };
@@ -635,6 +642,12 @@ namespace XCity
                 snapshot.cells == null || snapshot.loanBalance < 0 || snapshot.loanBalance > MaxLoanBalance ||
                 snapshot.ticksInDebt < 0 || snapshot.ticksInDebt > BankruptcyTicks || snapshot.peakPopulation < 0)
                 return false;
+
+            // The terrain decides which saved cells still fit, so switch to the city's map first.
+            if (snapshot.schemaVersion >= 14 &&
+                (snapshot.mapStyle < (int)MapStyle.Classic || snapshot.mapStyle > (int)MapStyle.Islands)) return false;
+            var map = snapshot.schemaVersion >= 14 ? new MapSpec((MapStyle)snapshot.mapStyle, snapshot.mapSeed) : MapSpec.Classic;
+            WorldTerrain.Use(map);
 
             bool legacy = snapshot.schemaVersion < 6;
             if (legacy ? snapshot.cells.Length != LegacySize * LegacySize :
