@@ -41,7 +41,10 @@ namespace XCity
         SewagePlant,
         PolicePost,
         Clinic,
-        FireStationSmall
+        FireStationSmall,
+        SmallPark,
+        Plaza,
+        LargePark
     }
 
     internal static class BuildingCatalog
@@ -73,6 +76,7 @@ namespace XCity
                 BuildingModel.PolicePost => (CellType.CivicService, "Đồn cảnh sát nhỏ", 400, 2.6f, 0),
                 BuildingModel.Clinic => (CellType.CivicService, "Phòng khám", 700, 2.8f, 0),
                 BuildingModel.FireStationSmall => (CellType.CivicService, "Trạm cứu hỏa nhỏ", 500, 2.8f, 0),
+                BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Building(model),
                 _ => default
             };
 
@@ -93,6 +97,7 @@ namespace XCity
             BuildingModel.PolicePost => 8,
             BuildingModel.Clinic => 14,
             BuildingModel.FireStationSmall => 10,
+            BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).Upkeep,
             _ => Get(model).Seats / 15
         };
 
@@ -103,6 +108,7 @@ namespace XCity
             BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or
                 BuildingModel.Harbor => 2000,
             BuildingModel.University or BuildingModel.OfficeTower or BuildingModel.ShoppingMall => 5000,
+            BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).UnlockPopulation,
             _ => 0
         };
 
@@ -172,7 +178,7 @@ namespace XCity
         internal const int PowerPlantUpkeep = 60;
         internal const int RoadUpkeep = 2;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 10;
+        internal const int CurrentSchemaVersion = 12;
         public const int UtilityCapacity = 40;
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -245,8 +251,9 @@ namespace XCity
             if (BuildingCatalog.IsPublicService(type)) _serviceCells.Add(index);
             else _serviceCells.Remove(index);
             CityCell current = _cells[x, z];
-            bool consumes = UsesPower(type);
-            bool usedPower = UsesPower(previous.Type);
+            TrackLandValueCell(x, z, previous, current);
+            bool consumes = UsesPower(type) && !ParkCatalog.IsPark(current.Model);
+            bool usedPower = UsesPower(previous.Type) && !ParkCatalog.IsPark(previous.Model);
             int source = UtilitySource(current);
             int previousSource = UtilitySource(previous);
             if (type == CellType.Road) _utilityRoads.Add(index);
@@ -282,6 +289,7 @@ namespace XCity
         {
             if (!IsInBounds(x, z)) return ZoneStatus.NotZoned;
             CityCell cell = _cells[x, z];
+            if (ParkCatalog.IsPark(cell.Model)) return ZoneStatus.Developed;
             if (!UsesPower(cell.Type)) return ZoneStatus.NotZoned;
             if (!Roads.HasRoadAccess(x, z))
                 return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
@@ -622,7 +630,7 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
+                int modelVersion = ParkCatalog.IsPark(cell.Model) ? 12 : cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
                     cell.Model == BuildingModel.Harbor ? 7 :
                     cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;

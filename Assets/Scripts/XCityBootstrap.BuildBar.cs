@@ -76,7 +76,7 @@ namespace XCity
         private const float BuildSlotWidth = 84f;
         private const float BuildSlotHeight = 66f;
         private const float BuildCardWidth = 176f;
-        private const float BuildCardHeight = 140f;
+        private const float BuildCardHeight = 164f;
         private const float BuildPickerHeight = BuildCardHeight + 56f;
         private RectTransform _buildPickerRect;
         private Text _buildPickerTitle;
@@ -91,6 +91,7 @@ namespace XCity
                 case CityOverlayMode.Education: return UiIcon.School;
                 case CityOverlayMode.Environment: return UiIcon.Park;
                 case CityOverlayMode.Happiness: return UiIcon.Smile;
+                case CityOverlayMode.LandValue: return UiIcon.Map;
             }
             switch (option.Tool)
             {
@@ -114,6 +115,7 @@ namespace XCity
                 BuildingModel.PolicePost or BuildingModel.PoliceStation => UiIcon.Police,
                 BuildingModel.Clinic or BuildingModel.Hospital => UiIcon.Hospital,
                 BuildingModel.FireStationSmall or BuildingModel.FireStation => UiIcon.Fire,
+                BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => UiIcon.Park,
                 BuildingModel.Harbor => UiIcon.Boat,
                 BuildingModel.WaterPump => UiIcon.Water,
                 BuildingModel.SewagePlant => UiIcon.Recycling,
@@ -155,6 +157,10 @@ namespace XCity
                     ModelOption(BuildTool.CivicService, BuildingModel.Hospital),
                     ModelOption(BuildTool.CivicService, BuildingModel.FireStation),
                     ModelOption(BuildTool.CivicService, BuildingModel.Harbor)),
+                Category(UiText.Parks, UiIcon.Park, UiTheme.Residential,
+                    ModelOption(BuildTool.CivicService, BuildingModel.SmallPark),
+                    ModelOption(BuildTool.CivicService, BuildingModel.Plaza),
+                    ModelOption(BuildTool.CivicService, BuildingModel.LargePark)),
                 Category(UiText.Utilities, UiIcon.Bolt, UiTheme.Utilities, new BuildOption(UiText.PowerPlant, BuildTool.PowerPlant),
                     ModelOption(BuildTool.CivicService, BuildingModel.WaterPump),
                     ModelOption(BuildTool.CivicService, BuildingModel.SewagePlant)),
@@ -165,6 +171,7 @@ namespace XCity
                     new BuildOption(UiText.Education, BuildTool.Pan, overlay: CityOverlayMode.Education),
                     new BuildOption(UiText.Environment, BuildTool.Pan, overlay: CityOverlayMode.Environment),
                     new BuildOption(UiText.Happiness, BuildTool.Pan, overlay: CityOverlayMode.Happiness),
+                    new BuildOption(UiText.LandValue, BuildTool.Pan, overlay: CityOverlayMode.LandValue),
                     new BuildOption(UiText.WorldMap, BuildTool.Pan, worldMap: true),
                     new BuildOption(UiText.OverlayOff, BuildTool.Pan)
                 }),
@@ -310,11 +317,13 @@ namespace XCity
                 return UiText.Price(CitySimulation.PowerPlantCost, false) + "\n" + UiText.Upkeep(CitySimulation.PowerPlantUpkeep);
 
             var item = BuildingCatalog.Get(option.Model);
-            int radius = ServiceCatalog.Get(option.Model).Radius;
+            var park = ParkCatalog.Get(option.Model);
+            int radius = ParkCatalog.IsPark(option.Model) ? park.Radius : ServiceCatalog.Get(option.Model).Radius;
             return UiText.Price(item.Cost, !BuildingCatalog.IsPublicService(item.Type)) + "\n" +
                 UiText.Upkeep(BuildingCatalog.ServiceUpkeep(option.Model)) +
                 (radius > 0 ? "\n" + UiText.Radius(radius) : "") +
-                (item.Seats > 0 ? "\n" + UiText.Seats(item.Seats) : "");
+                (item.Seats > 0 ? "\n" + UiText.Seats(item.Seats) : "") +
+                (park.Bonus > 0 ? "\n" + UiText.ParkHappiness(park.Bonus) : "");
         }
 
         private void ToggleBuildPicker(BuildCategory category)

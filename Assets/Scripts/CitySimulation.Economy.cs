@@ -44,6 +44,7 @@ namespace XCity
                 BuildingModel.Workshop => 10,
                 BuildingModel.Warehouse => 12,
                 BuildingModel.Factory => 20,
+                BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => 0,
                 _ => cell.Type switch
                 {
                     CellType.Commercial => 8,
@@ -135,7 +136,8 @@ namespace XCity
         }
 
         public int GetHappiness(int x, int z) =>
-            CalculateHappiness(GetCoverage(x, z), HasWater(x, z), HasSewage(x, z), GetTrafficLoad(x, z));
+            Math.Min(100, CalculateHappiness(GetCoverage(x, z), HasWater(x, z), HasSewage(x, z), GetTrafficLoad(x, z))
+                + ParkBonusAt(x, z));
 
         private static int CalculateHappiness(ServiceCoverage coverage, bool water, bool sewage, int traffic) =>
             BaseHappiness + HappinessPerService * ServiceCatalog.Count(coverage) -
@@ -247,8 +249,8 @@ namespace XCity
                 if (cell.Type == CellType.Commercial) commercialJobs += cellJobs;
                 if (cell.Type == CellType.Residential)
                 {
-                    int local = CalculateHappiness(_coverage[index], _watered[index], _sewered[index],
-                        _componentTraffic[_cellComponent[index]]);
+                    int local = Math.Min(100, CalculateHappiness(_coverage[index], _watered[index], _sewered[index],
+                        _componentTraffic[_cellComponent[index]]) + ParkBonusAt(x, z));
                     happiness += (long)local * BuildingCatalog.Residents(cell);
                 }
             }

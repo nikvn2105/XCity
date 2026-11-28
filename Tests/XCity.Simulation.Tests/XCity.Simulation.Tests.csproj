@@ -9,6 +9,8 @@
   <ItemGroup>
     <Compile Include="../../Assets/Scripts/CitySave.cs" Link="Simulation/CitySave.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.cs" Link="Simulation/CitySimulation.cs" />
+    <Compile Include="../../Assets/Scripts/CitySimulation.LandValue.cs" Link="Simulation/CitySimulation.LandValue.cs" />
+    <Compile Include="../../Assets/Scripts/UiText.cs" Link="Simulation/UiText.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Economy.cs" Link="Simulation/CitySimulation.Economy.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Waterfront.cs" Link="Simulation/CitySimulation.Waterfront.cs" />
     <Compile Include="../../Assets/Scripts/RoadGraph.cs" Link="Simulation/RoadGraph.cs" />

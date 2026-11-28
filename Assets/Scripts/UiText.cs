@@ -83,6 +83,11 @@ namespace XCity
         public const string Industrial = "Công nghiệp";
         public const string Education = "Giáo dục";
         public const string Services = "Dịch vụ";
+        public const string Parks = "Công viên";
+        public const string SmallPark = "Công viên nhỏ";
+        public const string Plaza = "Quảng trường";
+        public const string LargePark = "Công viên lớn";
+        public const string LandValue = "Giá đất";
         public const string Utilities = "Tiện ích";
         public const string OverlayOff = "Tắt lớp phủ";
         public const string Map = "Bản đồ";
@@ -104,6 +109,7 @@ namespace XCity
         public static string Price(int amount, bool perCell) => perCell ? $"Chi phí: ${amount:N0}/ô" : $"Chi phí: ${amount:N0}";
         public static string BridgePrice(int water, int bank) => $"Chi phí: ${water:N0}/ô nước\nĐầu cầu mới: ${bank:N0}/ô";
         public static string Upkeep(int amount) => $"Duy trì: ${amount:N0}/tháng";
+        public static string ParkHappiness(int points) => $"Hạnh phúc: +{points}";
         public static string Radius(int cells) => $"Bán kính: {cells:N0} ô";
         public static string Seats(int seats) => $"Học sinh: {seats:N0} chỗ";
 
