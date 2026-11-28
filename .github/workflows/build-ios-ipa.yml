@@ -1,8 +1,7 @@
 name: Build XCity iOS (.ipa)
 
+# Manual only: demo tags build the IPA and APK through demo-release.yml.
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 
 permissions:
