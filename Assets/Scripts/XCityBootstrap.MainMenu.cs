@@ -128,7 +128,7 @@ namespace XCity
             _menuWindow = (RectTransform)window.transform;
             _menuWindowGroup = window.AddComponent<CanvasGroup>();
             AddMenuColumn(window.transform, 20, 10);
-            _menuLogo = CreateLogo(window.transform, 64f, 40);
+            _menuLogo = CreateTitleArtwork(window.transform, 156f, 64f, 40);
             _menuTitle = AddMenuLabel(window.transform, UiText.GameTitle, UiTheme.TitleSize, 34f, UiTheme.Text);
             _menuNotice = AddMenuLabel(window.transform, "", UiTheme.SmallSize, 28f, UiTheme.Warning);
 

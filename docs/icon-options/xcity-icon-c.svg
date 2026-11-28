@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="teal" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#091f38"/><stop offset=".56" stop-color="#147b85"/><stop offset="1" stop-color="#3ccfcf"/>
+    </linearGradient>
+    <radialGradient id="shadow">
+      <stop stop-color="#061a30" stop-opacity=".75"/><stop offset="1" stop-color="#061a30" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="road" x1="0" y1="0" x2=".8" y2="1">
+      <stop stop-color="#344759"/><stop offset=".55" stop-color="#203349"/><stop offset="1" stop-color="#12233a"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2=".65" y2="1">
+      <stop stop-color="#457087"/><stop offset="1" stop-color="#15334f"/>
+    </linearGradient>
+    <clipPath id="x">
+      <path d="M248 247 512 436 778 247 864 351 618 526 864 699 778 803 512 614 248 803 160 699 406 526 160 351Z"/>
+    </clipPath>
+    <g id="highrise">
+      <path fill="#245477" d="m-35-135 40 24V0l-40-24Z"/>
+      <path fill="#4aa3f5" d="M5-111 48-134v112L5 0Z"/>
+      <path fill="#b2edff" d="M-35-135 7-159 48-134 5-111Z"/>
+      <path fill="#508ca4" d="m-17-136 24-13 23 14-24 13Z"/>
+      <path fill="none" stroke="#1d5075" stroke-width="4" d="M5-89l43-24M5-66l43-24M5-43l43-24M5-20l43-24m-24-77v110"/>
+      <path fill="#ffe09d" d="m28-69 15-8v7l-15 8Z"/>
+    </g>
+  </defs>
+  <path d="M0 0h1024v1024H0z" fill="url(#teal)"/>
+  <g fill="none" stroke="#74e1d3" stroke-width="2" opacity=".21">
+    <circle cx="511" cy="479" r="356"/><circle cx="511" cy="479" r="409"/>
+    <path d="M512 76v51m0 705v76M78 479h51m761 0h56"/>
+  </g>
+  <ellipse cx="514" cy="830" rx="393" ry="104" fill="url(#shadow)"/>
+  <!-- Extruded edge and visible underside. -->
+  <path fill="#112944" d="M248 331 512 520 778 331 864 435 618 610 864 783 778 887 512 698 248 887 160 783 406 610 160 435Z"/>
+  <path fill="url(#edge)" d="M160 351 406 526v84L160 435Zm0 348 88 104v84l-88-104Zm88 104 264-189v84L248 887Zm264-189 266 189v84L512 698Zm266 189 86-104v84l-86 104Zm-160-277 246-175v84L618 610Z"/>
+  <path fill="#3c8c99" opacity=".78" d="m248 816 264-189 266 189 86-104v9l-86 105-266-189-264 189-88-105v-9Z"/>
+  <path fill="url(#road)" stroke="#9bf3d8" stroke-width="8" stroke-linejoin="round" d="M248 247 512 436 778 247 864 351 618 526 864 699 778 803 512 614 248 803 160 699 406 526 160 351Z"/>
+  <g clip-path="url(#x)">
+    <path stroke="#587684" stroke-width="68" opacity=".27" d="m225 302 580 447m-6-444L222 751"/>
+    <path stroke="#f3c780" stroke-width="8" stroke-dasharray="27 17" fill="none" d="m201 290 272 206m81 60 269 209m-1-478L553 495m-81 61L203 765"/>
+    <path fill="none" stroke="#76a4a9" stroke-width="3" opacity=".72" d="m212 327 244 184m129 82 238 158m-14-407L568 517m-131 70L202 748"/>
+    <g stroke="#c9e8dd" stroke-width="6" opacity=".92">
+      <path d="m450 518 26-36m-13 46 26-36m-14 46 26-36m20 54 26-36m-13 47 26-36m-14 46 26-36"/>
+    </g>
+    <path fill="#080f24" opacity=".38" d="m263 351 117 61-39 25-109-65Zm437-8 118 45-26 34-122-56ZM322 702l87 56-35 24-104-58Z"/>
+  </g>
+  <use xlink:href="#highrise" transform="translate(260 361) scale(1.04)"/>
+  <use xlink:href="#highrise" transform="translate(321 380) scale(.71 .74)"/>
+  <use xlink:href="#highrise" transform="translate(735 343) scale(.84 1.2)"/>
+  <use xlink:href="#highrise" transform="translate(778 372) scale(.68 .60)"/>
+  <g>
+    <path fill="#1e766e" d="m269 648 34 18v60l-34-19Z"/>
+    <path fill="#4cd07d" d="m303 666 34-18v59l-34 19Z"/>
+    <path fill="#acfac4" d="m269 648 32-19 36 19-34 18Z"/>
+    <path fill="#258b79" d="m313 678 15-8v23l-15 8Z"/>
+  </g>
+  <g>
+    <path fill="#8f5844" d="m740 682 29 17v44l-29-17Z"/>
+    <path fill="#f0b13a" d="m769 699 34-19v46l-34 17Z"/>
+    <path fill="#fae0a2" d="m740 682 32-19 31 17-34 19Z"/>
+    <path fill="#754d4c" d="m778 710 14-8v12l-14 8Z"/>
+  </g>
+</svg>

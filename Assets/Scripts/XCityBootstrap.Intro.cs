@@ -20,6 +20,29 @@ namespace XCity
         private RectTransform _menuWindow;
         private CanvasGroup _menuWindowGroup;
 
+        // Menu and intro share the complete title artwork. The OS icon stays a separate asset.
+        private static GameObject CreateTitleArtwork(Transform parent, float height, float fallbackIconSize, int fallbackTextSize)
+        {
+            var texture = Resources.Load<Texture2D>("XCityTitleArtwork");
+            if (texture == null) return CreateLogo(parent, fallbackIconSize, fallbackTextSize);
+
+            var frame = new GameObject("TitleArtwork", typeof(RectTransform));
+            frame.transform.SetParent(parent, false);
+            var layout = frame.AddComponent<LayoutElement>();
+            layout.minHeight = height;
+            layout.preferredHeight = height;
+
+            var graphic = new GameObject("Artwork", typeof(RectTransform));
+            graphic.transform.SetParent(frame.transform, false);
+            var image = graphic.AddComponent<RawImage>();
+            image.texture = texture;
+            image.raycastTarget = false;
+            var fit = graphic.AddComponent<AspectRatioFitter>();
+            fit.aspectMode = AspectRatioFitter.AspectMode.FitInParent;
+            fit.aspectRatio = (float)texture.width / texture.height;
+            return frame;
+        }
+
         // The emblem (rounded) beside a bold "XCITY" wordmark.
         private static GameObject CreateLogo(Transform parent, float iconSize, int textSize)
         {
@@ -98,8 +121,10 @@ namespace XCity
             var logoRect = (RectTransform)logoGroup.transform;
             logoRect.SetParent(_introOverlay.transform, false);
             logoRect.anchorMin = logoRect.anchorMax = new Vector2(0.5f, 0.5f);
-            logoRect.sizeDelta = new Vector2(600f, 160f);
-            var logoRow = (RectTransform)CreateLogo(logoRect, 140f, 84).transform;
+            bool hasArtwork = Resources.Load<Texture2D>("XCityTitleArtwork") != null;
+            float height = hasArtwork ? 420f : 160f;
+            logoRect.sizeDelta = new Vector2(600f, height);
+            var logoRow = (RectTransform)CreateTitleArtwork(logoRect, height, 140f, 84).transform;
             logoRow.anchorMin = Vector2.zero;
             logoRow.anchorMax = Vector2.one;
             logoRow.offsetMin = logoRow.offsetMax = Vector2.zero;

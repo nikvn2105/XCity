@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="night" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#0b1329"/><stop offset=".6" stop-color="#164457"/><stop offset="1" stop-color="#111c36"/>
+    </linearGradient>
+    <radialGradient id="blocks">
+      <stop stop-color="#39858b"/><stop offset="1" stop-color="#10606e" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="warm" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#f0b13a" stop-opacity="0"/><stop offset=".18" stop-color="#f0b13a"/>
+      <stop offset=".72" stop-color="#ffe3a1"/><stop offset="1" stop-color="#fff6df"/>
+    </linearGradient>
+    <linearGradient id="cool" x1="0" y1="1" x2="1" y2="0">
+      <stop stop-color="#3ccfcf" stop-opacity="0"/><stop offset=".19" stop-color="#70dfda"/>
+      <stop offset=".64" stop-color="#f4f7e2"/><stop offset="1" stop-color="#ecfffd"/>
+    </linearGradient>
+    <g id="block">
+      <path fill="#112236" d="M-93-64l174-9 44 42 3 124-168 35-65-46Z"/>
+      <path fill="#142a3f" d="M-86-95 8-128l110 43v128L-6 86l-80-67Z"/>
+      <path fill="#203c54" d="M-86-95-6-42V86l-80-67Z"/>
+      <path fill="#275769" d="M-6-42 118-85V43L-6 86Z"/>
+      <path fill="#467a83" d="M-86-95 23-135l95 50-124 43Z"/>
+      <path fill="#234454" d="m-59-95 82-30 71 39-96 33Z"/>
+      <path fill="#163445" d="m-37-95 26-10 34 20-27 10Zm63-26 35 19-33 12-35-20Z"/>
+      <path fill="#78a5a1" d="m-43-95 29-12 34 18-28 11Z"/>
+      <path fill="#2d6471" d="m34-115 33 18-30 10-33-18Z"/>
+      <path fill="#f0b13a" d="m14-28 15-5v11l-15 5Zm56-18 16-6v11l-16 6Zm-26 49 17-6v11l-17 6ZM4 48l15-5v12L4 60Zm74-32 15-6v11l-15 6Z"/>
+      <path fill="#68c9c8" d="m-69-62 14 9v12l-14-9Zm24 23 14 9v12l-14-9Zm25 54 10 7v12l-10-7Z"/>
+    </g>
+  </defs>
+  <path d="M0 0h1024v1024H0z" fill="url(#night)"/>
+  <ellipse cx="506" cy="491" rx="512" ry="490" fill="url(#blocks)"/>
+  <g fill="none" stroke="#2a5162" opacity=".85">
+    <path stroke-width="28" d="M-124 266 758 1148M155-117l981 981M-95 716 718-97M264 1156 1156 264"/>
+    <path stroke-width="9" d="M-34 269l807 807M217-87l888 888M-74 771 773-76M253 1107l854-854"/>
+    <path stroke="#4f7c82" stroke-width="4" d="M-63 355 655 1073M300-64l777 777M-27 682 694-39M314 1031l724-724"/>
+  </g>
+  <g opacity=".46">
+    <use xlink:href="#block" transform="translate(108 91) scale(.72)"/>
+    <use xlink:href="#block" transform="translate(927 111) scale(.72)"/>
+    <use xlink:href="#block" transform="translate(88 940) scale(.72)"/>
+    <use xlink:href="#block" transform="translate(925 946) scale(.72)"/>
+  </g>
+  <path d="M180 182 845 846m0-666L178 845" fill="none" stroke="#428b97" stroke-width="121" stroke-linecap="square"/>
+  <path d="M180 182 845 846m0-666L178 845" fill="none" stroke="#102b3f" stroke-width="107"/>
+  <path d="M178 182 440 444m144 140 262 262m-1-666L583 442M443 582 178 846" fill="none" stroke="#527785" stroke-width="4" stroke-dasharray="22 12"/>
+  <path d="m408 448 40-39m-26 51 39-39m-26 52 39-39m80 162 40-39m-26 52 39-39m-25 52 39-39m-44-162 42 41m-55-27 41 41m-53-27 41 41m-162 86 40 41m-54-27 40 41m-54-27 41 41"
+      stroke="#7fbab7" stroke-width="5" opacity=".72"/>
+  <g fill="none" stroke-linecap="round">
+    <path d="M212 196 829 813M828 195 214 810" stroke="#f0b13a" stroke-width="31" opacity=".16"/>
+    <path d="M204 230 790 816M793 212 201 803" stroke="#3ccfcf" stroke-width="29" opacity=".23"/>
+    <path d="M212 196 829 813" stroke="url(#warm)" stroke-width="13"/>
+    <path d="M823 193 213 808" stroke="url(#warm)" stroke-width="9"/>
+    <path d="M204 230 790 816M793 212 201 803" stroke="url(#cool)" stroke-width="11"/>
+    <path d="m684 696 132 132m-103-482 104-104" stroke="#f8f9df" stroke-width="3" opacity=".8"/>
+    <path d="m277 246 89 89m-93 409 65-65" stroke="#ffd388" stroke-width="4" opacity=".85"/>
+  </g>
+  <use xlink:href="#block" transform="translate(502 257) scale(1.08)"/>
+  <use xlink:href="#block" transform="translate(285 498) scale(.9)"/>
+  <use xlink:href="#block" transform="translate(759 494) scale(.87)"/>
+  <use xlink:href="#block" transform="translate(515 798) scale(.94)"/>
+  <path fill="#ffd082" d="m679 654 11-2 18 18-10 3Zm30-324 13-15 9 1-14 16Z"/>
+  <path fill="#e0ffed" d="m311 694 14-15 11 2-14 15Zm-9-401 9-2 15 15-8 2Z"/>
+</svg>
