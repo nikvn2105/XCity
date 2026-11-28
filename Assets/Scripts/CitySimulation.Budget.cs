@@ -50,12 +50,13 @@ namespace XCity
         public BudgetReport LastBudget { get; private set; }
 
         // City administration grows with the square of the population up to 10,000 people: negligible
-        // in a small town (300: 9 per tick), a real cost mid-game (3,700: 1,369). Beyond that it rises
-        // one per resident (continuous at 10,000), so huge cities stay solvable and money cannot overflow.
-        internal const int AdministrationDivisor = 10000;
+        // in a small town (300: 4 per tick), noticeable mid-game (3,700: 684), half a coin per resident
+        // at 10,000. Beyond that it stays half a coin per resident (continuous), so big cities remain
+        // solvable and money cannot overflow. The 10,000-person report city went bankrupt at 1 per resident.
+        internal const int AdministrationThreshold = 10000;
 
-        public static int AdministrationCost(int population) => population >= AdministrationDivisor
-            ? population : (int)((long)population * population / AdministrationDivisor);
+        public static int AdministrationCost(int population) => population >= AdministrationThreshold
+            ? population / 2 : (int)((long)population * population / (2 * AdministrationThreshold));
 
         public int GetTaxRate(TaxZone zone) => _taxRates[(int)zone];
 

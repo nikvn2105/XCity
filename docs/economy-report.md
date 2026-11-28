@@ -226,12 +226,25 @@ Rác chiếm ~19% chi ở ~3.700 dân nhưng giữa game vẫn dư (thu 7.368 so
 
 ### Chi phí hành chính (2e đợt 2)
 
-Chi mỗi lượt = dân² / 10.000 dưới 10.000 dân, từ 10.000 trở lên = 1 mỗi dân (liền mạch tại 10.000; tránh tràn số tiền ở thành phố khổng lồ). Dòng "Hành chính" trong bảng ngân sách.
+Chi mỗi lượt = dân² / 20.000 dưới 10.000 dân; từ 10.000 trở lên = 0,5 mỗi dân (liền mạch tại 10.000 = 5.000; không tràn số ở thành phố khổng lồ). Dòng "Hành chính" trong bảng ngân sách.
 
-| Thuế | Quỹ thấp nhất | Ròng/tick ~3.700 dân | Hành chính lúc đó |
+Bản đầu (dân² / 10.000, rồi 1 mỗi dân) làm **Đô thị lớn phá sản ở ~9.500–10.900 dân** (hành chính 10.904 ≈ nửa thu): thu ~1,85/dân, chi khác đã ~1,0/dân, nên mọi thành phố 10.000 dân đều lỗ. Đã giảm một nửa.
+
+**Kịch bản Đô thị lớn** (`Scenario.Metropolis`): lưới 40 × 30 phố (2.400 lô, 9 ô bờ), mở rộng gấp đôi nhịp thường, thêm cặp trạm nước mỗi 150 lượt khi còn bờ, 4.000 lượt, thuế 10%.
+
+| Lượt | Dân | Ròng/tick | Hài lòng |
 |---:|---:|---:|---:|
-| 8% | 15.031 (không đổi) | +1.066 (trước +2.176) | 1.110 |
-| 10% | 25.307 (không đổi) | +2.978 (trước +4.391) | 1.413 |
-| 13% | 30.041 | +458 | 23 |
+| 250 | 2.640 | +2.685 | 64 |
+| 750 | 6.416 | +4.749 | 57 |
+| 1.250 | 8.792 | +4.142 | 48 |
+| 1.750 | 10.904 | +3.748 | 43 |
 
-Đầu game không đổi; lãi giữa game giảm ~1/3. Chưa đo được 5.000–10.000 dân (khung đo hết đất ở ~3.800).
+Mốc 500 / 2.000 / 5.000 dân: lượt 54 / 218 / 470. Không nợ; quỹ thấp nhất 36.656. Chi lượt cuối: điện 5.760, hành chính 5.452, đường 2.624, rác 1.957, khác 427, dịch vụ ~160; thu 20.131.
+
+Ở các kịch bản nhỏ (thuế 10%, ~3.700 dân): hành chính 688, lãi +3.624 (trước khi có hành chính +4.391). Thuế 8%: lãi +1.593.
+
+### Còn mở sau 2e
+
+- Lãi cuối game vẫn cao (~+3.700/tick ở 10.900 dân, 14 triệu sau 4.000 lượt), nhưng một phần do "thị trưởng tự động" chỉ xây một công trình mỗi loại dịch vụ: hài lòng tụt 64 → 43 và chi dịch vụ chỉ ~160. Người chơi thật sẽ phủ dịch vụ rộng hơn và tốn hơn nhiều. Cần đo lại khi bot phủ dịch vụ theo bán kính.
+- Nước: chỉ 125/744 nhà có đủ nước và thoát nước (9 ô bờ). Thành phố lớn xa bờ sẽ nghẽn lên cấp — xem xét ở giai đoạn 3 (sông, ao) hoặc thêm tháp nước không cần bờ.
+- Điện là khoản chi lớn nhất (96 nhà máy cho ~2.000 ô); giai đoạn sau nên có nhà máy công suất lớn hơn.

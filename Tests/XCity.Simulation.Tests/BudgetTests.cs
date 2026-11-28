@@ -117,10 +117,10 @@ namespace XCity.Tests
         public void Administration_GrowsWithTheSquareOfPopulation()
         {
             Assert.Equal(0, CitySimulation.AdministrationCost(0));
-            Assert.Equal(9, CitySimulation.AdministrationCost(300));
-            Assert.Equal(100, CitySimulation.AdministrationCost(1000));
-            Assert.Equal(10000, CitySimulation.AdministrationCost(10000));
-            Assert.Equal(50000, CitySimulation.AdministrationCost(50000)); // linear past 10,000
+            Assert.Equal(4, CitySimulation.AdministrationCost(300));
+            Assert.Equal(50, CitySimulation.AdministrationCost(1000));
+            Assert.Equal(5000, CitySimulation.AdministrationCost(10000));
+            Assert.Equal(25000, CitySimulation.AdministrationCost(50000)); // half a coin per resident past 10,000
 
             var city = GrownStreet();
             city.Tick();

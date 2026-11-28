@@ -8,7 +8,7 @@ namespace XCity.Tests
 {
     public sealed class EconomyReportTests
     {
-        public enum Scenario { Balanced, HousingHeavy, IndustryHeavy, EarlyServices, Growth }
+        public enum Scenario { Balanced, HousingHeavy, IndustryHeavy, EarlyServices, Growth, Metropolis }
 
         private const int Turns = 2000;
         private const int StreetDepth = 22;
@@ -27,9 +27,13 @@ namespace XCity.Tests
         [InlineData(Scenario.Growth, 10)]
         [InlineData(Scenario.Growth, 13)]
         [InlineData(Scenario.Growth, 16)]
+        [InlineData(Scenario.Metropolis)]
         public void ReportEconomyOverTwoThousandTurns(Scenario scenario, int taxRate = CitySimulation.DefaultTaxRate)
         {
-            var plan = new CityPlan();
+            bool metropolis = scenario == Scenario.Metropolis;
+            // The metropolis runs on a 40 x 30 street grid (2,400 lots, 9 shore lots) to reach ~10,000 people.
+            var plan = metropolis ? new CityPlan(40, 30, 9) : new CityPlan();
+            int turns = metropolis ? 4000 : Turns;
             foreach (TaxZone zone in new[] { TaxZone.Residential, TaxZone.Commercial, TaxZone.Industrial })
                 plan.City.SetTaxRate(zone, taxRate);
             _output.WriteLine($"Scenario {scenario}, tax {taxRate}%");
@@ -58,6 +62,7 @@ namespace XCity.Tests
                     });
                     break;
                 case Scenario.Growth:
+                case Scenario.Metropolis:
                     plan.Zone(20, StarterMix);
                     plan.BuildShore(BuildingModel.WaterPump);
                     plan.BuildShore(BuildingModel.SewagePlant);
@@ -71,7 +76,7 @@ namespace XCity.Tests
 
             _output.WriteLine("| Lượt | Tick thực tế | Tiền | Ròng/tick | Dân | Việc | Hạnh phúc | R | C | I |");
             _output.WriteLine("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|");
-            for (int turn = 1; turn <= Turns; turn++)
+            for (int turn = 1; turn <= turns; turn++)
             {
                 if (scenario == Scenario.EarlyServices && !city.IsBankrupt)
                 {
@@ -84,18 +89,24 @@ namespace XCity.Tests
                 }
 
                 // Auto-mayor: every 10 turns zone what demand asks for while cash allows, plus a park per ~30 homes.
-                if (scenario == Scenario.Growth && !city.IsBankrupt)
+                if ((scenario == Scenario.Growth || metropolis) && !city.IsBankrupt)
                 {
                     BuildAvailableServices(plan, servicePacks);
-                    if (turn % 10 == 0 && plan.LotsLeft > 8)
+                    int step = metropolis ? 2 : 1;
+                    if (metropolis && turn % 150 == 0 && plan.ShoreLeft >= 2 && city.Money > 8000)
+                    {
+                        plan.BuildShore(BuildingModel.WaterPump);
+                        plan.BuildShore(BuildingModel.SewagePlant);
+                    }
+                    if (turn % 10 == 0 && plan.LotsLeft > 16)
                     {
                         bool high = city.PeakPopulation >= 500;
                         if (city.ResidentialDemand > 0 && city.Money > 4000)
-                            plan.Zone(4, new[] { high && turn % 20 == 0 ? BuildingModel.Apartment : BuildingModel.RowHouse });
+                            plan.Zone(4 * step, new[] { high && turn % 20 == 0 ? BuildingModel.Apartment : BuildingModel.RowHouse });
                         if (city.CommercialDemand > 0 && city.Money > 4000)
-                            plan.Zone(2, new[] { high ? BuildingModel.Office : BuildingModel.Market, BuildingModel.HighStreet });
+                            plan.Zone(2 * step, new[] { high ? BuildingModel.Office : BuildingModel.Market, BuildingModel.HighStreet });
                         if (city.IndustrialDemand > 0 && city.Money > 4000)
-                            plan.Zone(2, new[] { BuildingModel.Workshop, BuildingModel.Warehouse });
+                            plan.Zone(2 * step, new[] { BuildingModel.Workshop, BuildingModel.Warehouse });
                         if (plan.Homes >= plan.Parks * 30 + 30 && city.Money > 3000)
                             plan.BuildService(BuildingModel.SmallPark);
                         // Garbage: at most one facility per 50 turns while collection is clearly short (placement is
@@ -116,13 +127,13 @@ namespace XCity.Tests
                 if (city.Money >= 1000000) firstMillion ??= turn;
                 minimumCash = Math.Min(minimumCash, Math.Min(plan.LowestAfterBuild, city.Money));
 
-                if (turn % 100 == 0)
+                if (turn % (metropolis ? 250 : 100) == 0)
                     _output.WriteLine($"| {turn} | {city.TickCount} | {city.Money} | {city.LastNetIncome} | " +
                         $"{city.Population} | {city.Jobs} | {city.AverageHappiness} | {city.ResidentialDemand} | " +
                         $"{city.CommercialDemand} | {city.IndustrialDemand} |");
             }
 
-            Assert.Equal((long)(bankruptcy ?? Turns), city.TickCount);
+            Assert.Equal((long)(bankruptcy ?? turns), city.TickCount);
             Assert.Equal(0, city.UnpoweredZones);
             Assert.Equal(startingCash + operatingResult - plan.Capex.Sum(), (long)city.Money);
             var upkeep = plan.Upkeep();
@@ -204,19 +215,24 @@ namespace XCity.Tests
             public readonly (int X, int Z) Origin;
             public int LowestAfterBuild { get; private set; } = int.MaxValue;
             public int LotsLeft => _lots.Count;
+            public int ShoreLeft => _shore.Count;
+            private readonly int _streetCount;
+            private readonly int _streetDepth;
             public int Homes { get; private set; }
             public int Parks { get; private set; }
 
-            public CityPlan()
+            public CityPlan(int streetCount = StreetCount, int streetDepth = StreetDepth, int shoreLots = 3)
             {
-                Origin = FindSite();
-                var lots = (from street in Enumerable.Range(0, StreetCount)
-                            from dz in Enumerable.Range(1, StreetDepth)
+                _streetCount = streetCount;
+                _streetDepth = streetDepth;
+                Origin = FindSite(streetCount, streetDepth, shoreLots);
+                var lots = (from street in Enumerable.Range(0, streetCount)
+                            from dz in Enumerable.Range(1, streetDepth)
                             from side in new[] { 0, 2 }
                             select (X: Origin.X + street * 3 + side, Z: Origin.Z + dz)).ToArray();
-                var shore = lots.Where(p => p.Z == Origin.Z + StreetDepth &&
-                    CitySimulation.TryHarborFacing(p.X, p.Z, out _, out _, out _)).Take(3).ToArray();
-                Assert.Equal(3, shore.Length);
+                var shore = lots.Where(p => p.Z == Origin.Z + streetDepth &&
+                    CitySimulation.TryHarborFacing(p.X, p.Z, out _, out _, out _)).Take(shoreLots).ToArray();
+                Assert.Equal(shoreLots, shore.Length);
                 _shore = new Queue<(int, int)>(shore);
                 _lots = new Queue<(int, int)>(lots.Except(shore));
             }
@@ -287,19 +303,19 @@ namespace XCity.Tests
                 return (roads * 2, _plants * 60, services, water);
             }
 
-            private static (int X, int Z) FindSite()
+            private static (int X, int Z) FindSite(int streetCount, int streetDepth, int shoreLots)
             {
-                int width = StreetCount * 3;
+                int width = streetCount * 3;
                 for (int z = 420; z >= 180; z--)
                 for (int x = 150; x < 350; x++)
                 {
                     int shore = 0;
-                    for (int dx = 0; dx < width && shore < 3; dx++)
-                        if (dx % 3 != 1 && CitySimulation.TryHarborFacing(x + dx, z + StreetDepth, out _, out _, out _))
+                    for (int dx = 0; dx < width && shore < shoreLots; dx++)
+                        if (dx % 3 != 1 && CitySimulation.TryHarborFacing(x + dx, z + streetDepth, out _, out _, out _))
                             shore++;
-                    if (shore < 3) continue;
+                    if (shore < shoreLots) continue;
                     if (Enumerable.Range(x, width).All(cx =>
-                        Enumerable.Range(z, StreetDepth + 1).All(cz => CitySimulation.IsBuildable(cx, cz))))
+                        Enumerable.Range(z, streetDepth + 1).All(cz => CitySimulation.IsBuildable(cx, cz))))
                         return (x, z);
                 }
                 throw new InvalidOperationException("No connected land for the economy report and its three shore lots.");
