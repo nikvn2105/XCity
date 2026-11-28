@@ -6,6 +6,13 @@ namespace XCity
         public const string StrokeCost = "Chi phí: $";
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";
 
+        // Density and land value.
+        public static readonly string[] DensityNames = { "Mật độ thấp", "Mật độ vừa", "Mật độ cao" };
+        public static string DensityLine(int density, int minLandValue) =>
+            minLandValue > 0 ? $"{DensityNames[density]} · cần đất ≥ {minLandValue}" : DensityNames[density];
+        public static string LandValueFact(int value) => $"Giá trị đất {value}";
+        public static string NeedsLandValue(int value) => $"Cần giá trị đất ≥ {value}";
+
         // Budget panel.
         public const string Budget = "Ngân sách";
         public const string Income = "Thu";

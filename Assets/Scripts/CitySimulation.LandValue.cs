@@ -73,6 +73,17 @@ namespace XCity
 
         internal int LandValueTaxPercent(int x, int z) => 50 + GetLandValue(x, z);
 
+        /// <summary>
+        /// True when this cell's building needs more land value to develop or level up. Existing levels
+        /// are never lost: a drop below the threshold only stops further growth.
+        /// </summary>
+        public bool LandValueBlocksGrowth(int x, int z)
+        {
+            if (!IsInBounds(x, z)) return false;
+            int needed = BuildingCatalog.MinLandValue(BuildingCatalog.DensityOf(_cells[x, z].Model));
+            return needed > 0 && GetLandValue(x, z) < needed;
+        }
+
         internal int ParkBonusAt(int x, int z) =>
             _parkReach != null && IsInBounds(x, z) && _cells[x, z].Type == CellType.Residential
                 ? ParkInfluence(CellIndex(x, z)) : 0;

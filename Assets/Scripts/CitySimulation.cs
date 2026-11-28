@@ -47,8 +47,31 @@ namespace XCity
         LargePark
     }
 
+    public enum Density
+    {
+        Low,
+        Medium,
+        High
+    }
+
     internal static class BuildingCatalog
     {
+        // Homes and shops only: industry lowers land value itself, so gating it would block every factory row.
+        public static Density DensityOf(BuildingModel model) => model switch
+        {
+            BuildingModel.RowHouse or BuildingModel.HighStreet => Density.Medium,
+            BuildingModel.Apartment or BuildingModel.Office or BuildingModel.OfficeTower or
+                BuildingModel.ShoppingMall => Density.High,
+            _ => Density.Low
+        };
+
+        public static int MinLandValue(Density density) => density switch
+        {
+            Density.High => 60,
+            Density.Medium => 30,
+            _ => 0
+        };
+
         public static (CellType Type, string Name, int Cost, float Height, int Seats) Get(BuildingModel model) =>
             model switch
             {
@@ -489,7 +512,9 @@ namespace XCity
 
                 ZoneStatus status = GetZoneStatus(x, z);
                 bool operating = status == ZoneStatus.Developed || status == ZoneStatus.WaitingForDevelopment;
-                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < DevelopmentChance(cell.Type))
+                // The land-value check comes after the roll so blocked cells consume the same random numbers.
+                if (status == ZoneStatus.WaitingForDevelopment && NextRandom() < DevelopmentChance(cell.Type) &&
+                    !LandValueBlocksGrowth(x, z))
                 {
                     cell.Level = 1;
                     cell.Height = cell.Model != BuildingModel.Default
@@ -505,7 +530,7 @@ namespace XCity
 
                 else if (status == ZoneStatus.Developed && cell.Type == CellType.Residential &&
                          cell.Level < MaxResidentialLevel && CanUpgradeResidence(x, z, cell.Level) &&
-                         NextRandom() < 0.12f)
+                         NextRandom() < 0.12f && !LandValueBlocksGrowth(x, z))
                 {
                     cell.Level++;
                     cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);

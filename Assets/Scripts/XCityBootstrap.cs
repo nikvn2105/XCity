@@ -1090,6 +1090,12 @@ namespace XCity
                     (_city.HasWater(point.x, point.y) ? "" : " · Thiếu nước") +
                     (_city.HasSewage(point.x, point.y) ? "" : " · Thiếu thoát nước") +
                     (_city.GetTrafficLoad(point.x, point.y) > 100 ? " · Kẹt xe" : "");
+            if (type == CellType.Residential || type == CellType.Commercial)
+            {
+                label += " · " + UiText.LandValueFact(_city.GetLandValue(point.x, point.y));
+                if (_city.LandValueBlocksGrowth(point.x, point.y))
+                    label += " · " + UiText.NeedsLandValue(BuildingCatalog.MinLandValue(BuildingCatalog.DensityOf(cell.Model)));
+            }
             if (type == CellType.Road)
                 label += $" · Lưu lượng {_city.GetTrafficLoad(point.x, point.y)}%";
             if (cell.Model == BuildingModel.WaterPump || cell.Model == BuildingModel.SewagePlant)

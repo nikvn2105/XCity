@@ -319,6 +319,12 @@ namespace XCity
             var item = BuildingCatalog.Get(option.Model);
             var park = ParkCatalog.Get(option.Model);
             int radius = ParkCatalog.IsPark(option.Model) ? park.Radius : ServiceCatalog.Get(option.Model).Radius;
+            if (item.Type == CellType.Residential || item.Type == CellType.Commercial)
+            {
+                Density density = BuildingCatalog.DensityOf(option.Model);
+                return UiText.Price(item.Cost, true) + "\n" +
+                    UiText.DensityLine((int)density, BuildingCatalog.MinLandValue(density));
+            }
             return UiText.Price(item.Cost, !BuildingCatalog.IsPublicService(item.Type)) + "\n" +
                 UiText.Upkeep(BuildingCatalog.ServiceUpkeep(option.Model)) +
                 (radius > 0 ? "\n" + UiText.Radius(radius) : "") +
