@@ -1,0 +1,62 @@
+name: Build XCity Android APK
+
+on:
+  push:
+    tags: ['v*-demo.*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Determine demo version
+        id: demo
+        shell: bash
+        run: |
+          version="$(bash .github/scripts/demo-version.sh)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build Android APK
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2022.3.47f1
+          targetPlatform: Android
+          androidExportType: androidPackage
+          buildName: XCity
+          buildsPath: build
+          versioning: None
+
+      - name: Verify APK and signature
+        shell: bash
+        env:
+          DEMO_VERSION: ${{ steps.demo.outputs.version }}
+        run: |
+          apk=build/Android/XCity.apk
+          unzip -tq "$apk"
+          unzip -Z1 "$apk" lib/arm64-v8a/libil2cpp.so
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          "$apksigner" verify --verbose --print-certs "$apk"
+          sudo chown -R "$(id -u):$(id -g)" build/Android
+          mv "$apk" "build/Android/XCity-$DEMO_VERSION.apk"
+          sha256sum "build/Android/XCity-$DEMO_VERSION.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: XCity-android-apk
+          path: build/Android/XCity-${{ steps.demo.outputs.version }}.apk
+          if-no-files-found: error
+          retention-days: 30

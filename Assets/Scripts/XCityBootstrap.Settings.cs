@@ -42,6 +42,8 @@ namespace XCity
             ApplyDisplaySettings();
         }
 
+        partial void ApplyPostProcessing(int level);
+
         private void ApplyDisplaySettings()
         {
             Application.targetFrameRate = _frameRate;
@@ -63,6 +65,7 @@ namespace XCity
             QualitySettings.shadowCascades = cascades;
             QualitySettings.antiAliasing = msaa;
             Shader.SetGlobalFloat("_XCityQuality", _graphicsLevel);
+            ApplyPostProcessing(_graphicsLevel);
 
             // Rendering fewer pixels is the biggest GPU saving on a 2796x1290 panel. Preview captures keep their size.
             if (_previewOutput == null && !Application.isEditor)
