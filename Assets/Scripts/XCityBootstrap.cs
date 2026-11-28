@@ -119,6 +119,7 @@ namespace XCity
         {
             _previewOutput = GetPreviewOutputArg();
             _city = OpenStartupCity();
+            CrashLog.SetMap(_city.Map);
             _nextAutosave = Time.unscaledTime + 15f;
             CreateMaterials();
             SetupEnvironment();
@@ -130,6 +131,7 @@ namespace XCity
             RestoreFpsCounter();
             if (_previewOutput == null && _activeSaveSlot == 0) ShowMainMenu(intro: true);
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
+            else if (CrashLog.TakeStartupNotice()) ShowCrashLogToast(UiText.CrashLogPreviousSession, UiTheme.Warning);
         }
 
         private void CreateMaterials()
@@ -361,9 +363,11 @@ namespace XCity
         private void Update()
         {
             UpdateSafeArea();
+            if (SettingsOpen) RefreshCrashLogCount();
             if (MainMenuOpen)
             {
                 OrbitMenuCamera();
+                UpdateToasts();
                 UpdateFpsCounter();
                 return;
             }

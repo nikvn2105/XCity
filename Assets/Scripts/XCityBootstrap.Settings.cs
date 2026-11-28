@@ -100,7 +100,12 @@ namespace XCity
             if (_settingsPanel == null) BuildSettingsPanel();
             else _settingsPanel.SetActive(!_settingsPanel.activeSelf);
             _returnToMenuButton.gameObject.SetActive(!MainMenuOpen && _activeSaveSlot != 0);
-            if (SettingsOpen) _settingsPanel.transform.SetAsLastSibling();
+            if (SettingsOpen)
+            {
+                _settingsPanel.transform.SetAsLastSibling();
+                RefreshCrashLogCount();
+            }
+            else if (_crashLogPanel != null) _crashLogPanel.SetActive(false);
             if (MainMenuOpen) _menuControls.interactable = !SettingsOpen;
             RefreshSettingsButtons();
         }
@@ -108,7 +113,7 @@ namespace XCity
         private void BuildSettingsPanel()
         {
             Font font = UiTheme.Font;
-            _settingsPanel = CreatePanel(_safeAreaRoot, "Settings", new Vector2(0.2f, 0.14f), new Vector2(0.8f, 0.86f),
+            _settingsPanel = CreatePanel(_safeAreaRoot, "Settings", new Vector2(0.2f, 0.08f), new Vector2(0.8f, 0.92f),
                 Vector2.zero, Vector2.zero, UiTheme.PanelSolid);
             var layout = _settingsPanel.AddComponent<VerticalLayoutGroup>();
             layout.padding = new RectOffset(18, 18, 14, 14);
@@ -140,6 +145,8 @@ namespace XCity
             KeepTall(_fpsCounterButton.transform);
             _fpsCounterButton.onClick.AddListener(() => SetFpsCounter(_fpsText == null || !_fpsText.gameObject.activeSelf));
 
+            BuildCrashLogRow(AddSettingsRow());
+
             _returnToMenuButton = AddMenuButton(_settingsPanel.transform, UiText.ReturnToMenu, UiIcon.Home,
                 () => ReturnToMainMenu(), UiTheme.Button);
             Button close = CreateHudButton(_settingsPanel.transform, font, UiText.Close, "CloseSettings");
@@ -159,7 +166,7 @@ namespace XCity
             }
 
             // Unity hides a Text that does not fit its rect, so rows keep enough height for the 20pt button labels.
-            void KeepTall(Transform item) => item.gameObject.AddComponent<LayoutElement>().minHeight = 44f;
+            void KeepTall(Transform item) => item.gameObject.AddComponent<LayoutElement>().minHeight = UiTheme.MinTouch;
 
             Transform AddSettingsRow()
             {
