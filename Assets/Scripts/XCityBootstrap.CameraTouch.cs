@@ -47,8 +47,51 @@ namespace XCity
             row.spacing = 6;
             row.childControlWidth = row.childControlHeight = true;
             row.childForceExpandWidth = row.childForceExpandHeight = true;
-            CreateIconButton(panel.transform, UiIcon.RotateLeft, "RotateLeft").onClick.AddListener(() => RotateStep(-1f));
-            CreateIconButton(panel.transform, UiIcon.RotateRight, "RotateRight").onClick.AddListener(() => RotateStep(1f));
+            AddRotateHold(CreateIconButton(panel.transform, UiIcon.RotateLeft, "RotateLeft"), -1f);
+            AddRotateHold(CreateIconButton(panel.transform, UiIcon.RotateRight, "RotateRight"), 1f);
+        }
+
+        // Tap: 45° glide. Hold: slow cinematic turn that eases in, then glides out on release.
+        private const float HoldDelay = 0.35f;
+        private const float CinematicDegreesPerSecond = 14f;
+
+        private void AddRotateHold(Button button, float direction)
+        {
+            var hold = button.gameObject.AddComponent<RotateHold>();
+            hold.Tap = () => RotateStep(direction);
+            hold.Turn = (held, dt) =>
+            {
+                ClearFollow();
+                float speed = direction * CinematicDegreesPerSecond * Mathf.SmoothStep(0f, 1f, (held - HoldDelay) / 0.8f);
+                _camYaw -= speed * dt;
+                _yawVelocity = speed; // Release hands this speed to inertia for a soft stop.
+                UpdateCameraTransform();
+            };
+        }
+
+        private sealed class RotateHold : MonoBehaviour, UnityEngine.EventSystems.IPointerDownHandler,
+            UnityEngine.EventSystems.IPointerUpHandler
+        {
+            public System.Action Tap;
+            public System.Action<float, float> Turn;
+            private float _downAt = -1f;
+
+            public void OnPointerDown(UnityEngine.EventSystems.PointerEventData data) => _downAt = Time.unscaledTime;
+
+            public void OnPointerUp(UnityEngine.EventSystems.PointerEventData data)
+            {
+                if (_downAt >= 0f && Time.unscaledTime - _downAt < HoldDelay) Tap();
+                _downAt = -1f;
+            }
+
+            private void OnDisable() => _downAt = -1f;
+
+            private void Update()
+            {
+                if (_downAt < 0f) return;
+                float held = Time.unscaledTime - _downAt;
+                if (held >= HoldDelay) Turn(held, Time.unscaledDeltaTime);
+            }
         }
 
         private void RotateStep(float direction)
