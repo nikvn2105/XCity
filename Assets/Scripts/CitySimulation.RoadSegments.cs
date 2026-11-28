@@ -113,7 +113,7 @@ namespace XCity
         }
 
         // Called from TrackCell: a curve that loses any of its road cells falls back to plain grid road.
-        // shortcut: undoing a bulldoze restores the road cells but not the curve, until 4e rebuilds curves from runs.
+        // The dropped curve is kept for the next undo step, so undoing the bulldoze brings the curve back.
         private void TrackSegmentCell(int index, CellType type)
         {
             int id = _cellSegment[index];
@@ -122,7 +122,30 @@ namespace XCity
             _segments.Remove(id);
             foreach (int cell in _segmentCells[id]) _cellSegment[cell] = 0;
             _segmentCells.Remove(id);
+            _droppedSegments.Add(segment);
             RoadSegmentChanged?.Invoke(id, segment, false);
+        }
+
+        private readonly List<RoadSegment> _droppedSegments = new List<RoadSegment>();
+
+        // Hands the curves dropped since the last undo step to the step being recorded.
+        private List<RoadSegment> TakeDroppedSegments()
+        {
+            if (_droppedSegments.Count == 0) return null;
+            var taken = new List<RoadSegment>(_droppedSegments);
+            _droppedSegments.Clear();
+            return taken;
+        }
+
+        private void RestoreDroppedSegments(List<RoadSegment> segments)
+        {
+            _droppedSegments.Clear(); // Curves removed by the undo itself (undoing their own build) stay gone.
+            if (segments == null) return;
+            foreach (RoadSegment segment in segments)
+            {
+                List<(int X, int Z)> cells = RasterizeSegment(segment);
+                if (cells.Count >= 2) AttachSegment(segment, cells);
+            }
         }
 
         private void WriteRoadSegments(CitySnapshot snapshot)

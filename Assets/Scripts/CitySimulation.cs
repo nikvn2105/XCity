@@ -258,6 +258,7 @@ namespace XCity
         {
             public List<(int X, int Z, CityCell Cell)> Cells;
             public List<(int X, int Z, byte Tier)> Terrain;
+            public List<RoadSegment> Segments;
             public int Spent;
         }
 
@@ -405,7 +406,7 @@ namespace XCity
             List<(int X, int Z, byte Tier)> terrain = null)
         {
             if (_undoSteps.Count == MaxUndoSteps) _undoSteps.RemoveAt(0);
-            _undoSteps.Add(new UndoStep { Cells = cells, Spent = spent, Terrain = terrain });
+            _undoSteps.Add(new UndoStep { Cells = cells, Spent = spent, Terrain = terrain, Segments = TakeDroppedSegments() });
         }
 
         // Steps are undone newest first, so each restored cell is exactly the state that step replaced.
@@ -435,6 +436,7 @@ namespace XCity
             }
 
             Money += step.Spent;
+            RestoreDroppedSegments(step.Segments);
             foreach (var entry in step.Cells)
                 CellChanged?.Invoke(entry.X, entry.Z);
             return true;

@@ -32,6 +32,10 @@ namespace XCity.Tests
             Assert.True(city.TrySetCell(mid.X, mid.Z, CellType.Empty));
             Assert.Empty(city.RoadSegments);
             Assert.Equal(0, city.SegmentAt(x, z));
+
+            Assert.True(city.TryUndoBuild()); // Undoing the bulldoze brings the curve back.
+            Assert.Single(city.RoadSegments);
+            Assert.NotEqual(0, city.SegmentAt(x, z));
         }
 
         [Fact]
