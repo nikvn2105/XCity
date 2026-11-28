@@ -49,6 +49,7 @@ jobs:
           unzip -Z1 "$apk" lib/arm64-v8a/libil2cpp.so
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
           "$apksigner" verify --verbose --print-certs "$apk"
+          sudo chown -R "$(id -u):$(id -g)" build/Android
           mv "$apk" "build/Android/XCity-$DEMO_VERSION.apk"
           sha256sum "build/Android/XCity-$DEMO_VERSION.apk"
 
