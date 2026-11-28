@@ -14,17 +14,18 @@ namespace XCity
         Education,
         Health,
         Police,
-        Fire
+        Fire,
+        Garbage
     }
 
     /// <summary>Last tick's income and spending by line, for the budget panel.</summary>
     public struct BudgetReport
     {
         public int ResidentialTax, CommercialTax, IndustrialTax;
-        public int Roads, Power, Education, Health, Police, Fire, Other, Loan;
+        public int Roads, Power, Education, Health, Police, Fire, Garbage, Other, Loan;
 
         public int Income => ResidentialTax + CommercialTax + IndustrialTax;
-        public int Spending => Roads + Power + Education + Health + Police + Fire + Other + Loan;
+        public int Spending => Roads + Power + Education + Health + Police + Fire + Garbage + Other + Loan;
     }
 
     // Tax rates per zone and funding per service. 10% tax and 100% funding reproduce the old fixed economy.
@@ -39,7 +40,7 @@ namespace XCity
         internal const int DemandPerTaxPoint = 3;
 
         private readonly int[] _taxRates = { DefaultTaxRate, DefaultTaxRate, DefaultTaxRate };
-        private readonly int[] _funding = { DefaultFunding, DefaultFunding, DefaultFunding, DefaultFunding };
+        private readonly int[] _funding = { DefaultFunding, DefaultFunding, DefaultFunding, DefaultFunding, DefaultFunding };
 
         public BudgetReport LastBudget { get; private set; }
 
@@ -54,7 +55,8 @@ namespace XCity
             int clamped = Math.Max(MinFunding, Math.Min(MaxFunding, percent));
             if (clamped == _funding[(int)service]) return;
             _funding[(int)service] = clamped;
-            _coverageDirty = true; // funding changes service reach
+            if (service == BudgetService.Garbage) _garbageDirty = true;
+            else _coverageDirty = true; // funding changes service reach
         }
 
         internal int TaxDemandShift(TaxZone zone) => (DefaultTaxRate - _taxRates[(int)zone]) * DemandPerTaxPoint;
@@ -62,7 +64,8 @@ namespace XCity
         // Residents feel their own tax: one happiness point per point away from the default.
         internal int TaxHappinessShift => DefaultTaxRate - _taxRates[(int)TaxZone.Residential];
 
-        internal static BudgetService? ServiceOf(BuildingModel model) => ServiceCatalog.Get(model).Coverage switch
+        internal static BudgetService? ServiceOf(BuildingModel model) => GarbageCatalog.IsFacility(model)
+            ? BudgetService.Garbage : ServiceCatalog.Get(model).Coverage switch
         {
             ServiceCoverage.Education => BudgetService.Education,
             ServiceCoverage.Health => BudgetService.Health,
@@ -75,7 +78,7 @@ namespace XCity
         internal int FundedRadius(BuildingModel model, int radius)
         {
             BudgetService? service = ServiceOf(model);
-            return service == null ? radius : radius * (200 + _funding[(int)service.Value]) / 300;
+            return service == null || service == BudgetService.Garbage ? radius : radius * (200 + _funding[(int)service.Value]) / 300;
         }
 
         internal int FundedUpkeep(BuildingModel model, int upkeep)
@@ -89,8 +92,9 @@ namespace XCity
             if (snapshot.schemaVersion < 11) return;
             if (snapshot.taxRates != null && snapshot.taxRates.Length == _taxRates.Length)
                 for (int i = 0; i < _taxRates.Length; i++) SetTaxRate((TaxZone)i, snapshot.taxRates[i]);
-            if (snapshot.serviceFunding != null && snapshot.serviceFunding.Length == _funding.Length)
-                for (int i = 0; i < _funding.Length; i++) SetFunding((BudgetService)i, snapshot.serviceFunding[i]);
+            if (snapshot.serviceFunding != null && (snapshot.serviceFunding.Length == _funding.Length ||
+                (snapshot.schemaVersion < 13 && snapshot.serviceFunding.Length == (int)BudgetService.Garbage)))
+                for (int i = 0; i < snapshot.serviceFunding.Length; i++) SetFunding((BudgetService)i, snapshot.serviceFunding[i]);
         }
     }
 }

@@ -13,13 +13,20 @@ namespace XCity
         public static string LandValueFact(int value) => $"Giá trị đất {value}";
         public static string NeedsLandValue(int value) => $"Cần giá trị đất ≥ {value}";
 
+        public const string Garbage = "Rác thải";
+        public const string Landfill = "Bãi rác";
+        public const string Incinerator = "Lò đốt rác";
+        public const string MissingGarbage = "Thiếu thu gom rác";
+        public static string GarbageCapacity(int capacity) => $"Công suất {capacity:N0}/lượt";
+        public static string GarbageCollection(int used, int capacity) => $"Thu gom {used:N0}/{capacity:N0}";
+
         // Budget panel.
         public const string Budget = "Ngân sách";
         public const string Income = "Thu";
         public const string Spending = "Chi";
         public static readonly string[] TaxZones = { "Thuế nhà ở", "Thuế thương mại", "Thuế công nghiệp" };
         public static readonly string[] SpendingLines =
-            { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", "Khác (nước, cảng, công viên)", "Trả nợ" };
+            { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", Garbage, "Khác (nước, cảng, công viên)", "Trả nợ" };
 
         // Tutorial quest card.
         public static string QuestStep(int step, int total) => $"NHIỆM VỤ {step}/{total}";

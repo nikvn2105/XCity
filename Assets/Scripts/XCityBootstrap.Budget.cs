@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace XCity
 {
     // Budget panel, opened by tapping the money stat: income per zone with its tax rate, spending per
-    // line with funding for the four services. Changes apply from the next tick.
+    // line with funding for the five services. Changes apply from the next tick.
     public partial class XCityBootstrap
     {
         private const int FundingStep = 10;
@@ -14,8 +14,8 @@ namespace XCity
         private Text _budgetSummary;
         private readonly Text[] _taxRateTexts = new Text[3];
         private readonly Text[] _taxAmountTexts = new Text[3];
-        private readonly Text[] _fundingTexts = new Text[4];
-        private readonly Text[] _spendingTexts = new Text[8];
+        private readonly Text[] _fundingTexts = new Text[5];
+        private readonly Text[] _spendingTexts = new Text[9];
 
         private bool BudgetOpen => _budgetPanel != null && _budgetPanel.activeSelf;
 
@@ -66,12 +66,12 @@ namespace XCity
             Color[] lineColors =
             {
                 UiTheme.RoadGray, UiTheme.Utilities, UiTheme.Education, UiTheme.Services,
-                UiTheme.Commercial, UiTheme.Demolish, UiTheme.TextMuted, UiTheme.TextMuted
+                UiTheme.Commercial, UiTheme.Demolish, UiTheme.Residential, UiTheme.TextMuted, UiTheme.TextMuted
             };
             for (int i = 0; i < _spendingTexts.Length; i++)
             {
-                int service = i - 2; // lines 2-5 are the four funded services
-                bool funded = service >= 0 && service < 4;
+                int service = i - 2; // lines 2-6 are the funded services
+                bool funded = service >= 0 && service < _fundingTexts.Length;
                 Text rate = null;
                 _spendingTexts[i] = funded
                     ? AddBudgetRow(spending, UiText.SpendingLines[i], lineColors[i],
@@ -89,7 +89,7 @@ namespace XCity
             rect.SetParent(_budgetPanel.transform, false);
             Place(rect, min, max, offsetMin, offsetMax);
             var layout = column.AddComponent<VerticalLayoutGroup>();
-            layout.spacing = 2;
+            layout.spacing = 1;
             layout.childControlWidth = layout.childControlHeight = true;
             layout.childForceExpandWidth = true;
             layout.childForceExpandHeight = false;
@@ -106,7 +106,7 @@ namespace XCity
         {
             var row = new GameObject("Row", typeof(RectTransform));
             row.transform.SetParent(column, false);
-            row.AddComponent<LayoutElement>().minHeight = minus != null ? UiTheme.MinTouch : 28f;
+            row.AddComponent<LayoutElement>().minHeight = minus != null ? UiTheme.MinTouch : 20f;
             var layout = row.AddComponent<HorizontalLayoutGroup>();
             layout.spacing = 6;
             layout.childAlignment = TextAnchor.MiddleLeft;
@@ -181,9 +181,9 @@ namespace XCity
                 _taxRateTexts[i].text = $"{_city.GetTaxRate((TaxZone)i)}%";
                 _taxAmountTexts[i].text = $"${taxes[i]:N0}";
             }
-            for (int i = 0; i < 4; i++)
+            for (int i = 0; i < _fundingTexts.Length; i++)
                 _fundingTexts[i].text = $"{_city.GetFunding((BudgetService)i)}%";
-            int[] lines = { budget.Roads, budget.Power, budget.Education, budget.Health, budget.Police, budget.Fire, budget.Other, budget.Loan };
+            int[] lines = { budget.Roads, budget.Power, budget.Education, budget.Health, budget.Police, budget.Fire, budget.Garbage, budget.Other, budget.Loan };
             for (int i = 0; i < lines.Length; i++)
                 _spendingTexts[i].text = $"${lines[i]:N0}";
 

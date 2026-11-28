@@ -61,12 +61,12 @@ namespace XCity.Tests
             states.Add(Fingerprint(city));
             city.Tick();
             states.Add(Fingerprint(city));
-            // Golden values captured on 6f1cdab before replacing the utility algorithms; the last one
-            // re-captured when tax started following land value (same growth, different money).
+            // This large city has no garbage facilities. The phase 2d happiness penalty is included
+            // in the fingerprint, so keep checking both state restoration and the affected economy.
             Assert.Equal(new[]
             {
-                0x3394BA78B2E9D378UL, 0xBE934DC03F8225F9UL, 0x9AE3CF32875D73B0UL,
-                0xBE934DC03F8225F9UL, 0x3394BA78B2E9D378UL, 0x1D4E63788D104DA3UL
+                0xDD7A83EF322AE240UL, 0x4519FEFACB88C175UL, 0xABA3117097FE7504UL,
+                0x4519FEFACB88C175UL, 0xDD7A83EF322AE240UL, 0xF316F0EF56E3AF77UL
             }, states);
         }
 
@@ -115,15 +115,15 @@ namespace XCity.Tests
             Assert.Equal(0xB130B91B09D9AA5BUL, path);
             Assert.True(city.TrySetCell(256, 257, CellType.Residential));
             Assert.True(city.TrySetCell(257, 257, CellType.Industrial));
-            // Golden values captured on 2449372 with two newly zoned cells; money re-captured when tax
-            // started following land value (random states, i.e. growth, are unchanged).
+            // Phase 2d reduces taxable income in this unserved city. Keep the original RNG
+            // expectations and the unchanged route assertion above.
             var expected = new (ulong Fingerprint, int Money, uint RandomState)[]
             {
-                (0xBA208F661227115DUL, 2728117, 2647435461),
-                (0x54FE80E7D7CB0E51UL, 4456334, 307599695),
-                (0x54FE80E7D7CB0E51UL, 6184551, 2398689233),
-                (0x54FE80E7D7CB0E51UL, 7912768, 745495504),
-                (0x54FE80E7D7CB0E51UL, 9640985, 632435482)
+                (0x25787966927BF7D9UL, 2467755, 2647435461),
+                (0x8526E67FE75B297DUL, 3935610, 307599695),
+                (0x8526E67FE75B297DUL, 5403465, 2398689233),
+                (0x8526E67FE75B297DUL, 6871320, 745495504),
+                (0x8526E67FE75B297DUL, 8339175, 632435482)
             };
             foreach (var state in expected)
             {

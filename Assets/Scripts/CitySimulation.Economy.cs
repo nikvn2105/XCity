@@ -44,7 +44,8 @@ namespace XCity
                 BuildingModel.Workshop => 10,
                 BuildingModel.Warehouse => 12,
                 BuildingModel.Factory => 20,
-                BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => 0,
+                BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark or
+                BuildingModel.Landfill or BuildingModel.Incinerator => 0,
                 _ => cell.Type switch
                 {
                     CellType.Commercial => 8,
@@ -137,7 +138,10 @@ namespace XCity
 
         public int GetHappiness(int x, int z) =>
             Math.Min(100, CalculateHappiness(GetCoverage(x, z), HasWater(x, z), HasSewage(x, z), GetTrafficLoad(x, z))
-                + ParkBonusAt(x, z));
+                + ParkBonusAt(x, z) - GarbageHappinessPenalty(x, z));
+
+        private int GarbageHappinessPenalty(int x, int z) =>
+            IsInBounds(x, z) && _cells[x, z].Type == CellType.Residential && NeedsGarbageCollection(x, z) ? 10 : 0;
 
         private int CalculateHappiness(ServiceCoverage coverage, bool water, bool sewage, int traffic) =>
             TaxHappinessShift + BaseHappiness + HappinessPerService * ServiceCatalog.Count(coverage) -
@@ -216,7 +220,7 @@ namespace XCity
 
         // A home needs water, sewage and one service type in reach to reach level 2, and two services for level 3.
         private bool CanUpgradeResidence(int x, int z, int level) =>
-            ResidentialDemand > 0 && HasWater(x, z) && HasSewage(x, z) && ServiceCatalog.Count(GetCoverage(x, z)) >= level;
+            ResidentialDemand > 0 && !NeedsGarbageCollection(x, z) && HasWater(x, z) && HasSewage(x, z) && ServiceCatalog.Count(GetCoverage(x, z)) >= level;
 
         private float DevelopmentChance(CellType type)
         {
@@ -250,7 +254,7 @@ namespace XCity
                 if (cell.Type == CellType.Residential)
                 {
                     int local = Math.Min(100, CalculateHappiness(_coverage[index], _watered[index], _sewered[index],
-                        _componentTraffic[_cellComponent[index]]) + ParkBonusAt(x, z));
+                        _componentTraffic[_cellComponent[index]]) + ParkBonusAt(x, z) - GarbageHappinessPenalty(x, z));
                     happiness += (long)local * BuildingCatalog.Residents(cell);
                 }
             }

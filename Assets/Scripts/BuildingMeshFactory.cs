@@ -243,11 +243,69 @@ namespace XCity
                 case BuildingModel.LargePark:
                     BuildPark(b, cell.Model, CatalogVariant(x, z), Hash(x, z, 1283));
                     break;
+                case BuildingModel.Landfill:
+                case BuildingModel.Incinerator:
+                    BuildGarbageFacility(b, cell.Model, CatalogVariant(x, z));
+                    break;
                 case BuildingModel.WaterPump:
                 case BuildingModel.SewagePlant:
                     BuildUtility(b, cell.Model, height, CatalogVariant(x, z));
                     break;
             }
+        }
+
+        private static void BuildGarbageFacility(MeshBuilder b, BuildingModel model, int variant)
+        {
+            var concrete = new Color32(159, 156, 137, 255);
+            var metal = new Color32(81, 104, 111, 255);
+            var amber = new Color32(208, 145, 66, 255);
+            if (model == BuildingModel.Incinerator)
+            {
+                float width = variant == 2 ? 2.08f : 2.77f;
+                float hall = variant == 1 ? 1.72f : 2.24f;
+                var foot = new Vector3(-0.20f, 0.04f, -0.19f);
+                AddWindowBlock(b, foot, width, 2.24f, hall, 2, concrete, metal);
+                Vector3 roof = foot + Vector3.up * hall;
+                if (variant == 1) b.AddGableRoof(roof, width, 2.24f, 0.64f, 0.04f, metal, concrete);
+                if (variant == 2)
+                    b.AddBox(new Vector3(1.16f, 0.72f, 0.46f), new Vector3(0.99f, 1.36f, 1.37f), concrete, metal);
+
+                var stack = new Vector3(1.14f, 0.04f, -1.12f);
+                b.AddCylinder(stack, 0.21f, 0.15f, GarbageCatalog.IncineratorChimneyHeight - 0.12f,
+                    8, metal, false, default);
+                stack.y = GarbageCatalog.IncineratorChimneyHeight - 0.08f;
+                b.AddCylinder(stack, 0.165f, 0.165f, 0.08f, 8, amber, true, metal);
+                return;
+            }
+
+            var dirt = new Color32(152, 114, 83, 255);
+            var dirtTop = new Color32(187, 145, 99, 255);
+            b.AddBox(new Vector3(0, 0.06f, 0), new Vector3(3.52f, 0.04f, 3.52f), dirt, dirt);
+            // Side and rear rails with fence posts. The entrance stays open on the road side.
+            b.AddBox(new Vector3(0, 0.42f, -1.67f), new Vector3(3.36f, 0.12f, 0.06f), metal, metal);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float x = side * 1.67f;
+                b.AddBox(new Vector3(x, 0.42f, -0.29f), new Vector3(0.06f, 0.12f, 2.81f), metal, metal);
+                for (int post = -1; post <= 1; post++)
+                    b.AddBox(new Vector3(x, 0.27f, -0.26f + post * 1.34f),
+                        new Vector3(0.09f, 0.53f, 0.09f), metal, metal);
+            }
+
+            float moundX = variant == 1 ? 0.55f : -0.55f;
+            b.AddCylinder(new Vector3(moundX, 0.08f, -0.66f), variant == 2 ? 0.59f : 0.88f,
+                0.28f, variant == 2 ? 0.95f : 0.67f, 7, dirt, true, dirtTop);
+            b.AddCylinder(new Vector3(-moundX, 0.08f, -0.85f), 0.56f, 0.15f, 0.41f, 6, dirt, true, dirtTop);
+
+            // Compactor and stationary truck, drawn in the same mesh as the site.
+            b.AddBox(new Vector3(-0.80f, 0.32f, 0.74f), new Vector3(0.80f, 0.39f, 0.58f), metal, amber);
+            b.AddBox(new Vector3(-0.80f, 0.18f, 1.11f), new Vector3(0.84f, 0.20f, 0.24f), amber, amber);
+            b.AddBox(new Vector3(0.86f, 0.21f, 0.93f), new Vector3(0.60f, 0.18f, 1.23f), metal, metal);
+            b.AddBox(new Vector3(0.86f, 0.40f, 1.36f), new Vector3(0.59f, 0.32f, 0.36f), amber, amber);
+            b.AddBox(new Vector3(0.86f, 0.47f, 0.83f), new Vector3(0.56f, 0.45f, 0.67f), metal, concrete);
+            for (int axle = 0; axle < 2; axle++)
+                b.AddWheelCylinder(new Vector3(0.86f, 0.20f, 0.59f + 0.69f * axle),
+                    0.12f, 0.67f, 6, metal, concrete);
         }
 
         private static void BuildPark(MeshBuilder b, BuildingModel model, int variant, uint seed)

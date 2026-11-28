@@ -13,7 +13,8 @@ namespace XCity
         Education,
         Environment,
         Happiness,
-        LandValue
+        LandValue,
+        Garbage
     }
 
     internal sealed class CityOverlaySystem : IDisposable
@@ -77,6 +78,7 @@ namespace XCity
                 CityOverlayMode.Education => CityOverlayMode.Environment,
                 CityOverlayMode.Environment => CityOverlayMode.Happiness,
                 CityOverlayMode.Happiness => CityOverlayMode.LandValue,
+                CityOverlayMode.LandValue => CityOverlayMode.Garbage,
                 _ => CityOverlayMode.None
             };
             SetMode(next);
@@ -90,6 +92,7 @@ namespace XCity
             CityOverlayMode.Environment => "Môi trường",
             CityOverlayMode.Happiness => "Hạnh phúc",
             CityOverlayMode.LandValue => UiText.LandValue,
+            CityOverlayMode.Garbage => UiText.Garbage,
             _ => "Tắt"
         };
 
@@ -209,6 +212,11 @@ namespace XCity
                     // A home counts as schooled only if a school in reach still had a seat for it.
                     bool schooled = (_city.GetCoverage(x, z) & ServiceCoverage.Education) != 0;
                     color = schooled ? new Color32(72, 208, 122, 255) : new Color32(236, 138, 48, 255);
+                    return true;
+
+                case CityOverlayMode.Garbage:
+                    color = !_city.ProducesGarbage(x, z) ? new Color32(125, 134, 145, 255) :
+                        _city.HasGarbageService(x, z) ? new Color32(66, 204, 112, 255) : new Color32(232, 73, 68, 255);
                     return true;
 
                 case CityOverlayMode.LandValue:

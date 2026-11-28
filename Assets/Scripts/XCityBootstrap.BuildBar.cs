@@ -92,6 +92,7 @@ namespace XCity
                 case CityOverlayMode.Environment: return UiIcon.Park;
                 case CityOverlayMode.Happiness: return UiIcon.Smile;
                 case CityOverlayMode.LandValue: return UiIcon.Map;
+                case CityOverlayMode.Garbage: return UiIcon.Recycling;
             }
             switch (option.Tool)
             {
@@ -118,7 +119,8 @@ namespace XCity
                 BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => UiIcon.Park,
                 BuildingModel.Harbor => UiIcon.Boat,
                 BuildingModel.WaterPump => UiIcon.Water,
-                BuildingModel.SewagePlant => UiIcon.Recycling,
+                BuildingModel.Landfill => UiIcon.Delete,
+                BuildingModel.SewagePlant or BuildingModel.Incinerator => UiIcon.Recycling,
                 _ => UiIcon.School
             };
         }
@@ -163,7 +165,9 @@ namespace XCity
                     ModelOption(BuildTool.CivicService, BuildingModel.LargePark)),
                 Category(UiText.Utilities, UiIcon.Bolt, UiTheme.Utilities, new BuildOption(UiText.PowerPlant, BuildTool.PowerPlant),
                     ModelOption(BuildTool.CivicService, BuildingModel.WaterPump),
-                    ModelOption(BuildTool.CivicService, BuildingModel.SewagePlant)),
+                    ModelOption(BuildTool.CivicService, BuildingModel.SewagePlant),
+                    ModelOption(BuildTool.CivicService, BuildingModel.Landfill),
+                    ModelOption(BuildTool.CivicService, BuildingModel.Incinerator)),
                 new BuildCategory(UiText.Map, UiIcon.Layers, UiTheme.MapTeal, true, new[]
                 {
                     new BuildOption(UiText.Power, BuildTool.Pan, overlay: CityOverlayMode.Power),
@@ -172,6 +176,7 @@ namespace XCity
                     new BuildOption(UiText.Environment, BuildTool.Pan, overlay: CityOverlayMode.Environment),
                     new BuildOption(UiText.Happiness, BuildTool.Pan, overlay: CityOverlayMode.Happiness),
                     new BuildOption(UiText.LandValue, BuildTool.Pan, overlay: CityOverlayMode.LandValue),
+                    new BuildOption(UiText.Garbage, BuildTool.Pan, overlay: CityOverlayMode.Garbage),
                     new BuildOption(UiText.WorldMap, BuildTool.Pan, worldMap: true),
                     new BuildOption(UiText.OverlayOff, BuildTool.Pan)
                 }),
@@ -315,6 +320,13 @@ namespace XCity
                 return UiText.Price(CitySimulation.RoadCost, true) + "\n" + UiText.Upkeep(CitySimulation.RoadUpkeep);
             if (option.Tool == BuildTool.PowerPlant)
                 return UiText.Price(CitySimulation.PowerPlantCost, false) + "\n" + UiText.Upkeep(CitySimulation.PowerPlantUpkeep);
+
+            if (GarbageCatalog.IsFacility(option.Model))
+            {
+                var facility = GarbageCatalog.Get(option.Model);
+                return UiText.Price(facility.Cost, false) + "\n" + UiText.Upkeep(facility.Upkeep) + "\n" +
+                    UiText.Radius(facility.Radius) + "\n" + UiText.GarbageCapacity(facility.Capacity);
+            }
 
             var item = BuildingCatalog.Get(option.Model);
             var park = ParkCatalog.Get(option.Model);
