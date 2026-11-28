@@ -262,7 +262,8 @@ namespace XCity
                 {
                     if (_construction != null && _construction.IsSiteActive(x, z)) continue;
                     CityCell cell = _city.GetCell(x, z);
-                    if (cell.Level <= 0) continue;
+                    if (cell.Level <= 0 || (cell.Model == BuildingModel.Incinerator &&
+                        _city.GetZoneStatus(x, z) != ZoneStatus.Developed)) continue;
 
                     int quarterTurns = BuildingChunkRenderer.PickQuarterTurns(_city, x, z);
                     if (IndustrialMeshFactory.TryGetPlumeEmitter(x, z, cell, quarterTurns, _cellSize,

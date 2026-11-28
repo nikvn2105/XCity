@@ -52,6 +52,7 @@ namespace XCity
         private const byte NearWater = 2;
         private const byte PollutionKnown = 4;
         private const byte NearPollution = 8;
+        private const byte NearIncinerator = 16;
 
         // Unknown (or invalidated) flags are resolved only for cells somebody actually reads.
         private byte[] _landFeatures;
@@ -67,6 +68,8 @@ namespace XCity
             int value = 50 + 8 * ServiceCatalog.Count(GetCoverage(x, z)) + ParkInfluence(index);
             if ((features & NearWater) != 0) value += 12;
             if ((features & NearPollution) != 0) value -= 18;
+            else if ((features & NearIncinerator) != 0) value -= 10;
+            if (NeedsGarbageCollection(x, z)) value -= 10;
             if (GetTrafficLoad(x, z) > 100) value -= 12;
             return Math.Max(0, Math.Min(100, value));
         }
@@ -98,7 +101,7 @@ namespace XCity
                 if (ParkCatalog.IsPark(current.Model)) StampPark(x, z, ParkCatalog.Get(current.Model), 1);
             }
 
-            if (_landFeatures == null || IsPolluter(previous.Type) == IsPolluter(current.Type)) return;
+            if (_landFeatures == null || PollutionFlag(previous) == PollutionFlag(current)) return;
             // Only this emitter's radius can have changed. The water flags describe immutable terrain.
             const int radius = LandPollutionRadius;
             int maxX = Math.Min(GridSize - 1, x + radius);
@@ -133,28 +136,38 @@ namespace XCity
             if ((features & WaterKnown) == 0)
             {
                 features |= WaterKnown;
-                if (AnyWithin(x, z, LandWaterRadius, water: true)) features |= NearWater;
+                if (LandFeatureWithin(x, z, LandWaterRadius, water: true) != 0) features |= NearWater;
             }
             if ((features & PollutionKnown) == 0)
             {
                 features |= PollutionKnown;
-                if (AnyWithin(x, z, LandPollutionRadius, water: false)) features |= NearPollution;
+                features |= LandFeatureWithin(x, z, LandPollutionRadius, water: false);
             }
             _landFeatures[index] = features;
             return features;
         }
 
-        private bool AnyWithin(int x, int z, int radius, bool water)
+        private byte LandFeatureWithin(int x, int z, int radius, bool water)
         {
             int maxX = Math.Min(GridSize - 1, x + radius);
             int minZ = Math.Max(0, z - radius), maxZ = Math.Min(GridSize - 1, z + radius);
+            byte nearby = 0;
             for (int cx = Math.Max(0, x - radius); cx <= maxX; cx++)
             for (int cz = minZ; cz <= maxZ; cz++)
             {
                 if (!InRadius(x, z, cx, cz, radius)) continue;
-                if (water ? IsWaterTerrain(cx, cz) : IsPolluter(_cells[cx, cz].Type)) return true;
+                if (water)
+                {
+                    if (IsWaterTerrain(cx, cz)) return NearWater;
+                }
+                else
+                {
+                    byte flag = PollutionFlag(_cells[cx, cz]);
+                    if (flag == NearPollution) return flag;
+                    if (flag == NearIncinerator) nearby = flag;
+                }
             }
-            return false;
+            return nearby;
         }
 
         private bool IsWaterTerrain(int x, int z)
@@ -173,6 +186,8 @@ namespace XCity
             return dx * dx + dz * dz <= radius * radius;
         }
 
-        private static bool IsPolluter(CellType type) => type == CellType.Industrial || type == CellType.PowerPlant;
+        private static byte PollutionFlag(CityCell cell) =>
+            cell.Type == CellType.Industrial || cell.Type == CellType.PowerPlant || cell.Model == BuildingModel.Landfill
+                ? NearPollution : cell.Model == BuildingModel.Incinerator ? NearIncinerator : (byte)0;
     }
 }

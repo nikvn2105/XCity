@@ -138,6 +138,11 @@ namespace XCity
                 localOffset = new Vector3(-0.60f, 3.28f, -0.58f);
                 isCoolingSteam = true;
             }
+            else if (cell.Model == BuildingModel.Incinerator)
+            {
+                localOffset = new Vector3(1.14f, GarbageCatalog.IncineratorChimneyHeight, -1.12f);
+                isCoolingSteam = false;
+            }
             else if (cell.Type == CellType.Industrial && cell.Level > 0)
             {
                 float h = Mathf.Max(1.8f, cell.Height);

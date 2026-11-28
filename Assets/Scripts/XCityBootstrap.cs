@@ -1108,6 +1108,13 @@ namespace XCity
                     $" · Phí: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
             if (type == CellType.CivicService)
                 label += $" · Phí duy trì: ${BuildingCatalog.ServiceUpkeep(cell.Model):N0}";
+            if (GarbageCatalog.IsFacility(cell.Model))
+            {
+                var (used, capacity) = _city.GarbageFacilityAt(point.x, point.y);
+                label += " · " + UiText.GarbageCollection(used, capacity);
+            }
+            else if (_city.ProducesGarbage(point.x, point.y) && !_city.HasGarbageService(point.x, point.y))
+                label += " · " + UiText.MissingGarbage;
             return status switch
             {
                 ZoneStatus.NeedsRoad => label + " · Cần đường liền kề",

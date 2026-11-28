@@ -124,7 +124,8 @@ namespace XCity.Tests
 
             Assert.True(city.TrySetCell(Center, Center, CellType.CivicService, BuildingModel.SmallPark));
             snapshot = city.CreateSnapshot();
-            Assert.Equal(12, snapshot.schemaVersion);
+            Assert.Equal(CitySimulation.CurrentSchemaVersion, snapshot.schemaVersion);
+            snapshot.schemaVersion = 12;
             Assert.True(CitySimulation.TryRestore(snapshot, out var restored));
             Assert.Equal(4, restored.ParkBonusAt(Center, Center + 1));
             snapshot.schemaVersion = version;

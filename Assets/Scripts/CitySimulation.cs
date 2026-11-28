@@ -44,7 +44,9 @@ namespace XCity
         FireStationSmall,
         SmallPark,
         Plaza,
-        LargePark
+        LargePark,
+        Landfill,
+        Incinerator
     }
 
     public enum Density
@@ -100,6 +102,7 @@ namespace XCity
                 BuildingModel.Clinic => (CellType.CivicService, "Phòng khám", 700, 2.8f, 0),
                 BuildingModel.FireStationSmall => (CellType.CivicService, "Trạm cứu hỏa nhỏ", 500, 2.8f, 0),
                 BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Building(model),
+                BuildingModel.Landfill or BuildingModel.Incinerator => GarbageCatalog.Building(model),
                 _ => default
             };
 
@@ -121,6 +124,7 @@ namespace XCity
             BuildingModel.Clinic => 14,
             BuildingModel.FireStationSmall => 10,
             BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).Upkeep,
+            BuildingModel.Landfill or BuildingModel.Incinerator => GarbageCatalog.Get(model).Upkeep,
             _ => Get(model).Seats / 15
         };
 
@@ -132,6 +136,7 @@ namespace XCity
                 BuildingModel.Harbor => 2000,
             BuildingModel.University or BuildingModel.OfficeTower or BuildingModel.ShoppingMall => 5000,
             BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).UnlockPopulation,
+            BuildingModel.Landfill or BuildingModel.Incinerator => GarbageCatalog.Get(model).Unlock,
             _ => 0
         };
 
@@ -203,8 +208,8 @@ namespace XCity
         internal const int PowerPlantUpkeep = 60;
         internal const int RoadUpkeep = 2;
         internal const float PowerPlantHeight = 3.2f;
-        // 11: tax rates and service funding; 12: parks.
-        internal const int CurrentSchemaVersion = 12;
+        // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding.
+        internal const int CurrentSchemaVersion = 13;
         public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -278,8 +283,9 @@ namespace XCity
             else _serviceCells.Remove(index);
             CityCell current = _cells[x, z];
             TrackLandValueCell(x, z, previous, current);
-            bool consumes = UsesPower(type) && !ParkCatalog.IsPark(current.Model);
-            bool usedPower = UsesPower(previous.Type) && !ParkCatalog.IsPark(previous.Model);
+            TrackGarbageCell(index, previous, current);
+            bool consumes = UsesPower(type) && !ParkCatalog.IsPark(current.Model) && current.Model != BuildingModel.Landfill;
+            bool usedPower = UsesPower(previous.Type) && !ParkCatalog.IsPark(previous.Model) && previous.Model != BuildingModel.Landfill;
             int source = UtilitySource(current);
             int previousSource = UtilitySource(previous);
             if (type == CellType.Road) _utilityRoads.Add(index);
@@ -315,7 +321,7 @@ namespace XCity
         {
             if (!IsInBounds(x, z)) return ZoneStatus.NotZoned;
             CityCell cell = _cells[x, z];
-            if (ParkCatalog.IsPark(cell.Model)) return ZoneStatus.Developed;
+            if (ParkCatalog.IsPark(cell.Model) || cell.Model == BuildingModel.Landfill) return ZoneStatus.Developed;
             if (!UsesPower(cell.Type)) return ZoneStatus.NotZoned;
             if (!Roads.HasRoadAccess(x, z))
                 return cell.Level == 0 ? ZoneStatus.NeedsRoad : ZoneStatus.DevelopedWithoutRoad;
@@ -460,6 +466,8 @@ namespace XCity
             _coverageDirty |= _coverageChangedByGrowth;
             RefreshCoverage();
             RefreshTraffic();
+            RefreshGarbage();
+            _garbageTickSnapshot = true;
             int networks = _componentRoads.Count;
             ClearCapacity(ref _tickWorkers, networks);
             ClearCapacity(ref _tickJobs, networks);
@@ -502,6 +510,7 @@ namespace XCity
                         case BudgetService.Health: budget.Health += upkeep; break;
                         case BudgetService.Police: budget.Police += upkeep; break;
                         case BudgetService.Fire: budget.Fire += upkeep; break;
+                        case BudgetService.Garbage: budget.Garbage += upkeep; break;
                         default: budget.Other += upkeep; break;
                     }
                     int serviceJobs = OperatingJobs(x, z, cell);
@@ -525,6 +534,7 @@ namespace XCity
                         _ => 2.2f + NextRandom() * 1.6f
                     };
                     if (cell.Type == CellType.Residential) _coverageChangedByGrowth = true;
+                    TrackGarbageDemand(index, cell);
                     CellChanged?.Invoke(x, z);
                 }
 
@@ -535,6 +545,7 @@ namespace XCity
                     cell.Level++;
                     cell.Height = Math.Min(cell.Height + 0.9f, 7.5f);
                     _coverageChangedByGrowth = true;
+                    TrackGarbageDemand(index, cell);
                     CellChanged?.Invoke(x, z);
                 }
 
@@ -556,9 +567,14 @@ namespace XCity
                     // Homes and shops pay more on valuable land (100% at land value 50, 50%-150% overall).
                     if (cell.Type == CellType.Residential)
                         residentialBase += BuildingCatalog.Residents(cell) * 5 / 4 * LandValueTaxPercent(x, z) / 100;
-                    else if (cell.Type == CellType.Commercial)
-                        commercialBase += 15 * cell.Level * EmploymentAt(x, z) / 100 * LandValueTaxPercent(x, z) / 100;
-                    else industrialBase += 15 * cell.Level * EmploymentAt(x, z) / 100;
+                    else
+                    {
+                        int taxable = 15 * cell.Level * EmploymentAt(x, z) / 100;
+                        if (cell.Type == CellType.Commercial) taxable = taxable * LandValueTaxPercent(x, z) / 100;
+                        if (NeedsGarbageCollection(x, z)) taxable = taxable * 80 / 100;
+                        if (cell.Type == CellType.Commercial) commercialBase += taxable;
+                        else industrialBase += taxable;
+                    }
                 }
             }
 
@@ -580,6 +596,7 @@ namespace XCity
             Money += LastNetIncome;
             TicksInDebt = Money < 0 ? TicksInDebt + 1 : 0;
             TickCount++;
+            _garbageTickSnapshot = false;
         }
 
         internal CitySnapshot CreateSnapshot()
@@ -686,7 +703,7 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = ParkCatalog.IsPark(cell.Model) ? 12 : cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
+                int modelVersion = GarbageCatalog.IsFacility(cell.Model) ? 13 : ParkCatalog.IsPark(cell.Model) ? 12 : cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
                     cell.Model == BuildingModel.Harbor ? 7 :
                     cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
@@ -736,7 +753,10 @@ namespace XCity
                 if (powered) _powerCapacity[network]--;
 
                 if (_powered[index] != powered && _serviceCells.Contains(index))
+                {
                     _coverageDirty = true;
+                    if (_cells[index / GridSize, index % GridSize].Model == BuildingModel.Incinerator) _garbageDirty = true;
+                }
                 _powered[index] = powered;
             }
 
