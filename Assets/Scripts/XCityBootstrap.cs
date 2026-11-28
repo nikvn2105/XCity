@@ -713,33 +713,27 @@ namespace XCity
                 for (int x = minX; x <= maxX; x++)
                 for (int z = minZ; z <= maxZ; z++)
                 {
-                    RoadGrade grade = _city.GetRoadGrade(x, z);
                     if (!WorldTerrain.IsLand(x, z)) continue;
-                    var cliff = new SoftCliff(x, z);
-                    if (!grade.IsRamp && !cliff.Active) continue;
-                    bool road = _city.GetCell(x, z).Type == CellType.Road;
-                    RoadConnections links = road ? _city.Roads.GetConnections(x, z) : RoadConnections.None;
-                    for (int ix = 0; ix < RoadGrade.PatchCount; ix++)
-                    for (int iz = 0; iz < RoadGrade.PatchCount; iz++)
+                    TerrainPatch surface = WorldTerrain.GetSurface(x, z);
+                    // At irregular boundaries a patch can be flat at an intermediate height.
+                    // Only nominal tier surfaces were already checked by TestPlane.
+                    if (!surface.IsSlope && surface.Sample(0.5f, 0.5f) == WorldTerrain.Tier(x, z) * WorldTerrain.TerraceStep)
+                        continue;
+                    CityCell tile = _city.GetCell(x, z);
+                    bool road = tile.Type == CellType.Road;
+                    int subdivisions = !surface.IsSlope ? 1 : road ? 4 : 2;
+                    for (int ix = 0; ix < subdivisions; ix++)
+                    for (int iz = 0; iz < subdivisions; iz++)
                     {
-                        float x0 = RoadGrade.Boundary(ix), x1 = RoadGrade.Boundary(ix + 1);
-                        float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
+                        float x0 = Cut(ix), x1 = Cut(ix + 1), z0 = Cut(iz), z1 = Cut(iz + 1);
                         Vector3 a = Point(x0, z0), b = Point(x0, z1), c = Point(x1, z1), d = Point(x1, z0);
-                        if (RoadGrade.FlipDiagonal(ix, iz))
-                        {
-                            TestTriangle(b, c, d);
-                            TestTriangle(b, d, a);
-                        }
-                        else
-                        {
-                            TestTriangle(a, b, c);
-                            TestTriangle(a, c, d);
-                        }
+                        TestTriangle(a, b, c);
+                        TestTriangle(a, c, d);
                     }
 
-                    Vector3 Point(float u, float v) => new Vector3((x + 0.5f + u) * CellSize,
-                        road ? cliff.RoadY(grade, links, u, v) + CityChunkRenderer.RoadY
-                            : grade.Base + cliff.Vertex(u, v) + 0.007f, (z + 0.5f + v) * CellSize);
+                    float Cut(int index) => subdivisions == 4 ? CityChunkRenderer.RoadBoundary(index, tile.RoadType) : index / (float)subdivisions;
+                    Vector3 Point(float u, float v) => new Vector3((x + u) * CellSize,
+                        surface.Sample(u, v) + (road ? CityChunkRenderer.RoadY : 0.007f), (z + v) * CellSize);
 
                     void TestTriangle(Vector3 a, Vector3 b, Vector3 c)
                     {
@@ -769,7 +763,8 @@ namespace XCity
                 Vector3 hit = ray.GetPoint(distance);
                 int x = Mathf.FloorToInt(hit.x / CellSize), z = Mathf.FloorToInt(hit.z / CellSize);
                 if ((uint)x >= GridSize || (uint)z >= GridSize || WorldTerrain.Tier(x, z) != tier ||
-                    WorldTerrain.IsLand(x, z) != land || (land && (_city.GetRoadGrade(x, z).IsRamp || new SoftCliff(x, z).Active))) return;
+                    WorldTerrain.IsLand(x, z) != land ||
+                    (land && (WorldTerrain.IsSlope(x, z) || WorldTerrain.SurfaceY(x, z) != y))) return;
                 closest = distance;
                 selected = new Vector2Int(x, z);
             }
@@ -979,7 +974,8 @@ namespace XCity
                 _stroke.Add(tile);
                 float rise = i > 0 && i < Mathf.Abs(span)
                     ? BridgeProfile.TerrainDeck(i - 0.5f, Mathf.Abs(span) - 1,
-                        WorldTerrain.SurfaceY(start.x, start.y), WorldTerrain.SurfaceY(end.x, end.y))
+                        CitySimulation.BridgeBankY(start.x, start.y, step.x, step.y),
+                        CitySimulation.BridgeBankY(end.x, end.y, -step.x, -step.y))
                     : WorldTerrain.SurfaceY(tile.x, tile.y);
                 ShowStreetPreview(i, tile, quote == BridgeQuote.Ready ? _roadPreviewMat : _invalidPreviewMat, rise);
             }
@@ -1016,13 +1012,18 @@ namespace XCity
             if (index == _roadMarkers.Count) CreateStreetMarker();
             MeshRenderer preview = _roadMarkers[index];
             if (preview.sharedMaterial != material) preview.sharedMaterial = material;
-            bool onGrade = _activeTool != BuildTool.Bridge &&
-                (new SoftCliff(cell.x, cell.y).Active || _city.GetRoadGrade(cell.x, cell.y).IsRamp);
+            TerrainPatch surface = WorldTerrain.GetSurface(cell.x, cell.y);
+            bool onGrade = surface.IsSlope;
+            preview.transform.rotation = TerrainRotation(surface);
             float markerWidth = CellSize * (onGrade ? 0.40f : 0.98f);
             preview.transform.localScale = new Vector3(markerWidth, 0.06f, markerWidth);
             preview.transform.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f + rise, (cell.y + 0.5f) * CellSize);
             preview.gameObject.SetActive(true);
         }
+
+        private static Quaternion TerrainRotation(TerrainPatch surface) => surface.IsSlope
+            ? Quaternion.FromToRotation(Vector3.up, new Vector3(-surface.DeltaX(0.5f), CellSize, -surface.DeltaZ(0.5f)))
+            : Quaternion.identity;
 
         private bool ApplyBuildStroke()
         {
@@ -1148,6 +1149,8 @@ namespace XCity
 
         private void OnDestroy()
         {
+            foreach (Mesh guide in _roadGuideMeshes)
+                if (guide != null) Destroy(guide);
             _cityRenderer?.Dispose();
             _construction?.Dispose();
             _industrialSmoke?.Dispose();
@@ -1211,9 +1214,8 @@ namespace XCity
             {
                 float grade = raised ? profile.HeightAt(profile.Axis == CitySimulation.BridgeAlongX ? u : v)
                     : cell.Type == CellType.Road
-                        ? new SoftCliff(point.x, point.y).RoadY(_city.GetRoadGrade(point.x, point.y),
-                            _city.Roads.GetConnections(point.x, point.y), u - 0.5f, v - 0.5f)
-                        : WorldTerrain.SurfaceY(point.x, point.y) + new SoftCliff(point.x, point.y).Sample(u - 0.5f, v - 0.5f);
+                        ? WorldTerrain.GetSurface(point.x, point.y).Sample(u, v) + CityChunkRenderer.RoadY
+                        : WorldTerrain.GetSurface(point.x, point.y).Sample(u, v);
                 _inspectionOutline.SetPosition(index, new Vector3(x + u * CellSize, grade + 0.18f, z + v * CellSize));
             }
             _inspectionOutline.enabled = true;

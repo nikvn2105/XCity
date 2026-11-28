@@ -25,10 +25,10 @@ namespace XCity
                     average >= 2.88f ? (byte)1 : (byte)0;
             }
 
-            // Reserve the start plateau plus a one-cell land shoulder for building on its edges.
+            // Reserve the start plateau plus a two-cell land shoulder for building on its edges.
             const int half = StartArea / 2;
-            int minX = start.X - half - 1, maxX = start.X + half;
-            int minZ = start.Z - half - 1, maxZ = start.Z + half;
+            int minX = start.X - half - 2, maxX = start.X + half + 1;
+            int minZ = start.Z - half - 2, maxZ = start.Z + half + 1;
             byte startTier = tiers[start.X * Size + start.Z];
             for (int x = minX; x <= maxX; x++)
             for (int z = minZ; z <= maxZ; z++)
@@ -40,6 +40,48 @@ namespace XCity
                     tiers[x * Size + z] = startTier;
 
             GradeFreshWater(water, downstream, tiers);
+        }
+
+        internal static float[] BuildSurfaceCorners(byte[] tiers, WaterKind[] water)
+        {
+            const int stride = Size + 1;
+            var corners = new float[stride * stride];
+            // For a straight edge the two interior samples are smoothstep(1/3) and smoothstep(2/3).
+            // Bias the three-cell band by half a cell so its two outer limits land on grid corners.
+            for (int x = 0; x <= Size; x++)
+            for (int z = 0; z <= Size; z++)
+            {
+                int weightedTiers = 0, totalWeight = 0;
+                for (int dx = -2; dx <= 0; dx++)
+                {
+                    int nx = x + dx;
+                    if ((uint)nx >= Size) continue;
+                    int row = nx * Size;
+                    int wx = dx == -1 ? 13 : 7;
+                    for (int dz = -2; dz <= 0; dz++)
+                    {
+                        int nz = z + dz;
+                        if ((uint)nz >= Size || water[row + nz] != WaterKind.Land) continue;
+                        int weight = wx * (dz == -1 ? 13 : 7);
+                        weightedTiers += tiers[row + nz] * weight;
+                        totalWeight += weight;
+                    }
+                }
+                if (totalWeight == 0) continue;
+                float elevation = WorldTerrain.TerraceStep * weightedTiers / totalWeight;
+                // Keep the land lip above any adjoining water surface without grading the water itself.
+                for (int dx = -1; dx <= 0; dx++)
+                for (int dz = -1; dz <= 0; dz++)
+                {
+                    int nx = x + dx, nz = z + dz;
+                    if ((uint)nx >= Size || (uint)nz >= Size) continue;
+                    int cell = nx * Size + nz;
+                    if (water[cell] == WaterKind.River || water[cell] == WaterKind.Lake)
+                        elevation = Math.Max(elevation, tiers[cell] * WorldTerrain.TerraceStep + BridgeProfile.WaterSurface + 0.05f);
+                }
+                corners[x * stride + z] = elevation;
+            }
+            return corners;
         }
 
         private static void GradeFreshWater(WaterKind[] water, int[] downstream, byte[] tiers)

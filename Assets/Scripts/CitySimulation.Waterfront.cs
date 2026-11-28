@@ -56,46 +56,6 @@ namespace XCity
             ? (Middle - Start) * 2f : (End - Middle) * 2f;
     }
 
-    internal readonly struct RoadGrade
-    {
-        // Ramp begins at the edge of the flat junction and meets the adjoining tile halfway in height.
-        private const float RampStart = 0.21f;
-        public const float SharedEdge = 0.40f; // Includes sidewalks and their pedestrian paths.
-        public const int PatchCount = 5;
-        public readonly float Base, West, East, South, North;
-
-        public RoadGrade(float surface, float west = 0f, float east = 0f, float south = 0f, float north = 0f)
-        {
-            Base = surface;
-            West = west;
-            East = east;
-            South = south;
-            North = north;
-        }
-
-        public static float Boundary(int index) => index switch
-        {
-            0 => -0.5f, 1 => -SharedEdge, 2 => -RampStart,
-            3 => RampStart, 4 => SharedEdge, _ => 0.5f
-        };
-
-        public static bool FlipDiagonal(int x, int z) => x == z && (x == 0 || x == PatchCount - 1);
-
-        public bool IsRamp => West != 0f || East != 0f || South != 0f || North != 0f;
-
-        public float Sample(float u, float v)
-        {
-            float x = Weight(u, RampStart), z = Weight(v, RampStart);
-            float edgeX = u < 0f ? West : East, edgeZ = v < 0f ? South : North;
-            // Keep the outer corner on its own terrace, with a diagonal crease matching the mesh.
-            return Base + edgeX * Math.Min(x, 1f - Weight(v, SharedEdge)) +
-                edgeZ * Math.Min(z, 1f - Weight(u, SharedEdge));
-        }
-
-        private static float Weight(float value, float threshold) =>
-            Math.Max(0f, Math.Min(1f, (Math.Abs(value) - threshold) / (0.5f - threshold)));
-    }
-
     public sealed partial class CitySimulation
     {
         internal const int MaxBridgeWaterTiles = 96;
@@ -131,8 +91,8 @@ namespace XCity
             while (IsInBounds(x + dx * count, z + dz * count) &&
                 _cells[x + dx * count, z + dz * count].BridgeAxis == axis)
                 count++;
-            float bankStart = WorldTerrain.SurfaceY(x - dx, z - dz);
-            float bankEnd = WorldTerrain.SurfaceY(x + dx * count, z + dz * count);
+            float bankStart = BridgeBankY(x - dx, z - dz, dx, dz);
+            float bankEnd = BridgeBankY(x + dx * count, z + dz * count, -dx, -dz);
             for (int i = 0; i < count; i++)
                 _bridgeProfiles[CellIndex(x + dx * i, z + dz * i)] = new BridgeProfile(axis, i, count, bankStart, bankEnd);
 
@@ -140,19 +100,8 @@ namespace XCity
             return true;
         }
 
-        internal RoadGrade GetRoadGrade(int x, int z)
-        {
-            float surface = WorldTerrain.SurfaceY(x, z);
-            if (!WorldTerrain.IsSlope(x, z) || !IsInBounds(x, z) || _cells[x, z].Type != CellType.Road)
-                return new RoadGrade(surface);
-            RoadConnections links = Roads.GetConnections(x, z);
-            return new RoadGrade(surface, Edge(RoadConnections.West, x - 1, z), Edge(RoadConnections.East, x + 1, z),
-                Edge(RoadConnections.South, x, z - 1), Edge(RoadConnections.North, x, z + 1));
-
-            float Edge(RoadConnections flag, int nx, int nz) =>
-                (links & flag) != 0 && WorldTerrain.IsLand(nx, nz)
-                    ? (WorldTerrain.SurfaceY(nx, nz) - surface) * 0.5f : 0f;
-        }
+        internal static float BridgeBankY(int x, int z, int towardX, int towardZ) =>
+            WorldTerrain.GetSurface(x, z).Sample(0.5f + towardX * 0.5f, 0.5f + towardZ * 0.5f);
 
         internal float RoadSurfaceY(float worldX, float worldZ, float cellSize)
         {
@@ -161,7 +110,7 @@ namespace XCity
             if (!IsInBounds(x, z)) return 0f;
             if (TryGetBridgeProfile(x, z, out BridgeProfile bridge))
                 return bridge.HeightAt(bridge.Axis == BridgeAlongX ? gridX - x : gridZ - z);
-            return GetRoadGrade(x, z).Sample(gridX - x - 0.5f, gridZ - z - 0.5f);
+            return WorldTerrain.GetSurface(x, z).Sample(gridX - x, gridZ - z);
         }
 
         internal BridgeQuote QuoteBridge(int x, int z, int endX, int endZ, out int cost, RoadType roadType = RoadType.Street)

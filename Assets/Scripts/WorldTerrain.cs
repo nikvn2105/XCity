@@ -52,6 +52,27 @@ namespace XCity
 
     public enum WaterKind : byte { Land, Sea, River, Lake }
 
+    internal readonly struct TerrainPatch
+    {
+        private readonly float _sw, _se, _nw, _ne;
+
+        public TerrainPatch(float sw, float se, float nw, float ne)
+        {
+            _sw = sw;
+            _se = se;
+            _nw = nw;
+            _ne = ne;
+        }
+
+        public bool IsSlope => _sw != _se || _sw != _nw || _sw != _ne;
+
+        public float Sample(float u, float v) => Lerp(Lerp(_sw, _se, u), Lerp(_nw, _ne, u), v);
+        public float DeltaX(float v) => Lerp(_se - _sw, _ne - _nw, v);
+        public float DeltaZ(float u) => Lerp(_nw - _sw, _ne - _se, u);
+
+        private static float Lerp(float a, float b, float t) => a + (b - a) * t;
+    }
+
     internal static class WorldTerrain
     {
         private const int Size = CitySimulation.GridSize;
@@ -59,6 +80,7 @@ namespace XCity
         private static WaterKind[] _water;
         private static int[] _downstream;
         private static byte[] _tiers;
+        private static float[] _corners = new float[(Size + 1) * (Size + 1)];
         private static float[] _height = MapGenerator.Generate(MapSpec.Classic, out _start, out _water, out _downstream, out _tiers);
         private static (int X, int Z) _start;
         private static readonly object Gate = new object();
@@ -78,6 +100,8 @@ namespace XCity
             {
                 if (spec == Current) return;
                 _height = MapGenerator.Generate(spec, out _start, out _water, out _downstream, out _tiers);
+                _corners = spec.Style == MapStyle.Classic ? new float[(Size + 1) * (Size + 1)] :
+                    MapGenerator.BuildSurfaceCorners(_tiers, _water);
                 Current = spec;
             }
         }
@@ -91,18 +115,32 @@ namespace XCity
         public static byte Tier(int x, int z) =>
             (uint)x < Size && (uint)z < Size ? _tiers[x * Size + z] : (byte)0;
 
-        public static float SurfaceY(int x, int z) => Tier(x, z) * TerraceStep;
+        public static float CornerY(int cx, int cz) =>
+            (uint)cx <= Size && (uint)cz <= Size ? _corners[cx * (Size + 1) + cz] : 0f;
 
-        public static float SurfaceY(float worldX, float worldZ, float cellSize) =>
-            SurfaceY((int)Math.Floor(worldX / cellSize), (int)Math.Floor(worldZ / cellSize));
-
-        public static bool IsSlope(int x, int z)
+        internal static TerrainPatch GetSurface(int x, int z)
         {
-            if (Current.Style == MapStyle.Classic || !IsLand(x, z)) return false;
-            byte tier = Tier(x, z);
-            return Tier(x - 1, z) != tier || Tier(x + 1, z) != tier ||
-                Tier(x, z - 1) != tier || Tier(x, z + 1) != tier;
+            if ((uint)x >= Size || (uint)z >= Size) return default;
+            if (!IsLand(x, z))
+            {
+                // Water has a level per tile; the terrain lattice describes land, not waterfalls.
+                float level = Tier(x, z) * TerraceStep;
+                return new TerrainPatch(level, level, level, level);
+            }
+            int index = x * (Size + 1) + z;
+            return new TerrainPatch(_corners[index], _corners[index + Size + 1], _corners[index + 1], _corners[index + Size + 2]);
         }
+
+        public static float SurfaceY(int x, int z) => GetSurface(x, z).Sample(0.5f, 0.5f);
+
+        public static float SurfaceY(float worldX, float worldZ, float cellSize)
+        {
+            float u = worldX / cellSize, v = worldZ / cellSize;
+            int x = (int)Math.Floor(u), z = (int)Math.Floor(v);
+            return GetSurface(x, z).Sample(u - x, v - z);
+        }
+
+        public static bool IsSlope(int x, int z) => GetSurface(x, z).IsSlope;
 
         public static float LandHeight(int x, int z) =>
             x >= 0 && z >= 0 && x < Size && z < Size ? _height[x * Size + z] : -1f;

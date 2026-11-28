@@ -166,12 +166,11 @@ namespace XCity
                     float y = OverlayY; // Always on the ground; the overlay shader draws it over buildings.
                     if (WorldTerrain.IsFreshWater(x, z)) y += BridgeProfile.WaterSurface;
                     _builder.SetFrame(center, 0);
-                    _builder.AddQuad(
-                        new Vector3(-size, y, -size),
-                        new Vector3(-size, y, size),
-                        new Vector3(size, y, size),
-                        new Vector3(size, y, -size),
-                        Vector3.up, color);
+                    TerrainPatch surface = WorldTerrain.GetSurface(x, z);
+                    _builder.AddQuad(Point(-size, -size), Point(-size, size), Point(size, size), Point(size, -size), Vector3.up, color);
+
+                    Vector3 Point(float localX, float localZ) => new Vector3(localX,
+                        y + surface.Sample(localX / _cellSize + 0.5f, localZ / _cellSize + 0.5f) - center.y, localZ);
                 }
             }
 

@@ -261,29 +261,28 @@ namespace XCity
                         AddBridge(center, bridge, full, emitScenery, x, z);
                         AddRoadDetails(_surface, center, x, z, cell, bridge);
                         if (emitScenery && cell.RoadType == RoadType.Boulevard)
-                            AddBoulevardTrees(center, default, x, z, bridge);
+                            AddBoulevardTrees(center, x, z, bridge);
                         continue;
                     }
                     if (!WorldTerrain.IsLand(x, z)) continue;
-                    RoadGrade grade = _city.GetRoadGrade(x, z);
-                    var cliff = new SoftCliff(x, z);
+                    TerrainPatch surface = WorldTerrain.GetSurface(x, z);
                     AddCoast(x, z, cell.Type);
                     if (cell.Type == CellType.Road)
                     {
-                        if (grade.IsRamp || cliff.Active)
+                        if (surface.IsSlope)
                         {
-                            AddRamp(_surface, grade, cliff, x, z);
-                            if (emitScenery && !grade.IsRamp && cell.RoadType != RoadType.Boulevard)
+                            AddSlopedRoad(_surface, surface, x, z);
+                            if (emitScenery && cell.RoadType != RoadType.Boulevard)
                                 AddStreetScenery(center, x, z, _cellSize * 0.39f);
                         }
                         else if (full) AddStreet(center, x, z, emitScenery && cell.RoadType != RoadType.Boulevard);
                         else AddOverviewStreet(center, x, z);
                         AddRoadDetails(_surface, center, x, z, cell);
                         if (emitScenery && cell.RoadType == RoadType.Boulevard)
-                            AddBoulevardTrees(center, grade, x, z);
+                            AddBoulevardTrees(center, x, z);
                     }
                     else
-                        AddLot(cell, x, z, full, emitScenery, cliff);
+                        AddLot(cell, x, z, full, emitScenery, surface);
                 }
             }
 
@@ -340,10 +339,9 @@ namespace XCity
                     float elevation = WorldTerrain.SurfaceY(x, z);
                     _farSurface.SetFrame(new Vector3(x0 + half, elevation, z0 + half), 0);
                     AddFreshWater(_farSurface, x, z, elevation);
-                    RoadGrade grade = _city.GetRoadGrade(x, z);
-                    var cliff = new SoftCliff(x, z);
-                    bool shaped = !cell.IsBridge && (grade.IsRamp || cliff.Active);
-                    if (WorldTerrain.IsLand(x, z)) AddFarWaterBank(_farSurface, x, z, grade);
+                    TerrainPatch surface = WorldTerrain.GetSurface(x, z);
+                    bool shaped = surface.IsSlope;
+                    if (WorldTerrain.IsLand(x, z)) AddFarWaterBank(_farSurface, surface, x, z);
                     if (shaped)
                     {
                         _farSurface.SetFrame(Vector3.zero, 0);
@@ -351,10 +349,10 @@ namespace XCity
                         _farSurface.SetFrame(new Vector3(x0 + half, elevation, z0 + half), 0);
                         if (cell.Type == CellType.Road)
                         {
-                            AddRamp(_farSurface, grade, cliff, x, z);
+                            AddSlopedRoad(_farSurface, surface, x, z);
                             AddRoadDetails(_farSurface, new Vector3(x0 + half, elevation, z0 + half), x, z, cell);
                         }
-                        else AddSoftGround(_farSurface, cliff, GetFarTileColor(cell, x, z), x, z);
+                        else AddSlopedGround(_farSurface, surface, GetFarTileColor(cell, x, z));
                     }
                     _farSurface.SetFrame(Vector3.zero, 0);
                     if (shaped) continue;
@@ -557,17 +555,12 @@ namespace XCity
         {
             if (!city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile bridge))
             {
-                RoadGrade grade = city.GetRoadGrade(cell.x, cell.y);
-                float u = position.x / cellSize - cell.x - 0.5f;
-                float v = position.z / cellSize - cell.y - 0.5f;
-                float surface = grade.Sample(u, v);
-                position.y += surface;
-                if (grade.IsRamp)
-                {
-                    const float step = 0.01f;
-                    float ahead = grade.Sample(u + tangent.x * step, v + tangent.z * step);
-                    tangent.y += (ahead - surface) / (cellSize * step);
-                }
+                TerrainPatch surface = WorldTerrain.GetSurface(cell.x, cell.y);
+                float u = Mathf.Clamp01(position.x / cellSize - cell.x);
+                float v = Mathf.Clamp01(position.z / cellSize - cell.y);
+                position.y += surface.Sample(u, v);
+                if (surface.IsSlope)
+                    tangent.y += (tangent.x * surface.DeltaX(v) + tangent.z * surface.DeltaZ(u)) / cellSize;
                 return;
             }
             bool xAxis = bridge.Axis == CitySimulation.BridgeAlongX;
@@ -651,7 +644,7 @@ namespace XCity
             if (waterN) CoastEdge(edge, edge, -edge, edge, Vector3.forward, x, z + 1);
             if (waterS) CoastEdge(-edge, -edge, edge, -edge, Vector3.back, x, z - 1);
 
-            if (!_infoView && landH < 0.22f)
+            if (!_infoView && landH < 0.22f && !WorldTerrain.IsSlope(x, z))
             {
                 float sandWidth = cellType == CellType.Empty ? _cellSize * 0.36f : 0.28f;
                 float shade = (BuildingMeshFactory.Hash(x, z, 601) & 15u) / 15f;
@@ -684,8 +677,10 @@ namespace XCity
                 Vector3 foamOuter = normal * 0.40f;
                 Vector3 slopeNormal = (normal + Vector3.up * 0.65f).normalized;
 
-                var topA = new Vector3(x0, bankTop, z0);
-                var topB = new Vector3(x1, bankTop, z1);
+                TerrainPatch surface = WorldTerrain.GetSurface(x, z);
+                float level = WorldTerrain.SurfaceY(x, z);
+                var topA = new Vector3(x0, bankTop + surface.Sample(x0 / _cellSize + 0.5f, z0 / _cellSize + 0.5f) - level, z0);
+                var topB = new Vector3(x1, bankTop + surface.Sample(x1 / _cellSize + 0.5f, z1 / _cellSize + 0.5f) - level, z1);
                 var botA = new Vector3(x0, waterline, z0) + bankOut;
                 var botB = new Vector3(x1, waterline, z1) + bankOut;
                 _surface.AddQuad(botA, botB, topB, topA, slopeNormal, sea ? bankColor : new Color32(78, 113, 60, 255));
@@ -720,112 +715,91 @@ namespace XCity
             }
         }
 
-        private void AddFarWaterBank(MeshBuilder mesh, int x, int z, RoadGrade grade)
+        private void AddFarWaterBank(MeshBuilder mesh, TerrainPatch surface, int x, int z)
         {
-            if (!WorldTerrain.IsSlope(x, z)) return;
-            Edge(x + 1, z, true, 0.5f, Vector3.right);
-            Edge(x - 1, z, true, -0.5f, Vector3.left);
-            Edge(x, z + 1, false, 0.5f, Vector3.forward);
-            Edge(x, z - 1, false, -0.5f, Vector3.back);
+            float center = surface.Sample(0.5f, 0.5f);
+            if (center == 0f && !surface.IsSlope) return;
+            Edge(x - 1, z, 0f, 1f, 0f, 0f, Vector3.left);
+            Edge(x + 1, z, 1f, 0f, 1f, 1f, Vector3.right);
+            Edge(x, z - 1, 0f, 0f, 1f, 0f, Vector3.back);
+            Edge(x, z + 1, 1f, 1f, 0f, 1f, Vector3.forward);
 
-            void Edge(int nx, int nz, bool alongZ, float fixedCoord, Vector3 normal)
+            void Edge(int nx, int nz, float u0, float v0, float u1, float v1, Vector3 normal)
             {
-                bool land = WorldTerrain.IsLand(nx, nz);
-                float lower = WorldTerrain.SurfaceY(nx, nz);
-                if (land || lower >= grade.Base) return;
-                RoadGrade other = land ? _city.GetRoadGrade(nx, nz) : new RoadGrade(lower + BridgeProfile.WaterSurface);
-                float offset = land ? 0.007f : 0f;
-                var stone = new Color32(108, 103, 91, 255);
-                float edge = alongZ ? (fixedCoord < 0 ? grade.West : grade.East) :
-                    (fixedCoord < 0 ? grade.South : grade.North);
-                if (edge == 0f)
-                    Wall(-0.5f, 0.5f);
-                else
-                {
-                    // Leave the connected road lane open; only its tapered shoulders retain rock.
-                    Wall(-0.5f, -RoadGrade.SharedEdge);
-                    Wall(RoadGrade.SharedEdge, 0.5f);
-                }
-
-                void Wall(float from, float to) =>
-                    mesh.AddQuad(Point(from, other, -fixedCoord), Point(to, other, -fixedCoord),
-                        Point(to, grade, fixedCoord), Point(from, grade, fixedCoord), normal, stone);
-
-                Vector3 Point(float at, RoadGrade surface, float sample) => alongZ
-                    ? new Vector3(fixedCoord * _cellSize, surface.Sample(sample, at) - grade.Base + offset, at * _cellSize)
-                    : new Vector3(at * _cellSize, surface.Sample(at, sample) - grade.Base + offset, fixedCoord * _cellSize);
+                if (WorldTerrain.IsLand(nx, nz)) return;
+                float waterTier = WorldTerrain.SurfaceY(nx, nz);
+                float a = surface.Sample(u0, v0), b = surface.Sample(u1, v1);
+                if (Mathf.Max(a, b) <= waterTier) return;
+                float bottom = waterTier + BridgeProfile.WaterSurface - center;
+                Vector3 topA = new Vector3((u0 - 0.5f) * _cellSize, a - center + 0.007f, (v0 - 0.5f) * _cellSize);
+                Vector3 topB = new Vector3((u1 - 0.5f) * _cellSize, b - center + 0.007f, (v1 - 0.5f) * _cellSize);
+                mesh.AddQuad(new Vector3(topA.x, bottom, topA.z), new Vector3(topB.x, bottom, topB.z),
+                    topB, topA, normal, BankEarth);
             }
         }
 
-        private void AddSoftGround(MeshBuilder mesh, SoftCliff cliff, Color32 grass, int x, int z)
+        private void AddSlopedGround(MeshBuilder mesh, TerrainPatch surface, Color32 grass)
         {
-            for (int ix = 0; ix < SoftCliff.GroundPatchCount; ix++)
-            for (int iz = 0; iz < SoftCliff.GroundPatchCount; iz++)
-            {
-                float x0 = SoftCliff.GroundBoundary(ix), x1 = SoftCliff.GroundBoundary(ix + 1);
-                float z0 = SoftCliff.GroundBoundary(iz), z1 = SoftCliff.GroundBoundary(iz + 1);
-                AddCliffPatch(mesh, SoftCliff.GroundFlip(ix, iz), Point(x0, z0), Point(x0, z1), Point(x1, z1), Point(x1, z0), grass, x, z);
-            }
-
-            Vector3 Point(float u, float v) => new Vector3(u * _cellSize, cliff.Vertex(u, v) + 0.007f, v * _cellSize);
+            float level = surface.Sample(0.5f, 0.5f);
+            for (int ix = 0; ix < 2; ix++)
+            for (int iz = 0; iz < 2; iz++)
+                AddTerrainQuad(mesh, surface, level, ix * 0.5f, iz * 0.5f,
+                    (ix + 1) * 0.5f, (iz + 1) * 0.5f, 0.007f, grass, true);
         }
 
-        private void AddCliffPatch(MeshBuilder mesh, bool flip, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
-            Color32 grass, int x, int z)
+        // Each slope surface fits the shared corners. The middle sample limits triangulation error
+        // on a twisted bilinear patch; the road and scenery sample the same height field.
+        private void AddSlopedRoad(MeshBuilder mesh, TerrainPatch surface, int x, int z)
         {
-            float steepness = 1f - Vector3.Cross(b - a, d - a).normalized.y;
-            float top = Mathf.Max(Mathf.Max(a.y, b.y), Mathf.Max(c.y, d.y));
-            Color32 ca = Shade(a), cb = Shade(b), cc = Shade(c), cd = Shade(d);
-            if (flip)
-                mesh.AddQuadColors(b, c, d, a, cb, cc, cd, ca, Vector3.up);
-            else
-                mesh.AddQuadColors(a, b, c, d, ca, cb, cc, cd, Vector3.up);
-
-            Color32 Shade(Vector3 p)
-            {
-                if (steepness <= 0.02f) return grass;
-                float n = WorldTerrain.Noise(x * 10 + 128 + Mathf.RoundToInt(p.x * 2f),
-                    z * 10 + 128 + Mathf.RoundToInt(p.z * 2f), 14);
-                var soil = Color32.Lerp(new Color32(139, 115, 86, 255), new Color32(114, 111, 101, 255), n);
-                var baseColor = Color32.Lerp(soil, new Color32(75, 68, 57, 255), Mathf.Clamp01((top - p.y) / 2f) * 0.46f);
-                return Color32.Lerp(grass, baseColor, Mathf.Clamp01(steepness * 4f) * (0.32f + 0.68f * Mathf.Clamp01((top - p.y) / 0.40f)));
-            }
-        }
-
-        private void AddRamp(MeshBuilder mesh, RoadGrade grade, SoftCliff cliff, int x, int z)
-        {
-            Color32 paving = _infoView ? GetInfoGroundColor(_city.GetCell(x, z), x, z) : Paving;
-            Color32 road = _infoView ? GetInfoRoadColor(x, z) : Asphalt;
+            CityCell cell = _city.GetCell(x, z);
+            float level = surface.Sample(0.5f, 0.5f);
             RoadConnections links = _city.Roads.GetConnections(x, z);
-            for (int ix = 0; ix < RoadGrade.PatchCount; ix++)
-            for (int iz = 0; iz < RoadGrade.PatchCount; iz++)
+            Color32 road = _infoView ? GetInfoRoadColor(x, z) : Asphalt;
+            Color32 verge = _infoView ? GetInfoGroundColor(cell, x, z) : GetNaturalGroundColor(x, z);
+            for (int ix = 0; ix < 4; ix++)
+            for (int iz = 0; iz < 4; iz++)
             {
-                bool inX = ix >= 1 && ix < RoadGrade.PatchCount - 1;
-                bool inZ = iz >= 1 && iz < RoadGrade.PatchCount - 1;
-                bool driveable = (inX && inZ) || (inZ && (links & (ix == 0 ? RoadConnections.West : RoadConnections.East)) != 0) ||
+                bool inX = ix == 1 || ix == 2, inZ = iz == 1 || iz == 2;
+                bool asphalt = (inX && inZ) ||
+                    (inZ && (links & (ix == 0 ? RoadConnections.West : RoadConnections.East)) != 0) ||
                     (inX && (links & (iz == 0 ? RoadConnections.South : RoadConnections.North)) != 0);
-                float x0 = RoadGrade.Boundary(ix), x1 = RoadGrade.Boundary(ix + 1);
-                float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
-                Vector3 a = Point(x0, z0), b = Point(x0, z1), c = Point(x1, z1), d = Point(x1, z0);
-                if (cliff.Active && !driveable)
-                    AddCliffPatch(mesh, RoadGrade.FlipDiagonal(ix, iz), a, b, c, d, GetNaturalGroundColor(x, z), x, z);
-                else if (RoadGrade.FlipDiagonal(ix, iz))
-                    mesh.AddQuad(b, c, d, a, Vector3.up, paving);
-                else
-                    mesh.AddQuad(a, b, c, d, Vector3.up, driveable ? road : paving);
+                AddTerrainQuad(mesh, surface, level, RoadBoundary(ix, cell.RoadType), RoadBoundary(iz, cell.RoadType),
+                    RoadBoundary(ix + 1, cell.RoadType), RoadBoundary(iz + 1, cell.RoadType),
+                    RoadY, asphalt ? road : verge, !asphalt);
             }
-
-            Vector3 Point(float u, float v) => new Vector3(u * _cellSize,
-                cliff.RoadY(grade, links, u, v) - grade.Base + RoadY, v * _cellSize);
         }
 
-        private float RoadHalfWidth(RoadType type) => _cellSize * (type == RoadType.Avenue ? 0.455f : 0.335f);
+        internal static float RoadBoundary(int index, RoadType type)
+        {
+            float lane = RoadHalfWidthRatio(type);
+            return index == 0 ? 0f : index == 1 ? 0.5f - lane : index == 2 ? 0.5f : index == 3 ? 0.5f + lane : 1f;
+        }
+
+        private void AddTerrainQuad(MeshBuilder mesh, TerrainPatch surface, float level,
+            float u0, float v0, float u1, float v1, float lift, Color32 color, bool tintSlope)
+        {
+            mesh.AddQuadColors(Point(u0, v0), Point(u0, v1), Point(u1, v1), Point(u1, v0),
+                Shade(u0, v0), Shade(u0, v1), Shade(u1, v1), Shade(u1, v0), Vector3.up);
+
+            Vector3 Point(float u, float v) => new Vector3((u - 0.5f) * _cellSize,
+                surface.Sample(u, v) - level + lift, (v - 0.5f) * _cellSize);
+            Color32 Shade(float u, float v)
+            {
+                if (!tintSlope) return color;
+                float dx = surface.DeltaX(v), dz = surface.DeltaZ(u);
+                float slope = Mathf.Sqrt(dx * dx + dz * dz) / _cellSize;
+                return Color32.Lerp(color, BankEarth, Mathf.Clamp01(slope * 1.8f));
+            }
+        }
+
+        private float RoadHalfWidth(RoadType type) => _cellSize * RoadHalfWidthRatio(type);
+        private static float RoadHalfWidthRatio(RoadType type) => type == RoadType.Avenue ? 0.455f : 0.335f;
 
         private void AddRoadDetails(MeshBuilder mesh, Vector3 center, int x, int z, CityCell cell, BridgeProfile? bridge = null)
         {
             if (_infoView || (cell.RoadType != RoadType.OneWay && cell.RoadType != RoadType.Avenue)) return;
             mesh.SetFrame(center, 0);
-            RoadGrade grade = bridge.HasValue ? default : _city.GetRoadGrade(x, z);
+            TerrainPatch surfacePatch = bridge.HasValue ? default : WorldTerrain.GetSurface(x, z);
             RoadConnections connections = _city.Roads.GetConnections(x, z);
             bool straight = connections == (RoadConnections.North | RoadConnections.South) ||
                 connections == (RoadConnections.East | RoadConnections.West);
@@ -868,7 +842,7 @@ namespace XCity
                     Vector3 local = forward * along + across * acrossLane;
                     float surface = bridge.HasValue
                         ? bridge.Value.HeightAt((bridge.Value.Axis == CitySimulation.BridgeAlongX ? local.x : local.z) + 0.5f)
-                        : grade.Sample(local.x, local.z) - grade.Base;
+                        : surfacePatch.Sample(local.x + 0.5f, local.z + 0.5f) - center.y;
                     return local * _cellSize + Vector3.up * (surface + PaintY + 0.012f);
                 }
 
@@ -883,7 +857,7 @@ namespace XCity
             }
         }
 
-        private void AddBoulevardTrees(Vector3 center, RoadGrade grade, int x, int z, BridgeProfile? bridge = null)
+        private void AddBoulevardTrees(Vector3 center, int x, int z, BridgeProfile? bridge = null)
         {
             RoadConnections links = _city.Roads.GetConnections(x, z);
             bool alongX = (links & CitySimulation.BridgeAlongX) != 0;
@@ -896,7 +870,7 @@ namespace XCity
                 float u = alongX ? 0f : side * 0.39f;
                 float v = alongX ? side * 0.39f : 0f;
                 TreeMeshFactory.AddStreetTree(_props, new Vector3(u * _cellSize,
-                    (bridge?.Middle ?? (grade.Sample(u, v) - grade.Base)) + CurbY, v * _cellSize), 0.48f, seed + (uint)(side + 1));
+                    (bridge?.Middle ?? (WorldTerrain.GetSurface(x, z).Sample(u + 0.5f, v + 0.5f) - center.y)) + CurbY, v * _cellSize), 0.48f, seed + (uint)(side + 1));
             }
         }
 
@@ -971,6 +945,11 @@ namespace XCity
             foreach (RoadConnections direction in Directions)
                 if ((links & direction) != 0) degree++;
             uint seed = BuildingMeshFactory.Hash(x, z, 412);
+            int turn = (int)((seed >> 8) & 3u);
+            float u = shoulder / _cellSize, v = u;
+            if (turn == 2 || turn == 3) u = -u;
+            if (turn == 1 || turn == 2) v = -v;
+            center.y = WorldTerrain.GetSurface(x, z).Sample(u + 0.5f, v + 0.5f);
             if (degree > 1 && seed % 5u == 0)
             {
                 _props.SetFrame(center, (int)((seed >> 8) & 3u));
@@ -1012,14 +991,14 @@ namespace XCity
             _props.AddBox(new Vector3(offset - 0.39f, 2.02f, offset), new Vector3(0.24f, 0.10f, 0.16f), lampWarm, metal);
         }
 
-        private void AddLot(CityCell cell, int x, int z, bool full, bool emitScenery, SoftCliff cliff)
+        private void AddLot(CityCell cell, int x, int z, bool full, bool emitScenery, TerrainPatch surface)
         {
             CellType type = cell.Type;
             float half = _cellSize * 0.5f;
             Color32 ground = _infoView
                 ? GetInfoGroundColor(cell, x, z)
                 : GetNaturalGroundColor(x, z);
-            if (cliff.Active) AddSoftGround(_surface, cliff, ground, x, z);
+            if (surface.IsSlope) AddSlopedGround(_surface, surface, ground);
             else Rect(_surface, -half, -half, half, half, 0.007f, ground);
 
             if (type != CellType.Empty)
@@ -1033,7 +1012,7 @@ namespace XCity
 
             if (!full) return;
             uint seed = BuildingMeshFactory.Hash(x, z, 921);
-            if (!cliff.Active && _city.Roads.HasRoadAccess(x, z) && CountAdjacentBuildings(x, z) >= 2)
+            if (!surface.IsSlope && _city.Roads.HasRoadAccess(x, z) && CountAdjacentBuildings(x, z) >= 2)
             {
                 AddPocketPark(half, seed, emitScenery);
                 return;
@@ -1047,19 +1026,22 @@ namespace XCity
                 float dx = ((seed >> 8 & 255u) / 255f - 0.5f) * half * 0.85f;
                 float dz = ((seed >> 16 & 255u) / 255f - 0.5f) * half * 0.85f;
                 float size = 0.78f + (seed >> 24 & 255u) / 255f * 0.44f;
-                TreeMeshFactory.AddWildTree(_props, new Vector3(dx, cliff.Sample(dx / _cellSize, dz / _cellSize) + 0.008f, dz), size, seed, grove);
+                TreeMeshFactory.AddWildTree(_props, new Vector3(dx, Height(dx, dz) + 0.008f, dz), size, seed, grove);
                 if (grove > 0.62f && seed % 3u == 0)
                 {
                     float sdx = dx * -0.55f;
                     float sdz = dz * -0.55f + (dz > 0 ? -0.67f : 0.67f);
-                    TreeMeshFactory.AddWildTree(_props, new Vector3(sdx, cliff.Sample(sdx / _cellSize, sdz / _cellSize) + 0.008f, sdz), size * 0.64f, seed ^ 0x9E3779B9u, grove + 0.12f);
+                    TreeMeshFactory.AddWildTree(_props, new Vector3(sdx, Height(sdx, sdz) + 0.008f, sdz), size * 0.64f, seed ^ 0x9E3779B9u, grove + 0.12f);
                 }
             }
             else if (seed % 19u == 0)
             {
                 var rock = new Color32(138, 149, 132, 255);
-                _props.AddCylinder(new Vector3(0.37f, cliff.Sample(0.37f / _cellSize, -0.44f / _cellSize) + 0.01f, -0.44f), 0.34f, 0.22f, 0.22f, 5, rock, true, Paving);
+                _props.AddCylinder(new Vector3(0.37f, Height(0.37f, -0.44f) + 0.01f, -0.44f), 0.34f, 0.22f, 0.22f, 5, rock, true, Paving);
             }
+
+            float Height(float localX, float localZ) =>
+                surface.Sample(localX / _cellSize + 0.5f, localZ / _cellSize + 0.5f) - surface.Sample(0.5f, 0.5f);
         }
 
         private int CountAdjacentBuildings(int x, int z)

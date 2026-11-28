@@ -14,6 +14,44 @@ namespace XCity.Tests
         private const int Size = CitySimulation.GridSize;
 
         [Fact]
+        public void ClassicCornersAreFlatAndEveryLandTileIsBuildable()
+        {
+            WorldTerrain.Use(MapSpec.Classic);
+            for (int x = 0; x <= Size; x++)
+            for (int z = 0; z <= Size; z++)
+            {
+                Assert.Equal(0f, WorldTerrain.CornerY(x, z));
+                Assert.False(WorldTerrain.IsSlope(x, z));
+            }
+        }
+
+        [Fact]
+        public void StraightTierEdgeUsesExactlyThreeContinuousSlopeTiles()
+        {
+            var tiers = new byte[Size * Size];
+            var water = new WaterKind[tiers.Length];
+            int edge = Size / 2;
+            for (int x = edge; x < Size; x++)
+            for (int z = 0; z < Size; z++)
+                tiers[x * Size + z] = 1;
+            float[] corners = MapGenerator.BuildSurfaceCorners(tiers, water);
+            float At(int x, int z) => corners[x * (Size + 1) + z];
+
+            Assert.Equal(0f, At(edge - 1, edge));
+            Assert.Equal(2f * 7f / 27f, At(edge, edge));
+            Assert.Equal(2f * 20f / 27f, At(edge + 1, edge));
+            Assert.Equal(2f, At(edge + 2, edge));
+
+            for (int x = edge - 2; x <= edge + 2; x++)
+            {
+                var tile = new TerrainPatch(At(x, edge), At(x + 1, edge), At(x, edge + 1), At(x + 1, edge + 1));
+                Assert.Equal(x >= edge - 1 && x < edge + 2, tile.IsSlope);
+                Assert.Equal(At(x + 1, edge), tile.Sample(1f, 0.5f));
+                Assert.Equal(At(x, edge), tile.Sample(0f, 0.5f));
+            }
+        }
+
+        [Fact]
         public void ClassicMap_MatchesTheOriginalFormulaEverywhere()
         {
             float[] grid = MapGenerator.Generate(MapSpec.Classic, out _, out var water, out _, out var tiers);
@@ -42,6 +80,11 @@ namespace XCity.Tests
                 Assert.Equal(water, waterAgain);
                 Assert.Equal(flow, flowAgain);
                 Assert.Equal(tiers, tiersAgain);
+                var corners = MapGenerator.BuildSurfaceCorners(tiers, water);
+                Assert.Equal(corners, MapGenerator.BuildSurfaceCorners(tiersAgain, waterAgain));
+                int stride = Size + 1;
+                int core = 0;
+                float startHeight = corners[start.X * stride + start.Z];
                 if (style == MapStyle.Continent) Assert.True(tiers.Distinct().Count() >= 2);
                 Assert.Contains(WaterKind.Lake, water);
                 Assert.Equal(start, startAgain);
@@ -56,6 +99,31 @@ namespace XCity.Tests
                     Assert.True(a[x * Size + z] >= 0f, $"{style} seed {seed}: water inside the start area at ({x}, {z})");
                     Assert.Equal(tiers[start.X * Size + start.Z], tiers[x * Size + z]);
                 }
+                for (int x = start.X - half; x <= start.X + half; x++)
+                for (int z = start.Z - half; z <= start.Z + half; z++)
+                    Assert.Equal(startHeight, corners[x * stride + z]);
+                for (int x = 2; x < Size - 1; x++)
+                for (int z = 2; z < Size - 1; z++)
+                {
+                    byte tier = tiers[x * Size + z];
+                    if (tier == 0 || water[x * Size + z] != WaterKind.Land) continue;
+                    bool uniform = true;
+                    for (int dx = -2; dx <= 1; dx++)
+                    for (int dz = -2; dz <= 1; dz++)
+                    {
+                        int i = (x + dx) * Size + z + dz;
+                        uniform &= water[i] == WaterKind.Land && tiers[i] == tier;
+                    }
+                    if (!uniform) continue;
+                    int c = x * stride + z;
+                    float flat = tier * WorldTerrain.TerraceStep;
+                    Assert.Equal(flat, corners[c]);
+                    Assert.Equal(flat, corners[c + 1]);
+                    Assert.Equal(flat, corners[c + stride]);
+                    Assert.Equal(flat, corners[c + stride + 1]);
+                    core++;
+                }
+                Assert.True(core > 0);
                 Assert.Contains(Enumerable.Range(start.X - half - 4, MapGenerator.StartArea + 8)
                     .SelectMany(x => Enumerable.Range(start.Z - half - 4, MapGenerator.StartArea + 8)
                         .Select(z => water[x * Size + z])), kind => kind is WaterKind.River or WaterKind.Lake);
@@ -96,6 +164,7 @@ namespace XCity.Tests
                     riverCells++;
                     Assert.True(WorldTerrain.IsFreshWater(x, z));
                     Assert.False(WorldTerrain.IsLand(x, z));
+                    Assert.False(WorldTerrain.GetSurface(x, z).IsSlope);
                     int current = x * Size + z;
                     for (int links = 0; ; links++)
                     {
@@ -237,6 +306,7 @@ namespace XCity.Tests
                 var edge = (from x in Enumerable.Range(1, Size - 2)
                             from z in Enumerable.Range(1, Size - 2)
                             where WorldTerrain.IsLand(x, z) && WorldTerrain.IsLand(x + 1, z) &&
+                                WorldTerrain.IsSlope(x, z) && WorldTerrain.IsSlope(x + 1, z) &&
                                 WorldTerrain.Tier(x, z) != WorldTerrain.Tier(x + 1, z)
                             select (x, z)).First();
                 var (ex, ez) = edge;
@@ -245,16 +315,17 @@ namespace XCity.Tests
                 Assert.False(city.TrySetCell(ex, ez, CellType.CivicService, BuildingModel.SmallPark));
                 Assert.True(city.TrySetCell(ex, ez, CellType.Road));
                 Assert.True(city.TrySetCell(ex + 1, ez, CellType.Road));
-                RoadGrade west = city.GetRoadGrade(ex, ez);
-                RoadGrade east = city.GetRoadGrade(ex + 1, ez);
-                Assert.True(west.IsRamp && east.IsRamp);
-                float joint = west.Sample(0.5f, 0f);
-                Assert.Equal(joint, east.Sample(-0.5f, 0f));
-                Assert.Equal(west.Sample(0.5f, 0.39f), east.Sample(-0.5f, 0.39f));
-                Assert.Equal(joint, city.RoadSurfaceY((ex + 1) * 4f, (ez + 0.5f) * 4f, 4f));
+                TerrainPatch west = WorldTerrain.GetSurface(ex, ez);
+                TerrainPatch east = WorldTerrain.GetSurface(ex + 1, ez);
+                Assert.True(west.IsSlope && east.IsSlope);
+                float joint = west.Sample(1f, 0.5f);
+                Assert.Equal(joint, east.Sample(0f, 0.5f), 5);
+                Assert.Equal(west.Sample(1f, 0.39f), east.Sample(0f, 0.39f), 5);
+                Assert.Equal(joint, city.RoadSurfaceY((ex + 1) * 4f, (ez + 0.5f) * 4f, 4f), 5);
 
-                // A save from before terraces with a house on what is now a slope drops that house on load.
+                // An older save with a house on what is now a slope drops that house on load.
                 CitySnapshot snapshot = city.CreateSnapshot();
+                snapshot.schemaVersion = 15;
                 int slot = System.Array.IndexOf(snapshot.cellIndices, CitySimulation.CellIndex(ex, ez));
                 snapshot.cells[slot] = new CityCell { Type = CellType.Residential };
                 Assert.True(CitySimulation.TryRestore(snapshot, out var restored));
