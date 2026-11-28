@@ -42,6 +42,7 @@ namespace XCity
             _root = new GameObject("BuildingChunks").transform;
             _root.SetParent(parent, false);
             _city.CellChanged += MarkDirty;
+            _city.RoadSegmentChanged += OnRoadSegmentChanged;
         }
 
         public void SetCameraPosition(Vector3 eye) => _eye = eye;
@@ -86,6 +87,18 @@ namespace XCity
             if (x < CitySimulation.GridSize - 1) AddChunk(x + 1, z);
             if (z > 0) AddChunk(x, z - 1);
             if (z < CitySimulation.GridSize - 1) AddChunk(x, z + 1);
+        }
+
+        private void OnRoadSegmentChanged(int id, RoadSegment segment, bool added)
+        {
+            foreach (var (x, z) in CitySimulation.RasterizeSegment(segment)) MarkDirty(x, z);
+        }
+
+        private void FaceCurve(MeshBuilder mesh, int start, int x, int z, CityCell cell, int quarterTurns, Vector3 center)
+        {
+            // A harbor faces water rather than its access road.
+            if (cell.Model == BuildingModel.Harbor || !_city.RoadCurves.TryFacing(x, z, out var facing)) return;
+            mesh.FitRoadFacing(start, center, quarterTurns, facing, _cellSize * 0.49f);
         }
 
         private void AddChunk(int x, int z)
@@ -184,10 +197,12 @@ namespace XCity
                         _waitingRendered[x, z] = false;
                         var centerLocal = new Vector3((x - startX + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z - startZ + 0.5f) * _cellSize);
                         int quarterTurns = PickQuarterTurns(_city, x, z);
+                        int firstVertex = meshBuilder.VertexCount;
                         if (full)
                             BuildingMeshFactory.Build(meshBuilder, x, z, cell, quarterTurns, centerLocal);
                         else
                             BuildingMeshFactory.BuildOverview(meshBuilder, cell, quarterTurns, centerLocal);
+                        FaceCurve(meshBuilder, firstVertex, x, z, cell, quarterTurns, centerLocal);
                     }
                     else if (full && IsZone(cell.Type) && cell.Level == 0 &&
                              _city.GetZoneStatus(x, z) == ZoneStatus.WaitingForDevelopment)
@@ -195,7 +210,9 @@ namespace XCity
                         _waitingRendered[x, z] = true;
                         int quarterTurns = PickQuarterTurns(_city, x, z);
                         Vector3 centerLocal = new Vector3((x - startX + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z - startZ + 0.5f) * _cellSize);
+                        int firstVertex = meshBuilder.VertexCount;
                         BuildingMeshFactory.BuildGroundwork(meshBuilder, x, z, cell.Type, quarterTurns, centerLocal);
+                        FaceCurve(meshBuilder, firstVertex, x, z, cell, quarterTurns, centerLocal);
                     }
                     else
                     {
@@ -268,7 +285,9 @@ namespace XCity
                                 (x - originX + 0.5f) * _cellSize,
                                 WorldTerrain.SurfaceY(x, z) + CityChunkRenderer.BuildingBase + height * 0.5f,
                                 (z - originZ + 0.5f) * _cellSize);
+                            int firstVertex = _farBuilder.VertexCount;
                             _farBuilder.AddSimpleBox(center, new Vector3(width, height, depth), walls, roof);
+                            FaceCurve(_farBuilder, firstVertex, x, z, cell, 0, center);
                         }
                     }
                 }
@@ -341,6 +360,7 @@ namespace XCity
         public void Dispose()
         {
             _city.CellChanged -= MarkDirty;
+            _city.RoadSegmentChanged -= OnRoadSegmentChanged;
             foreach (Mesh mesh in _meshes)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
             foreach (Mesh mesh in _farMeshes)

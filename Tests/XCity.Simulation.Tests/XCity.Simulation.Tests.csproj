@@ -13,6 +13,7 @@
     <Compile Include="../../Assets/Scripts/CitySimulation.LandValue.cs" Link="Simulation/CitySimulation.LandValue.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.RiverPollution.cs" Link="Simulation/CitySimulation.RiverPollution.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.RoadSegments.cs" Link="Simulation/CitySimulation.RoadSegments.cs" />
+    <Compile Include="../../Assets/Scripts/RoadCurveGeometry.cs" Link="Simulation/RoadCurveGeometry.cs" />
     <Compile Include="../../Assets/Scripts/UiText.cs" Link="Simulation/UiText.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Economy.cs" Link="Simulation/CitySimulation.Economy.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Budget.cs" Link="Simulation/CitySimulation.Budget.cs" />

@@ -5,7 +5,7 @@ using UnityEngine.Rendering;
 
 namespace XCity
 {
-    internal sealed class CityChunkRenderer : IDisposable
+    internal sealed partial class CityChunkRenderer : IDisposable
     {
         internal const float BuildingWidthRatio = 0.72f;
         internal const float BuildingBase = 0.1f;
@@ -77,6 +77,8 @@ namespace XCity
             _root.SetParent(parent, false);
             _shoreTexture = CreateShoreTexture();
             Shader.SetGlobalTexture("_XCityShoreTex", _shoreTexture);
+            _curves = _city.RoadCurves;
+            _city.RoadSegmentChanged += OnRoadSegmentChanged;
             _city.CellChanged += MarkDirty;
             _city.TerrainChanged += MarkTerrainDirty;
         }
@@ -151,6 +153,16 @@ namespace XCity
             else if (_infoView)
             {
                 MarkChunk(x, z, includeScenery: false);
+            }
+
+            if (roadTouch && _city.RoadSegments.Count != 0)
+            {
+                // A new grid arm may make an adjacent spline cell a junction, changing
+                // the ribbon mouth on the other side of that cell as well.
+                for (int dx = -2; dx <= 2; dx++)
+                for (int dz = -2; dz <= 2; dz++)
+                    if (Mathf.Abs(dx) + Mathf.Abs(dz) <= 2 && _city.SegmentAt(x + dx, z + dz) != 0)
+                        MarkChunk(x + dx, z + dz, includeScenery: true);
             }
 
             if (_infoView && (roadTouch || BuildingCatalog.IsPublicService(before) || BuildingCatalog.IsPublicService(after)))
@@ -272,6 +284,7 @@ namespace XCity
                     AddCoast(x, z, cell.Type);
                     if (cell.Type == CellType.Road)
                     {
+                        if (AddCurvedRoadTile(_surface, x, z, surface, center, cell, emitScenery)) continue;
                         if (surface.IsSlope)
                         {
                             AddSlopedRoad(_surface, surface, x, z);
@@ -345,6 +358,16 @@ namespace XCity
                     TerrainPatch surface = WorldTerrain.GetSurface(x, z);
                     bool shaped = surface.IsSlope;
                     if (WorldTerrain.IsLand(x, z)) AddFarWaterBank(_farSurface, surface, x, z);
+                    if (cell.Type == CellType.Road && (_city.SegmentAt(x, z) != 0 || _curves.IsJunction(x, z)))
+                    {
+                        _farSurface.SetFrame(Vector3.zero, 0);
+                        FlushSpan();
+                        var center = new Vector3(x0 + half, elevation, z0 + half);
+                        _farSurface.SetFrame(center, 0);
+                        AddCurvedRoadTile(_farSurface, x, z, surface, center, cell, false);
+                        _farSurface.SetFrame(Vector3.zero, 0);
+                        continue;
+                    }
                     if (shaped)
                     {
                         _farSurface.SetFrame(Vector3.zero, 0);
@@ -559,8 +582,18 @@ namespace XCity
             if (!city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile bridge))
             {
                 TerrainPatch surface = WorldTerrain.GetSurface(cell.x, cell.y);
-                float u = Mathf.Clamp01(position.x / cellSize - cell.x);
-                float v = Mathf.Clamp01(position.z / cellSize - cell.y);
+                float u = position.x / cellSize - cell.x;
+                float v = position.z / cellSize - cell.y;
+                if (city.SegmentAt(cell.x, cell.y) != 0 && (u < 0f || u > 1f || v < 0f || v > 1f))
+                {
+                    // A U-turn can end at a diagonal spline slice outside the raster cell.
+                    int x = Mathf.FloorToInt(position.x / cellSize), z = Mathf.FloorToInt(position.z / cellSize);
+                    surface = WorldTerrain.GetSurface(x, z);
+                    u = position.x / cellSize - x;
+                    v = position.z / cellSize - z;
+                }
+                u = Mathf.Clamp01(u);
+                v = Mathf.Clamp01(v);
                 position.y += surface.Sample(u, v);
                 if (surface.IsSlope)
                     tangent.y += (tangent.x * surface.DeltaX(v) + tangent.z * surface.DeltaZ(u)) / cellSize;
@@ -1313,6 +1346,7 @@ namespace XCity
 
         public void Dispose()
         {
+            _city.RoadSegmentChanged -= OnRoadSegmentChanged;
             _city.CellChanged -= MarkDirty;
             _city.TerrainChanged -= MarkTerrainDirty;
             foreach (Mesh mesh in _surfaces)

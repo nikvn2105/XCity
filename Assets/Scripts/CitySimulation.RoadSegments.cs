@@ -35,6 +35,8 @@ namespace XCity
         private readonly int[] _cellSegment = new int[GridSize * GridSize];
         private int _nextSegmentId = 1;
 
+        internal event Action<int, RoadSegment, bool> RoadSegmentChanged;
+
         public IReadOnlyDictionary<int, RoadSegment> RoadSegments => _segments;
 
         /// <summary>Segment drawn through this road cell, 0 for plain grid roads.</summary>
@@ -106,6 +108,7 @@ namespace XCity
                 owned.Add(index);
             }
             _segmentCells[id] = owned;
+            RoadSegmentChanged?.Invoke(id, segment, true);
             return id;
         }
 
@@ -115,9 +118,11 @@ namespace XCity
         {
             int id = _cellSegment[index];
             if (id == 0 || type == CellType.Road) return;
+            RoadSegment segment = _segments[id];
             _segments.Remove(id);
             foreach (int cell in _segmentCells[id]) _cellSegment[cell] = 0;
             _segmentCells.Remove(id);
+            RoadSegmentChanged?.Invoke(id, segment, false);
         }
 
         private void WriteRoadSegments(CitySnapshot snapshot)

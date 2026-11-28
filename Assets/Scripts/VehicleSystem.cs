@@ -130,11 +130,7 @@ namespace XCity
 
         private Vector3 ComputeWorldPos(Vehicle v)
         {
-            ComputeCurve(v, out Vector3 p0, out Vector3 p1, out Vector3 p2);
-            float u = 1f - v.T;
-            Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
-            Vector3 tangent = 2f * u * (p1 - p0) + 2f * v.T * (p2 - p1);
-            CityChunkRenderer.ApplyRoadGrade(_city, v.Cell, _cellSize, ref pos, ref tangent);
+            SampleVehicle(v, out Vector3 pos, out _);
             return pos;
         }
 
@@ -238,7 +234,8 @@ namespace XCity
                 Vehicle v = _vehicles[i];
                 bool fireActive = _emergency != null && _emergency.HasActiveFire;
                 bool responding = fireActive && v.Template.IsFireTruck;
-                float desiredSpeed = v.InDir != v.OutDir ? v.Speed * 0.78f : v.Speed;
+                bool followsCurve = TryCurvedMotion(v, out var motion);
+                float desiredSpeed = !followsCurve && v.InDir != v.OutDir ? v.Speed * 0.78f : v.Speed;
                 if (responding)
                 {
                     int fireDist = Mathf.Abs(v.Cell.x - _emergency.FireCell.x) + Mathf.Abs(v.Cell.y - _emergency.FireCell.y);
@@ -310,8 +307,8 @@ namespace XCity
                     blocker = other;
                 }
 
-                ComputeCurve(v, out Vector3 p0, out Vector3 p1, out Vector3 p2);
-                float length = (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f;
+                float length = followsCurve ? Mathf.Max(0.1f, motion.Length) : GridPathLength(v);
+                bool hasCurve = _city.SegmentAt(v.Cell.x, v.Cell.y) != 0;
                 float distMoved = v.CurrentSpeed * dt;
                 v.T += distMoved / Mathf.Max(length, 0.1f);
                 v.WheelAngle = Mathf.Repeat(v.WheelAngle + (distMoved / Mathf.Max(0.08f, v.Template.WheelRadius)) * Mathf.Rad2Deg, 360f);
@@ -351,6 +348,8 @@ namespace XCity
                     }
                     v.OutDir = v.Route != null ? v.Route[v.RouteStep] : ChooseOutDir(v.Cell.x, v.Cell.y, v.InDir, v.Template.IsFireTruck);
                     if (v.OutDir < 0) RemoveVehicleAt(i);
+                    else if (hasCurve || _city.SegmentAt(v.Cell.x, v.Cell.y) != 0)
+                        v.T = Mathf.Min(1f, v.T * length / VehiclePathLength(v));
                 }
             }
 
@@ -572,18 +571,57 @@ namespace XCity
             return VehicleLaneRules.SpawnHeading(exit, (int)links, degree);
         }
 
+        private float LaneOffset(Vehicle vehicle, Vector2Int neighbor) =>
+            IsAvenue(vehicle.Cell) && IsAvenue(neighbor) ? AvenueLane(vehicle) : 0.17f;
+
+        private static float AvenueLane(Vehicle vehicle) => vehicle.Phase < Mathf.PI ? 0.10f : 0.29f;
+
+        private bool IsAvenue(Vector2Int cell) => (uint)cell.x < CitySimulation.GridSize &&
+            (uint)cell.y < CitySimulation.GridSize && _city.GetCell(cell.x, cell.y).RoadType == RoadType.Avenue;
+
+        private bool TryCurvedMotion(Vehicle vehicle, out CurvedRoadMotion motion)
+        {
+            motion = default;
+            var cell = vehicle.Cell;
+            return _city.SegmentAt(cell.x, cell.y) != 0 &&
+                CurvedRoadMotion.TryCreate(_city, cell, vehicle.InDir, vehicle.OutDir,
+                    IsAvenue(cell) ? AvenueLane(vehicle) : 0.17f, LaneOffset(vehicle, cell - Dir2D[vehicle.InDir]),
+                    LaneOffset(vehicle, cell + Dir2D[vehicle.OutDir]), _cellSize, out motion);
+        }
+
+        private float VehiclePathLength(Vehicle vehicle)
+        {
+            return TryCurvedMotion(vehicle, out var motion) ? Mathf.Max(0.1f, motion.Length) : GridPathLength(vehicle);
+        }
+
+        private float GridPathLength(Vehicle vehicle)
+        {
+            ComputeCurve(vehicle, out Vector3 p0, out Vector3 p1, out Vector3 p2);
+            return Mathf.Max(0.1f, (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f);
+        }
+
+        private void SampleVehicle(Vehicle vehicle, out Vector3 pos, out Vector3 tangent)
+        {
+            if (TryCurvedMotion(vehicle, out var motion))
+            {
+                motion.Evaluate(vehicle.T, 0.05f, out pos, out tangent);
+                return;
+            }
+            ComputeCurve(vehicle, out Vector3 p0, out Vector3 p1, out Vector3 p2);
+            float t = vehicle.T, u = 1f - t;
+            pos = u * u * p0 + 2f * u * t * p1 + t * t * p2;
+            tangent = 2f * u * (p1 - p0) + 2f * t * (p2 - p1);
+            if (tangent.sqrMagnitude < 1e-6f) tangent = p2 - p0;
+            CityChunkRenderer.ApplyRoadGrade(_city, vehicle.Cell, _cellSize, ref pos, ref tangent);
+        }
+
         private void ComputeCurve(Vehicle vehicle, out Vector3 p0, out Vector3 p1, out Vector3 p2)
         {
             Vector2Int cell = vehicle.Cell;
             int inDir = vehicle.InDir, outDir = vehicle.OutDir;
             float half = _cellSize * 0.5f;
-            float enterOffset = 0.17f * _cellSize, exitOffset = enterOffset;
-            if (_city.GetCell(cell.x, cell.y).RoadType == RoadType.Avenue)
-            {
-                float avenueOffset = (vehicle.Phase < Mathf.PI ? 0.10f : 0.29f) * _cellSize;
-                if (IsAvenue(cell - Dir2D[inDir])) enterOffset = avenueOffset;
-                if (IsAvenue(cell + Dir2D[outDir])) exitOffset = avenueOffset;
-            }
+            float enterOffset = LaneOffset(vehicle, cell - Dir2D[inDir]) * _cellSize;
+            float exitOffset = LaneOffset(vehicle, cell + Dir2D[outDir]) * _cellSize;
             Vector3 center = new Vector3((cell.x + 0.5f) * _cellSize, 0.05f, (cell.y + 0.5f) * _cellSize);
 
             p0 = center - Dir3D[inDir] * half + Right3D[inDir] * enterOffset;
@@ -595,9 +633,11 @@ namespace XCity
                 p1 = center;
             else
                 p1 = center + Right3D[inDir] * enterOffset + Right3D[outDir] * exitOffset;
+            CurvedRoadMotion.MatchNeighbor(_city, cell, inDir, true, enterOffset / _cellSize, _cellSize, ref p0);
+            CurvedRoadMotion.MatchNeighbor(_city, cell, outDir, false, exitOffset / _cellSize, _cellSize, ref p2);
 
-            bool IsAvenue(Vector2Int point) => (uint)point.x < CitySimulation.GridSize &&
-                (uint)point.y < CitySimulation.GridSize && _city.GetCell(point.x, point.y).RoadType == RoadType.Avenue;
+
+
         }
 
         private void RenderVehicles()
@@ -660,13 +700,7 @@ namespace XCity
             {
                 Vehicle v = _vehicles[i];
                 VehicleTemplate tpl = v.Template;
-                ComputeCurve(v, out Vector3 p0, out Vector3 p1, out Vector3 p2);
-
-                float u = 1f - v.T;
-                Vector3 pos = u * u * p0 + 2f * u * v.T * p1 + v.T * v.T * p2;
-                Vector3 tangent = 2f * u * (p1 - p0) + 2f * v.T * (p2 - p1);
-                if (tangent.sqrMagnitude < 1e-6f) tangent = p2 - p0;
-                CityChunkRenderer.ApplyRoadGrade(_city, v.Cell, _cellSize, ref pos, ref tangent);
+                SampleVehicle(v, out Vector3 pos, out Vector3 tangent);
                 Quaternion pathRot = tangent.sqrMagnitude > 1e-6f
                     ? Quaternion.LookRotation(tangent.normalized, Vector3.up)
                     : Quaternion.identity;
