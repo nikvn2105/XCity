@@ -11,17 +11,21 @@ fixes) and Codex (heavy implementation), in parallel worktrees.
   every phase must keep Low/Medium graphics comfortable on an A13: 30 FPS minimum, no long frame
   hitches, no thermal throttling in a 20-minute session.
 
+## Later additions
+- Android APK build workflow (Codex, 28/11): not yet part of the target devices; decide whether Android gets performance targets like iPhone 11.
+- Post Processing branch `codex/post-processing` is ready but held for phase 7.
+
 ## Out of scope until further notice
 Mods, multiplayer, asset editor, PC-size maps, App Store submission.
 
 ## Phases
 
-| # | Phase | Main content | Size | Done when |
-|---|---|---|---|---|
-| 0 | Lock the foundation (in progress) | Merge drag preview + camera gestures, test on iPhone, fix bugs | S | No crash, no major bug on device |
-| 1 | UI system | Compact info bar, code-drawn tool icons, building cards (cost, upkeep, radius, lock), toasts separate from hints, one theme and type scale, 44 pt touch targets, **multiple save slots**, finished tutorial | M | A first-time player plays 15 minutes unaided |
-| 2 | Gameplay depth | **Per-zone taxes**, budget panel and service funding, **land value**, **low/medium/high density zoning**, parks, garbage, economy balance (`docs/economy-report.md`) | L | A 10,000-person city has real choices and trade-offs |
-| 3 | Terrain and maps | Height, hills, **rivers and ponds**, several maps to choose from for a new game | L | Each map plays differently |
+| # | Phase | Main content | Size | Done when | Status (28/11) |
+|---|---|---|---|---|---|
+| 0 | Lock the foundation | Merge drag preview + camera gestures, test on iPhone, fix bugs | S | No crash, no major bug on device | Done |
+| 1 | UI system | Compact info bar, tool icons, building cards (cost, upkeep, radius, lock), toasts separate from hints, one theme and type scale, 44 pt touch targets, **multiple save slots**, finished tutorial | M | A first-time player plays 15 minutes unaided | Done; logo, app icon and opening animation added. Needs a first-time play test |
+| 2 | Gameplay depth | **Per-zone taxes**, budget panel and service funding, **land value**, **low/medium/high density zoning**, parks, garbage, economy balance (`docs/economy-report.md`) | L | A 10,000-person city has real choices and trade-offs | Done in simulation (a scripted city reaches 10,900 people solvent); needs play testing on device |
+| 3 | Terrain and maps (next) | Height, hills, **rivers and ponds**, several maps to choose from for a new game | L | Each map plays differently |
 | 4 | Roads, generation 2 | **Curved roads**, road types (small, large, highway, one-way), intersections. Roads move from the cell grid to a graph; the grid stays for zoning. Save migration | XL | Curved roads can be drawn and zoned along; old saves still load |
 | 5 | Real traffic | Congestion slows trips, **buses** with lines and stops, then metro or train, cargo | L | Traffic jams are a problem the player solves |
 | 6 | Districts and policies | Districts, per-district policies, statistics and graphs, citizen age and education | M | A 50,000+ city is manageable |
