@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="sky" x2="0.28" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#342044"/>
+      <stop offset=".49" stop-color="#c96362"/>
+      <stop offset=".67" stop-color="#f0a477"/>
+      <stop offset="1" stop-color="#29274d"/>
+    </linearGradient>
+    <linearGradient id="sun" x2="0" y2="1">
+      <stop stop-color="#ffe9a9"/><stop offset="1" stop-color="#f6a36d"/>
+    </linearGradient>
+    <linearGradient id="earth" x2="0" y2="1">
+      <stop stop-color="#aa6652"/><stop offset="1" stop-color="#513449"/>
+    </linearGradient>
+    <linearGradient id="water" x2="0" y2="1">
+      <stop stop-color="#3ccfcf"/><stop offset="1" stop-color="#277377"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="1" y2=".8">
+      <stop stop-color="#17203b" stop-opacity=".49"/><stop offset="1" stop-color="#22213c" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="halo">
+      <stop stop-color="#ffd491" stop-opacity=".65"/><stop offset="1" stop-color="#ffd491" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="cast">
+      <stop stop-color="#271d39" stop-opacity=".68"/><stop offset="1" stop-color="#271d39" stop-opacity="0"/>
+    </radialGradient>
+    <clipPath id="land"><path d="M512 267 917 487 512 707 107 487Z"/></clipPath>
+
+    <g id="house">
+      <path fill="#236e61" d="M-45-69 4-40V8L-45-20Z"/>
+      <path fill="#4cd07d" d="M4-40 52-67v48L4 8Z"/>
+      <path fill="#e5e3ad" d="M-50-67-34-112 18-84 7-37Z"/>
+      <path fill="#90e6a0" d="M-34-112 13-137 65-109 18-84Z"/>
+      <path fill="#39795f" d="M7-37 18-84 65-109 53-65Z"/>
+      <path fill="#17494d" d="M15-31 30-40v19L15-12ZM38-44l12-7v17l-12 7Z"/>
+      <path fill="#9ff4c0" d="M-36-54l19 11v15l-19-11Z"/>
+    </g>
+    <g id="tower">
+      <path fill="#23557b" d="M-51-178 0-150V0l-51-28Z"/>
+      <path fill="#4aa3f5" d="M0-150 51-179v151L0 0Z"/>
+      <path fill="#a9e4ff" d="M-51-178 0-207 51-179 0-150Z"/>
+      <path fill="#37769d" d="M-27-179 0-194 28-179 0-164Z"/>
+      <path fill="none" stroke="#124368" stroke-width="5" opacity=".63" d="m0-119 51-29M0-88l51-29M0-57l51-29M0-26l51-29M17-160v150M34-169v150"/>
+      <path fill="none" stroke="#4b91bb" stroke-width="5" opacity=".72" d="m-50-146 50 28m-50 4 50 28m-50 4 50 28m-50 4 50 28"/>
+      <path fill="#ffdd9d" d="m20-79 11-6v7l-11 6Zm18 20 10-6v7l-10 6Z"/>
+    </g>
+    <g id="tree">
+      <path fill="#326356" d="M-4-18h8V3h-8Z"/>
+      <ellipse cx="5" cy="-23" rx="24" ry="19" fill="#22956f"/>
+      <circle cx="0" cy="-31" r="20" fill="#4cd07d"/>
+      <circle cx="-6" cy="-36" r="12" fill="#8adf86"/>
+    </g>
+  </defs>
+
+  <path fill="url(#sky)" d="M0 0h1024v1024H0z"/>
+  <ellipse cx="505" cy="330" rx="452" ry="353" fill="url(#halo)"/>
+  <circle cx="548" cy="318" r="188" fill="url(#sun)"/>
+  <path fill="#f2a98f" opacity=".38" d="M98 346h230l-40 8H68zm579-103h212l-40 8H638zM80 405h152l-35 6H54zM814 370h142l-33 8H782z"/>
+  <ellipse cx="522" cy="817" rx="382" ry="112" fill="url(#cast)"/>
+
+  <!-- The two exposed faces of the island. -->
+  <path fill="url(#earth)" d="M107 487 512 707 512 836 127 628Z"/>
+  <path fill="#524053" d="M512 707 917 487 891 626 512 836Z"/>
+  <path fill="#c4775a" d="M114 516 512 734v21L118 540Z"/>
+  <path fill="#755064" d="M512 734 913 516l-4 21-397 218Z"/>
+  <path fill="#533647" d="M122 568 512 780v18L125 589Z"/>
+  <path fill="#382e46" d="M512 780 903 567l-5 22-386 209Z"/>
+  <path fill="#724853" d="M145 623l107 58 42 6 124 77 94 44v28L127 628Z"/>
+  <path fill="#434753" opacity=".55" d="M512 807 642 733l86-37 54-44 109-40v14L512 836Z"/>
+
+  <path fill="#84bd7b" d="M512 267 917 487 512 707 107 487Z"/>
+  <g clip-path="url(#land)">
+    <path fill="#699ba2" d="M512 267 732 387 510 504 294 388Z"/>
+    <path fill="#78b976" d="M107 487 303 380 512 495 302 606Z"/>
+    <path fill="#be9d68" d="M718 377 917 487 755 575 512 495Z"/>
+    <path fill="#5da475" d="M303 602 512 477 736 590 512 707Z"/>
+    <path fill="#9ad384" d="M107 487 304 378l8 5-191 105 391 210 2 9Z"/>
+    <path fill="url(#water)" d="M690 570l91-67 75-14 74 16-215 127Z"/>
+    <path fill="none" stroke="#80e5ce" stroke-width="5" d="m758 551 37-23 41-8m-105 66 42-26m25 22 57-31"/>
+    <path fill="none" stroke="#e8d69d" stroke-width="7" d="m690 570 91-67 75-14 74 16"/>
+    <path d="M308 377 728 605M716 375 295 605" stroke="#e4c5a5" stroke-width="63"/>
+    <path d="M308 377 728 605M716 375 295 605" stroke="#27364b" stroke-width="51"/>
+    <path d="M308 377 461 461m102 55 165 89m-12-230-153 84m-102 55-166 91" fill="none" stroke="#ffd798" stroke-width="5.5" stroke-dasharray="20 11"/>
+    <path fill="#fff0cb" opacity=".9" d="m453 500 7-4 25 14-8 4Zm14-8 8-4 25 14-8 4Zm14-8 8-4 25 14-8 4Zm66 3 8-4 23 13-8 4Zm15-8 7-4 24 13-8 4Z"/>
+
+    <!-- Long shadows share a single direction away from the sun. -->
+    <path fill="url(#shade)" d="M425 373 534 390 667 497 597 512 486 422 395 415ZM285 453l140 79-35 29-150-56ZM655 490l140 95-46 22-132-70ZM490 604l97 54-65 28-95-61Z"/>
+    <path fill="#8cc888" d="m388 593 122-60 106 56-122 67Z"/>
+    <path fill="none" stroke="#d6d596" stroke-width="10" d="m418 604 87-48 83 44m-112 31 82-47"/>
+
+    <!-- Jetty over the inlet. -->
+    <path fill="#4b5360" d="m778 535 67 36v17l-67-36Z"/>
+    <path fill="#f1b478" d="m766 535 19-11 76 41-19 11Z"/>
+    <path fill="#ae725a" d="m841 573 20-9v12l-20 10Zm-54-46 5-3 74 40-5 3Z"/>
+    <path stroke="#d89670" stroke-width="3.5" d="m788 546 20-10m-7 18 20-10m-7 18 20-10m-6 18 20-10"/>
+    <path fill="#ffd694" d="m829 596 12-6 24 12-12 8Z"/>
+  </g>
+
+  <!-- Back, side and foreground landmarks. -->
+  <use x="473" y="413" xlink:href="#tower"/>
+  <use transform="translate(551 426) scale(.79 .72)" xlink:href="#tower"/>
+  <use transform="translate(268 493) scale(.94)" xlink:href="#house"/>
+  <use transform="translate(325 527) scale(.94)" xlink:href="#house"/>
+
+  <g>
+    <path fill="#a25848" d="m621 450 88 48v50l-88-48Z"/>
+    <path fill="#f0b13a" d="m709 498 97-53v48l-97 55Z"/>
+    <path fill="#ffd775" d="m621 450 96-52 89 47-97 53Z"/>
+    <path fill="#e38544" d="m630 443 26-38 30 9-18 47Zm33 18 26-38 30 9-18 47Zm33 18 26-38 30 9-18 47Z"/>
+    <path fill="#ffe28b" d="m656 405 51-28 30 9-51 28Zm33 18 51-28 30 9-51 28Zm33 18 51-28 30 9-51 28Z"/>
+    <path fill="#a55546" d="m743 437 20 11v-93l-20-11Z"/>
+    <path fill="#ec9262" d="m763 448 16-9v-93l-16 9Z"/>
+    <path fill="#ffe2aa" d="m743 344 16-9 20 11-16 9Zm0 20 20 11 16-9v12l-16 9-20-11Z"/>
+    <path fill="#3b3547" d="m746 344 13-7 16 9-12 7Zm-22 161 23-12v28l-23 13Zm32-18 23-12v28l-23 13Z"/>
+    <path fill="none" stroke="#ffa867" stroke-width="5" opacity=".8" d="m728 508 15-8m17-10 15-8"/>
+  </g>
+
+  <use x="510" y="579" xlink:href="#tree"/>
+  <use x="456" y="612" xlink:href="#tree"/>
+  <use x="548" y="607" xlink:href="#tree"/>
+  <use x="496" y="640" xlink:href="#tree"/>
+  <use transform="translate(223 496) scale(.61)" xlink:href="#tree"/>
+</svg>
