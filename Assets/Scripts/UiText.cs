@@ -89,6 +89,12 @@ namespace XCity
         public static string RoadCapacity(int capacity) => $"Sức chứa: {capacity:N0} xe/ô";
         public const string RoadTapStart = "Chạm điểm đầu rồi điểm cuối, hoặc kéo để vẽ đường";
         public const string RoadTapEnd = "Chạm điểm cuối để xây · Chạm lại điểm đầu để dừng";
+        public const string CurveTapStart = "Đường cong: chạm điểm đầu";
+        public const string CurveTapBend = "Chạm điểm uốn · Chạm lại điểm đầu để dừng";
+        public const string CurveTapEnd = "Chạm điểm cuối để xây đường cong";
+        public const string CurveFailed = "Không xây được: đường cong qua nước, quá dài hoặc thiếu tiền";
+        public const string CurveModeOn = "Cong";
+        public const string CurveModeOff = "Thẳng";
 
         // Top bar.
         public const string PerTick = "/lượt";

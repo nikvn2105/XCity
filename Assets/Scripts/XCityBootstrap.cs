@@ -325,6 +325,7 @@ namespace XCity
             SetupWorldMap();
             SetupUXToolbar(_topButtons);
             SetupRotateButtons();
+            SetupCurveToggle();
             SetupInfoView();
             SetupTutorial();
 
@@ -1445,6 +1446,7 @@ namespace XCity
         {
             RefreshBuildBar();
             RefreshInfoViewHUD();
+            RefreshCurveToggle();
 
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;

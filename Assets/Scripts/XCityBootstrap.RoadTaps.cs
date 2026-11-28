@@ -1,10 +1,11 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace XCity
 {
     // Road by taps: the first tap sets a start point, each next tap builds an L-shaped road to it
     // (longer side first) and becomes the new start. Tapping the start again stops. Dragging still
-    // draws freehand roads.
+    // draws freehand roads. Curve mode (phase 4c): start, bend, end — three taps build one curved segment.
     public partial class XCityBootstrap
     {
         private Vector2Int? _roadAnchor;
@@ -13,6 +14,11 @@ namespace XCity
         private readonly Mesh[] _roadGuideMeshes = new Mesh[2];
         private readonly MeshBuilder _roadGuideBuilder = new MeshBuilder();
         private const int RoadGuideCells = 60;
+        private bool _curveRoads;
+        private Vector2Int? _roadBend;
+        private MeshRenderer _roadBendMarker;
+        private Button _curveToggle;
+        private Text _curveToggleText;
 
         private void HandleRoadTap(Vector2Int cell)
         {
@@ -26,6 +32,27 @@ namespace XCity
             if (cell == start)
             {
                 ClearRoadAnchor();
+                return;
+            }
+
+            if (_curveRoads)
+            {
+                if (!_roadBend.HasValue)
+                {
+                    SetRoadBend(cell);
+                    return;
+                }
+                Vector2Int bend = _roadBend.Value;
+                var segment = new RoadSegment(start.x + 0.5f, start.y + 0.5f, bend.x + 0.5f, bend.y + 0.5f,
+                    cell.x + 0.5f, cell.y + 0.5f, _activeRoadType);
+                if (_city.TryBuildSegment(segment, out _))
+                {
+                    _audio?.PlayBuild();
+                    _cityDirty = true;
+                    SetRoadAnchor(cell);
+                }
+                else ShowToast(UiText.CurveFailed, UiTheme.Danger, UiIcon.Warning);
+                RefreshHUD();
                 return;
             }
 
@@ -102,14 +129,69 @@ namespace XCity
             _roadGuides[axis].gameObject.SetActive(true);
         }
 
+        private void SetRoadBend(Vector2Int cell)
+        {
+            if (_roadBendMarker == null)
+            {
+                CreateStreetMarker();
+                _roadBendMarker = _roadMarkers[_roadMarkers.Count - 1];
+                _roadMarkers.RemoveAt(_roadMarkers.Count - 1);
+                _roadBendMarker.name = "RoadBend";
+                _roadBendMarker.transform.localScale = new Vector3(CellSize * 0.35f, 0.9f, CellSize * 0.35f);
+            }
+            _roadBend = cell;
+            _roadBendMarker.transform.position = new Vector3((cell.x + 0.5f) * CellSize, PreviewRise(cell) + 0.45f, (cell.y + 0.5f) * CellSize);
+            _roadBendMarker.gameObject.SetActive(true);
+        }
+
+        private void ClearRoadBend()
+        {
+            _roadBend = null;
+            if (_roadBendMarker != null) _roadBendMarker.gameObject.SetActive(false);
+        }
+
+        // Small "Cong"/"Thẳng" switch above the rotate buttons, shown only with the road tool.
+        private void SetupCurveToggle()
+        {
+            var panel = CreatePanel(_safeAreaRoot, "CurveToggle", new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-16f - 2 * UiTheme.MinTouch - 18f, BuildBarTop + 40f + UiTheme.MinTouch + 12f),
+                new Vector2(-16f, BuildBarTop + 40f + 2 * UiTheme.MinTouch + 24f), UiTheme.Panel);
+            UiTheme.Float(panel.GetComponent<Image>());
+            var row = panel.AddComponent<HorizontalLayoutGroup>();
+            row.padding = new RectOffset(6, 6, 6, 6);
+            row.childControlWidth = row.childControlHeight = true;
+            row.childForceExpandWidth = row.childForceExpandHeight = true;
+            _curveToggle = CreateIconButton(panel.transform, "", "CurveMode");
+            _curveToggleText = _curveToggle.GetComponentInChildren<Text>();
+            _curveToggleText.font = UiTheme.Font;
+            _curveToggleText.fontSize = UiTheme.SmallSize;
+            _curveToggle.onClick.AddListener(() =>
+            {
+                _curveRoads = !_curveRoads;
+                ClearRoadAnchor();
+                RefreshHUD();
+            });
+        }
+
+        private void RefreshCurveToggle()
+        {
+            if (_curveToggle == null) return;
+            _curveToggle.transform.parent.gameObject.SetActive(_activeTool == BuildTool.Road);
+            _curveToggleText.text = _curveRoads ? UiText.CurveModeOn : UiText.CurveModeOff;
+            ((Image)_curveToggle.targetGraphic).color = _curveRoads ? UiTheme.Active : UiTheme.Button;
+        }
+
         private void ClearRoadAnchor()
         {
             _roadAnchor = null;
+            ClearRoadBend();
             if (_roadAnchorMarker != null) _roadAnchorMarker.gameObject.SetActive(false);
             foreach (MeshRenderer guide in _roadGuides)
                 if (guide != null) guide.gameObject.SetActive(false);
         }
 
-        private string RoadHint => _roadAnchor.HasValue ? UiText.RoadTapEnd : UiText.RoadTapStart;
+        private string RoadHint => _curveRoads
+            ? (!_roadAnchor.HasValue ? UiText.CurveTapStart : !_roadBend.HasValue ? UiText.CurveTapBend : UiText.CurveTapEnd)
+            : _roadAnchor.HasValue ? UiText.RoadTapEnd : UiText.RoadTapStart;
     }
 }
