@@ -167,7 +167,7 @@ jobs:
               if [ "$conclusion" = success ]; then echo "used=mac" >> "$GITHUB_OUTPUT"; exit 0; fi
               echo "::warning::GitHub Mac job $conclusion; falling back to Codemagic"; break
             fi
-            if [ "$status" = queued ] || [ "$status" = waiting ] || [ "$status" = pending ]; then
+            if [ -z "$status" ] || [ "$status" = queued ] || [ "$status" = waiting ] || [ "$status" = pending ]; then
               queued_for=$((queued_for + 30))
               if [ $queued_for -ge 1200 ]; then echo "::warning::GitHub Mac queue stuck for 20 min; falling back to Codemagic"; break; fi
             fi
