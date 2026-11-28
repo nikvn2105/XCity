@@ -50,11 +50,15 @@ namespace XCity
         public static bool operator !=(MapSpec a, MapSpec b) => !a.Equals(b);
     }
 
+    public enum WaterKind : byte { Land, Sea, River, Lake }
+
     internal static class WorldTerrain
     {
         private const int Size = CitySimulation.GridSize;
         // Signed land height per cell (>= 0 is land), computed once per map.
-        private static float[] _height = MapGenerator.Generate(MapSpec.Classic, out _start);
+        private static WaterKind[] _water;
+        private static int[] _downstream;
+        private static float[] _height = MapGenerator.Generate(MapSpec.Classic, out _start, out _water, out _downstream);
         private static (int X, int Z) _start;
         private static readonly object Gate = new object();
 
@@ -72,7 +76,7 @@ namespace XCity
             lock (Gate)
             {
                 if (spec == Current) return;
-                _height = MapGenerator.Generate(spec, out _start);
+                _height = MapGenerator.Generate(spec, out _start, out _water, out _downstream);
                 Current = spec;
             }
         }
@@ -82,6 +86,16 @@ namespace XCity
 
         public static float LandHeight(int x, int z) =>
             x >= 0 && z >= 0 && x < Size && z < Size ? _height[x * Size + z] : -1f;
+
+        public static WaterKind WaterKind(int x, int z) =>
+            x >= 0 && z >= 0 && x < Size && z < Size ? _water[x * Size + z] : XCity.WaterKind.Sea;
+
+        public static bool IsFreshWater(int x, int z) =>
+            WaterKind(x, z) is XCity.WaterKind.River or XCity.WaterKind.Lake;
+
+        // The next river cell, packed as x * GridSize + z; -1 at the mouth or off the river.
+        public static int Downstream(int x, int z) =>
+            WaterKind(x, z) == XCity.WaterKind.River ? _downstream[x * Size + z] : -1;
 
         // The original archipelago formula, kept exact so seed-less saves load unchanged.
         internal static float ClassicHeight(int x, int z)

@@ -18,6 +18,7 @@
     <Compile Include="../../Assets/Scripts/RoadGraph.cs" Link="Simulation/RoadGraph.cs" />
     <Compile Include="../../Assets/Scripts/WorldTerrain.cs" Link="Simulation/WorldTerrain.cs" />
     <Compile Include="../../Assets/Scripts/MapGenerator.cs" Link="Simulation/MapGenerator.cs" />
+    <Compile Include="../../Assets/Scripts/MapGenerator.Water.cs" Link="Simulation/MapGenerator.Water.cs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />

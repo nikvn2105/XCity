@@ -565,7 +565,7 @@ namespace XCity
                         }
                         else if (BuildingCatalog.NeedsShore(_activeBuildingModel))
                         {
-                            _shoreWarningUntil = _city.CanPlaceHarbor(cell.x, cell.y)
+                            _shoreWarningUntil = _city.CanPlaceWaterfront(cell.x, cell.y, _activeBuildingModel)
                                 ? 0f : Time.unscaledTime + ShoreWarningDuration;
                         }
                     }
@@ -1164,12 +1164,13 @@ namespace XCity
             };
         }
 
-        private string GetShoreHint() =>
-            Time.unscaledTime < _shoreWarningUntil
-                ? "Không giáp nước — chọn ô sát bờ"
-                : _activeBuildingModel == BuildingModel.Harbor
-                    ? "Đặt sát mép nước (một cạnh giáp biển)"
-                    : "Đặt sát mép nước, cạnh đường có điện";
+        private string GetShoreHint()
+        {
+            bool harbor = _activeBuildingModel == BuildingModel.Harbor;
+            if (Time.unscaledTime < _shoreWarningUntil)
+                return harbor ? "Cảng cần một ô biển liền kề" : "Không giáp nước — chọn ô sát bờ";
+            return harbor ? "Đặt sát mép nước (một cạnh giáp biển)" : "Đặt sát mép nước, cạnh đường có điện";
+        }
 
         private GameObject _bankruptPanel;
 

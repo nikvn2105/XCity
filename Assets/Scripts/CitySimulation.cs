@@ -419,7 +419,7 @@ namespace XCity
                 return true;
             }
 
-            if (!IsBuildable(x, z) || (BuildingCatalog.NeedsShore(model) && !CanPlaceHarbor(x, z))) return false;
+            if (!IsBuildable(x, z) || (BuildingCatalog.NeedsShore(model) && !CanPlaceWaterfront(x, z, model))) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;
@@ -686,15 +686,16 @@ namespace XCity
                 if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
             }
 
-            var strandedHarbors = new List<int>();
+            var strandedWaterfront = new List<int>();
             foreach (int index in restored._occupied)
             {
                 int x = index / GridSize;
                 int z = index % GridSize;
-                if (BuildingCatalog.NeedsShore(restored._cells[x, z].Model) && !restored.CanPlaceHarbor(x, z))
-                    strandedHarbors.Add(index);
+                BuildingModel model = restored._cells[x, z].Model;
+                if (BuildingCatalog.NeedsShore(model) && !restored.CanPlaceWaterfront(x, z, model))
+                    strandedWaterfront.Add(index);
             }
-            foreach (int index in strandedHarbors)
+            foreach (int index in strandedWaterfront)
             {
                 restored._cells[index / GridSize, index % GridSize] = default;
                 restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);

@@ -492,7 +492,7 @@ namespace XCity
         private bool IsNavigableWater(int x, int z)
         {
             if (x < 0 || z < 0 || x >= CitySimulation.GridSize || z >= CitySimulation.GridSize) return false;
-            if (WorldTerrain.IsLand(x, z)) return false;
+            if (WorldTerrain.WaterKind(x, z) != WaterKind.Sea) return false;
             if (_city.TryGetBridgeProfile(x, z, out BridgeProfile bp))
                 return bp.HasNavigationOpening;
             return true;
@@ -515,7 +515,7 @@ namespace XCity
                     int nz = z + dz;
                     if (nx < 0 || nz < 0 || nx >= CitySimulation.GridSize || nz >= CitySimulation.GridSize)
                         return false;
-                    if (WorldTerrain.IsLand(nx, nz)) return false;
+                    if (WorldTerrain.WaterKind(nx, nz) != WaterKind.Sea) return false;
                     if (_city.TryGetBridgeProfile(nx, nz, out BridgeProfile bp) && !bp.HasNavigationOpening)
                         return false;
                 }
