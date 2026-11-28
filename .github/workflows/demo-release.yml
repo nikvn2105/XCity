@@ -242,8 +242,14 @@ jobs:
           apk="out/XCity-${GITHUB_REF_NAME}.apk"
           ipa="out/XCity-${GITHUB_REF_NAME}-unsigned.ipa"
           test -f "$apk" && test -f "$ipa"
-          gh release create "$GITHUB_REF_NAME" "$apk" "$ipa" --prerelease \
-            --title "XCity $GITHUB_REF_NAME" --notes "IPA cần được ký (ví dụ xsign) trước khi cài lên iPhone."
+          # A release made by hand on GitHub (draft or published) is reused instead of failing.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$apk" "$ipa" --clobber
+            gh release edit "$GITHUB_REF_NAME" --draft=false --prerelease --title "XCity $GITHUB_REF_NAME"
+          else
+            gh release create "$GITHUB_REF_NAME" "$apk" "$ipa" --prerelease \
+              --title "XCity $GITHUB_REF_NAME" --notes "IPA cần được ký (ví dụ xsign) trước khi cài lên iPhone."
+          fi
       # Releases made with this token do not trigger other workflows, so add the buttons here.
       - name: Add the download buttons
         env:
