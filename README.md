@@ -1,4 +1,7 @@
 # XCity
+
+[![Tải bản demo mới nhất](https://img.shields.io/github/v/release/nikvn2105/XCity?include_prereleases&label=T%E1%BA%A3i%20demo&style=for-the-badge&color=1565C0)](https://github.com/nikvn2105/XCity/releases)
+
 XCity — 100% Code-Driven Unity City-Builder for iOS (Cities: Skylines style)
 
 ## Bản demo cộng đồng
