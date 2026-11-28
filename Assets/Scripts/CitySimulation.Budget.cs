@@ -35,8 +35,13 @@ namespace XCity
         public const int DefaultFunding = 100;
         public const int MinFunding = 50;
         public const int MaxFunding = 150;
-        // Each point of tax above or below the default moves that zone's demand by this much.
+        // Raising tax hurts more than cutting it helps (balance report, phase 2e): per point above the
+        // default demand drops 4 and resident happiness 2; per point below, demand rises 3 and happiness 1.
         internal const int DemandPerTaxPoint = 3;
+        internal const int DemandPerTaxPointAbove = 4;
+        internal const int HappinessPerTaxPointAbove = 2;
+        // Above this rate each extra point only brings in half as much.
+        internal const int FullYieldTaxRate = 12;
 
         private readonly int[] _taxRates = { DefaultTaxRate, DefaultTaxRate, DefaultTaxRate };
         private readonly int[] _funding = { DefaultFunding, DefaultFunding, DefaultFunding, DefaultFunding };
@@ -57,10 +62,27 @@ namespace XCity
             _coverageDirty = true; // funding changes service reach
         }
 
-        internal int TaxDemandShift(TaxZone zone) => (DefaultTaxRate - _taxRates[(int)zone]) * DemandPerTaxPoint;
+        internal int TaxDemandShift(TaxZone zone)
+        {
+            int delta = DefaultTaxRate - _taxRates[(int)zone];
+            return delta * (delta < 0 ? DemandPerTaxPointAbove : DemandPerTaxPoint);
+        }
 
-        // Residents feel their own tax: one happiness point per point away from the default.
-        internal int TaxHappinessShift => DefaultTaxRate - _taxRates[(int)TaxZone.Residential];
+        internal int TaxHappinessShift
+        {
+            get
+            {
+                int delta = DefaultTaxRate - _taxRates[(int)TaxZone.Residential];
+                return delta < 0 ? delta * HappinessPerTaxPointAbove : delta;
+            }
+        }
+
+        // Rate actually collected, in tenths of the base: diminishing above FullYieldTaxRate.
+        internal int EffectiveTaxRate(TaxZone zone)
+        {
+            int rate = _taxRates[(int)zone];
+            return rate <= FullYieldTaxRate ? rate * 2 : FullYieldTaxRate * 2 + (rate - FullYieldTaxRate);
+        }
 
         internal static BudgetService? ServiceOf(BuildingModel model) => ServiceCatalog.Get(model).Coverage switch
         {

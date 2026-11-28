@@ -41,7 +41,9 @@ namespace XCity.Tests
 
             Assert.Equal(0, none.LastBudget.ResidentialTax);
             Assert.True(normal.LastBudget.ResidentialTax > 0);
+            // 20% collects like 16%: the points above 12% bring in half each.
             Assert.True(high.LastBudget.ResidentialTax > normal.LastBudget.ResidentialTax * 3 / 2);
+            Assert.True(high.LastBudget.ResidentialTax < normal.LastBudget.ResidentialTax * 17 / 10);
             Assert.Equal(high.LastBudget.Income, high.LastTaxIncome);
         }
 
@@ -60,11 +62,12 @@ namespace XCity.Tests
             Assert.True(high.ResidentialDemand <= normal.ResidentialDemand);
             Assert.True(high.CommercialDemand < normal.CommercialDemand);
             Assert.True(high.IndustrialDemand <= normal.IndustrialDemand);
-            Assert.Equal(-(CitySimulation.MaxTaxRate - CitySimulation.DefaultTaxRate) * CitySimulation.DemandPerTaxPoint,
+            Assert.Equal(-(CitySimulation.MaxTaxRate - CitySimulation.DefaultTaxRate) * CitySimulation.DemandPerTaxPointAbove,
                 high.TaxDemandShift(TaxZone.Residential));
             var home = city.OccupiedIndices.Select(i => (X: i / CitySimulation.GridSize, Z: i % CitySimulation.GridSize))
                 .First(p => city.GetCell(p.X, p.Z).Type == CellType.Residential);
-            Assert.Equal(normal.GetHappiness(home.X, home.Z) - (CitySimulation.MaxTaxRate - CitySimulation.DefaultTaxRate),
+            Assert.Equal(normal.GetHappiness(home.X, home.Z) -
+                (CitySimulation.MaxTaxRate - CitySimulation.DefaultTaxRate) * CitySimulation.HappinessPerTaxPointAbove,
                 high.GetHappiness(home.X, home.Z));
         }
 

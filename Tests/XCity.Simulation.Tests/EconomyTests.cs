@@ -239,18 +239,20 @@ namespace XCity.Tests
         [Fact]
         public void WaterPump_ServesAtMostItsCapacity()
         {
-            var (x, z) = FindShore(30, 0);
+            var (x, z) = FindShore(50, 0);
             var city = new CitySimulation();
-            Assert.True(city.TryApplyBuild(Enumerable.Range(z, 30).Select(dz => (x, dz)), CellType.Road));
+            Assert.True(city.TryApplyBuild(Enumerable.Range(z, 50).Select(dz => (x, dz)), CellType.Road));
             Assert.True(city.TrySetCell(x + 1, z, CellType.CivicService, BuildingModel.WaterPump));
             Assert.True(city.TrySetCell(x - 1, z, CellType.PowerPlant));
-            Assert.True(city.TrySetCell(x + 1, z + 29, CellType.PowerPlant));
-            for (int dz = 1; dz < 29; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
-            for (int dz = 1; dz < 30; dz++) Assert.True(city.TrySetCell(x - 1, z + dz, CellType.Residential));
+            Assert.True(city.TrySetCell(x + 1, z + 49, CellType.PowerPlant));
+            for (int dz = 1; dz < 49; dz++) Assert.True(city.TrySetCell(x + 1, z + dz, CellType.Residential));
+            // Enough plants that power never limits the pump: only water capacity should.
+            for (int dz = 1; dz < 50; dz++)
+                Assert.True(city.TrySetCell(x - 1, z + dz, dz % 10 == 0 ? CellType.PowerPlant : CellType.Residential));
 
             // Every building on the network draws water, the pump included.
-            int served = Enumerable.Range(0, 30).Count(dz => city.HasWater(x + 1, z + dz)) +
-                Enumerable.Range(0, 30).Count(dz => city.HasWater(x - 1, z + dz));
+            int served = Enumerable.Range(0, 50).Count(dz => city.HasWater(x + 1, z + dz)) +
+                Enumerable.Range(0, 50).Count(dz => city.HasWater(x - 1, z + dz));
             Assert.Equal(CitySimulation.UtilityCapacity, served);
         }
 

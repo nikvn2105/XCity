@@ -26,6 +26,7 @@ namespace XCity.Tests
         [InlineData(Scenario.Growth, 8)]
         [InlineData(Scenario.Growth, 10)]
         [InlineData(Scenario.Growth, 13)]
+        [InlineData(Scenario.Growth, 16)]
         public void ReportEconomyOverTwoThousandTurns(Scenario scenario, int taxRate = CitySimulation.DefaultTaxRate)
         {
             var plan = new CityPlan();

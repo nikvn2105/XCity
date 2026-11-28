@@ -194,3 +194,17 @@ Chi lượt cuối (thuế 10%): đường 696, điện 1.500, giáo dục 40, y
 - Kéo chi giữa game lên: rác (2d) sẽ thêm một khoản; cân nhắc phí đường tăng theo quy mô, phí dịch vụ lớn hơn, hoặc giảm thuế gốc mỗi dân.
 - Nước: tăng sức chứa trạm (40 → 80 ô) hoặc giảm giá, để lên cấp nhà không bị nghẽn.
 - Mở rộng khung đo lên ~2.500 lô với nhiều bờ nước để kiểm chứng mốc 10.000 dân.
+
+### Đã làm trong 2e (đợt 1, trước khi có rác)
+
+- Thuế trên 10%: mỗi điểm trừ nhu cầu **4** và hài lòng dân **2**; dưới 10% giữ +3 nhu cầu / +1 hài lòng. Phần thuế trên 12% chỉ thu được một nửa (20% thu như 16%).
+- Trạm bơm và xử lý nước thải phục vụ **80** ô (trước 40).
+
+| Thuế | 500 dân | 2.000 dân | Dân lượt 1.000 | Ròng/tick lượt 1.000 | Ghi chú |
+|---:|---:|---:|---:|---:|---|
+| 8% | lượt 90 | lượt 503 | 3.416 | +3.044 | |
+| 10% | lượt 92 | lượt 536 | 3.660 | +5.004 | nhà lên cấp 2–3: 14 → 29 |
+| 13% | lượt 145 | — | 636 | +921 | chững lại nhưng vẫn lãi |
+| 16% | — | — | 156 | +9 | đứng yên, không phá sản |
+
+Còn lại cho đợt 2 (sau khi gộp rác 2d): chi giữa game vẫn thấp so với thu (lãi ~5.000/tick ở ~3.700 dân); đo lại khi rác thêm chi phí rồi mới chỉnh phí đường/dịch vụ hoặc thuế gốc.

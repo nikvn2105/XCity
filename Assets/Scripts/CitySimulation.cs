@@ -205,7 +205,7 @@ namespace XCity
         internal const float PowerPlantHeight = 3.2f;
         // 11: tax rates and service funding; 12: parks.
         internal const int CurrentSchemaVersion = 12;
-        public const int UtilityCapacity = 40;
+        public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
         private readonly bool[] _watered = new bool[GridSize * GridSize];
@@ -567,9 +567,9 @@ namespace XCity
             UpdateDemand(jobs, commercialJobs, happiness);
             // This tick's commute staffs and loads the networks for the next one (roads cannot change mid-tick).
             PublishTraffic(networkWorkers, networkJobs);
-            budget.ResidentialTax = residentialBase * _taxRates[(int)TaxZone.Residential] / DefaultTaxRate;
-            budget.CommercialTax = commercialBase * _taxRates[(int)TaxZone.Commercial] / DefaultTaxRate;
-            budget.IndustrialTax = industrialBase * _taxRates[(int)TaxZone.Industrial] / DefaultTaxRate;
+            budget.ResidentialTax = residentialBase * EffectiveTaxRate(TaxZone.Residential) / (2 * DefaultTaxRate);
+            budget.CommercialTax = commercialBase * EffectiveTaxRate(TaxZone.Commercial) / (2 * DefaultTaxRate);
+            budget.IndustrialTax = industrialBase * EffectiveTaxRate(TaxZone.Industrial) / (2 * DefaultTaxRate);
             int taxIncome = budget.Income;
             LastTaxIncome = taxIncome;
             int repayment = Math.Min(LoanBalance, LoanRepayment);
