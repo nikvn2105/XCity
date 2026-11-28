@@ -705,14 +705,11 @@ namespace XCity
                 for (int z = minZ; z <= maxZ; z++)
                 {
                     RoadGrade grade = _city.GetRoadGrade(x, z);
-                    if (WorldTerrain.IsSlope(x, z))
-                    {
-                        TestWall(x - 1, z, -0.5f, alongZ: true);
-                        TestWall(x + 1, z, 0.5f, alongZ: true);
-                        TestWall(x, z - 1, -0.5f, alongZ: false);
-                        TestWall(x, z + 1, 0.5f, alongZ: false);
-                    }
-                    if (!grade.IsRamp) continue;
+                    if (!WorldTerrain.IsLand(x, z)) continue;
+                    var cliff = new SoftCliff(x, z);
+                    if (!grade.IsRamp && !cliff.Active) continue;
+                    bool road = _city.GetCell(x, z).Type == CellType.Road;
+                    RoadConnections links = road ? _city.Roads.GetConnections(x, z) : RoadConnections.None;
                     for (int ix = 0; ix < RoadGrade.PatchCount; ix++)
                     for (int iz = 0; iz < RoadGrade.PatchCount; iz++)
                     {
@@ -732,27 +729,8 @@ namespace XCity
                     }
 
                     Vector3 Point(float u, float v) => new Vector3((x + 0.5f + u) * CellSize,
-                        grade.Sample(u, v) + CityChunkRenderer.RoadY, (z + 0.5f + v) * CellSize);
-
-                    void TestWall(int nx, int nz, float edge, bool alongZ)
-                    {
-                        float lower = WorldTerrain.SurfaceY(nx, nz);
-                        if (lower >= grade.Base || !WorldTerrain.IsLand(nx, nz)) return;
-                        float direction = alongZ ? ray.direction.x : ray.direction.z;
-                        if (Mathf.Abs(direction) < 0.0001f) return;
-                        float plane = ((alongZ ? x : z) + 0.5f + edge) * CellSize;
-                        float distance = (plane - (alongZ ? ray.origin.x : ray.origin.z)) / direction;
-                        if (distance < 0f || distance >= closest) return;
-                        Vector3 hit = ray.GetPoint(distance);
-                        float offset = (alongZ ? hit.z : hit.x) / CellSize - (alongZ ? z : x) - 0.5f;
-                        if (Mathf.Abs(offset) > 0.5f) return;
-                        RoadGrade neighbor = _city.GetRoadGrade(nx, nz);
-                        float bottom = alongZ ? neighbor.Sample(-edge, offset) : neighbor.Sample(offset, -edge);
-                        float top = alongZ ? grade.Sample(edge, offset) : grade.Sample(offset, edge);
-                        if (hit.y < bottom || hit.y > top) return;
-                        closest = distance;
-                        selected = new Vector2Int(x, z);
-                    }
+                        road ? cliff.RoadY(grade, links, u, v) + CityChunkRenderer.RoadY
+                            : grade.Base + cliff.Vertex(u, v) + 0.007f, (z + 0.5f + v) * CellSize);
 
                     void TestTriangle(Vector3 a, Vector3 b, Vector3 c)
                     {
@@ -782,7 +760,7 @@ namespace XCity
                 Vector3 hit = ray.GetPoint(distance);
                 int x = Mathf.FloorToInt(hit.x / CellSize), z = Mathf.FloorToInt(hit.z / CellSize);
                 if ((uint)x >= GridSize || (uint)z >= GridSize || WorldTerrain.Tier(x, z) != tier ||
-                    WorldTerrain.IsLand(x, z) != land || (land && _city.GetRoadGrade(x, z).IsRamp)) return;
+                    WorldTerrain.IsLand(x, z) != land || (land && (_city.GetRoadGrade(x, z).IsRamp || new SoftCliff(x, z).Active))) return;
                 closest = distance;
                 selected = new Vector2Int(x, z);
             }
@@ -944,8 +922,7 @@ namespace XCity
             if (_city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile deck)) return deck.Middle;
             if (!WorldTerrain.IsLand(cell.x, cell.y))
                 return WorldTerrain.SurfaceY(cell.x, cell.y) + BridgeProfile.WaterSurface;
-            RoadGrade grade = _city.GetRoadGrade(cell.x, cell.y);
-            return grade.Base + Mathf.Max(0f, Mathf.Max(Mathf.Max(grade.North, grade.South), Mathf.Max(grade.East, grade.West)));
+            return WorldTerrain.SurfaceY(cell.x, cell.y);
         }
 
         private void UpdateBridgePreview(Vector2Int pointer)
@@ -1013,6 +990,10 @@ namespace XCity
             if (index == _roadMarkers.Count) CreateStreetMarker();
             MeshRenderer preview = _roadMarkers[index];
             if (preview.sharedMaterial != material) preview.sharedMaterial = material;
+            bool onGrade = _activeTool != BuildTool.Bridge &&
+                (new SoftCliff(cell.x, cell.y).Active || _city.GetRoadGrade(cell.x, cell.y).IsRamp);
+            float markerWidth = CellSize * (onGrade ? 0.40f : 0.98f);
+            preview.transform.localScale = new Vector3(markerWidth, 0.06f, markerWidth);
             preview.transform.position = new Vector3((cell.x + 0.5f) * CellSize, 0.15f + rise, (cell.y + 0.5f) * CellSize);
             preview.gameObject.SetActive(true);
         }
@@ -1199,7 +1180,10 @@ namespace XCity
             void SetCorner(int index, float u, float v)
             {
                 float grade = raised ? profile.HeightAt(profile.Axis == CitySimulation.BridgeAlongX ? u : v)
-                    : _city.GetRoadGrade(point.x, point.y).Sample(u - 0.5f, v - 0.5f);
+                    : cell.Type == CellType.Road
+                        ? new SoftCliff(point.x, point.y).RoadY(_city.GetRoadGrade(point.x, point.y),
+                            _city.Roads.GetConnections(point.x, point.y), u - 0.5f, v - 0.5f)
+                        : WorldTerrain.SurfaceY(point.x, point.y) + new SoftCliff(point.x, point.y).Sample(u - 0.5f, v - 0.5f);
                 _inspectionOutline.SetPosition(index, new Vector3(x + u * CellSize, grade + 0.18f, z + v * CellSize));
             }
             _inspectionOutline.enabled = true;
