@@ -141,3 +141,4 @@ crashlytics-build.properties
 /Tests/**/[Bb]in/
 /Tests/**/[Oo]bj/
 !/Tests/**/*.csproj
+Assets/Resources/XCityBuild.txt*

@@ -281,6 +281,14 @@ namespace XCity
             topBar.offsetMin = new Vector2(16, -12 - TopBarHeight);
             topBar.offsetMax = new Vector2(-16, -12);
             SetupTopBar(topBar, font);
+            // Build and map in a corner, so every screenshot says what it runs.
+            var buildInfo = CreateLabel(_safeAreaRoot, font, 13, UiTheme.TextMuted, TextAnchor.LowerRight);
+            var infoRect = buildInfo.rectTransform;
+            infoRect.anchorMin = infoRect.anchorMax = infoRect.pivot = new Vector2(1f, 0f);
+            infoRect.anchoredPosition = new Vector2(-8f, 4f);
+            var build = Resources.Load<TextAsset>("XCityBuild");
+            buildInfo.text = $"{(build != null ? build.text.Trim() : "dev")} · " +
+                $"{UiText.MapStyleName((int)WorldTerrain.Current.Style)} #{WorldTerrain.Current.Seed}";
             // A small pill under the top bar. While a fire burns, tapping it flies the camera there.
             var hintPill = CreatePanel(_safeAreaRoot, "HintPill", new Vector2(0.32f, 1), new Vector2(0.68f, 1),
                 new Vector2(0, -110), new Vector2(0, -78), UiTheme.Panel);
