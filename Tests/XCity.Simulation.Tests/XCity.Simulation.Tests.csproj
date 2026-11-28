@@ -10,6 +10,7 @@
     <Compile Include="../../Assets/Scripts/CitySave.cs" Link="Simulation/CitySave.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.cs" Link="Simulation/CitySimulation.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Economy.cs" Link="Simulation/CitySimulation.Economy.cs" />
+    <Compile Include="../../Assets/Scripts/CitySimulation.Budget.cs" Link="Simulation/CitySimulation.Budget.cs" />
     <Compile Include="../../Assets/Scripts/CitySimulation.Waterfront.cs" Link="Simulation/CitySimulation.Waterfront.cs" />
     <Compile Include="../../Assets/Scripts/RoadGraph.cs" Link="Simulation/RoadGraph.cs" />
     <Compile Include="../../Assets/Scripts/WorldTerrain.cs" Link="Simulation/WorldTerrain.cs" />

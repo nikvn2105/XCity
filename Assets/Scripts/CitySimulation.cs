@@ -152,6 +152,8 @@ namespace XCity
         public int loanBalance;
         public int ticksInDebt;
         public int peakPopulation;
+        public int[] taxRates;
+        public int[] serviceFunding;
         public CityCell[] cells;
         public int[] cellIndices;
     }
@@ -172,7 +174,7 @@ namespace XCity
         internal const int PowerPlantUpkeep = 60;
         internal const int RoadUpkeep = 2;
         internal const float PowerPlantHeight = 3.2f;
-        internal const int CurrentSchemaVersion = 10;
+        internal const int CurrentSchemaVersion = 11;
         public const int UtilityCapacity = 40;
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -433,7 +435,9 @@ namespace XCity
             int[] networkJobs = _tickJobs;
             int population = 0;
             int netIncome = 0;
-            int taxIncome = 0;
+            var budget = new BudgetReport();
+            // Untaxed base per zone, before the rate is applied (10% = the base amount).
+            int residentialBase = 0, commercialBase = 0, industrialBase = 0;
             int jobs = 0;
             int commercialJobs = 0;
             long happiness = 0;
@@ -445,18 +449,29 @@ namespace XCity
                 if (cell.Type == CellType.Road)
                 {
                     netIncome -= RoadUpkeep;
+                    budget.Roads += RoadUpkeep;
                     continue;
                 }
 
                 if (cell.Type == CellType.PowerPlant)
                 {
                     netIncome -= PowerPlantUpkeep;
+                    budget.Power += PowerPlantUpkeep;
                     continue;
                 }
 
                 if (BuildingCatalog.IsPublicService(cell.Type))
                 {
-                    netIncome -= BuildingCatalog.ServiceUpkeep(cell.Model);
+                    int upkeep = FundedUpkeep(cell.Model, BuildingCatalog.ServiceUpkeep(cell.Model));
+                    netIncome -= upkeep;
+                    switch (ServiceOf(cell.Model))
+                    {
+                        case BudgetService.Education: budget.Education += upkeep; break;
+                        case BudgetService.Health: budget.Health += upkeep; break;
+                        case BudgetService.Police: budget.Police += upkeep; break;
+                        case BudgetService.Fire: budget.Fire += upkeep; break;
+                        default: budget.Other += upkeep; break;
+                    }
                     int serviceJobs = OperatingJobs(x, z, cell);
                     jobs += serviceJobs;
                     networkJobs[_cellComponent[index]] += serviceJobs;
@@ -503,8 +518,11 @@ namespace XCity
                     if (cell.Type == CellType.Commercial) commercialJobs += cellJobs;
                 }
                 if (operating)
-                    taxIncome += cell.Type == CellType.Residential ? BuildingCatalog.Residents(cell) * 5 / 4 :
-                        15 * cell.Level * EmploymentAt(x, z) / 100;
+                {
+                    if (cell.Type == CellType.Residential) residentialBase += BuildingCatalog.Residents(cell) * 5 / 4;
+                    else if (cell.Type == CellType.Commercial) commercialBase += 15 * cell.Level * EmploymentAt(x, z) / 100;
+                    else industrialBase += 15 * cell.Level * EmploymentAt(x, z) / 100;
+                }
             }
 
             Population = population;
@@ -512,8 +530,14 @@ namespace XCity
             UpdateDemand(jobs, commercialJobs, happiness);
             // This tick's commute staffs and loads the networks for the next one (roads cannot change mid-tick).
             PublishTraffic(networkWorkers, networkJobs);
+            budget.ResidentialTax = residentialBase * _taxRates[(int)TaxZone.Residential] / DefaultTaxRate;
+            budget.CommercialTax = commercialBase * _taxRates[(int)TaxZone.Commercial] / DefaultTaxRate;
+            budget.IndustrialTax = industrialBase * _taxRates[(int)TaxZone.Industrial] / DefaultTaxRate;
+            int taxIncome = budget.Income;
             LastTaxIncome = taxIncome;
             int repayment = Math.Min(LoanBalance, LoanRepayment);
+            budget.Loan = repayment;
+            LastBudget = budget;
             LoanBalance -= repayment;
             LastNetIncome = taxIncome + netIncome - repayment;
             Money += LastNetIncome;
@@ -534,6 +558,8 @@ namespace XCity
                 loanBalance = LoanBalance,
                 ticksInDebt = TicksInDebt,
                 peakPopulation = PeakPopulation,
+                taxRates = (int[])_taxRates.Clone(),
+                serviceFunding = (int[])_funding.Clone(),
                 cells = new CityCell[_occupied.Count],
                 cellIndices = new int[_occupied.Count]
             };
@@ -607,6 +633,7 @@ namespace XCity
                 restored.DroppedCellsOnLoad++;
             }
             restored.PeakPopulation = Math.Max(snapshot.peakPopulation, restored.Population);
+            restored.RestoreBudget(snapshot);
             restored.RecalculateEconomy();
             city = restored;
             return true;

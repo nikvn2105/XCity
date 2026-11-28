@@ -137,8 +137,8 @@ namespace XCity
         public int GetHappiness(int x, int z) =>
             CalculateHappiness(GetCoverage(x, z), HasWater(x, z), HasSewage(x, z), GetTrafficLoad(x, z));
 
-        private static int CalculateHappiness(ServiceCoverage coverage, bool water, bool sewage, int traffic) =>
-            BaseHappiness + HappinessPerService * ServiceCatalog.Count(coverage) -
+        private int CalculateHappiness(ServiceCoverage coverage, bool water, bool sewage, int traffic) =>
+            TaxHappinessShift + BaseHappiness + HappinessPerService * ServiceCatalog.Count(coverage) -
             (water ? 0 : MissingUtilityPenalty) - (sewage ? 0 : MissingUtilityPenalty) -
             (traffic > 100 ? CongestionPenalty : 0);
 
@@ -265,12 +265,14 @@ namespace XCity
             int industrialJobs = jobs - commercialJobs;
             // Homes want jobs; workers want slightly more jobs than exist, split between shops and industry.
             // The small surplus keeps a balanced city growing instead of settling where every demand is zero.
-            ResidentialDemand = Clamp(10 + (jobs - workers) * 100 / Math.Max(40, workers));
+            ResidentialDemand = Clamp(10 + (jobs - workers) * 100 / Math.Max(40, workers) + TaxDemandShift(TaxZone.Residential));
             int wantedJobs = workers * 110 / 100 + 20;
             int wantedCommercial = wantedJobs * 35 / 100;
             int wantedIndustrial = wantedJobs - wantedCommercial;
-            CommercialDemand = Clamp((wantedCommercial - commercialJobs) * 100 / Math.Max(20, wantedCommercial));
-            IndustrialDemand = Clamp((wantedIndustrial - industrialJobs) * 100 / Math.Max(20, wantedIndustrial));
+            CommercialDemand = Clamp((wantedCommercial - commercialJobs) * 100 / Math.Max(20, wantedCommercial) +
+                TaxDemandShift(TaxZone.Commercial));
+            IndustrialDemand = Clamp((wantedIndustrial - industrialJobs) * 100 / Math.Max(20, wantedIndustrial) +
+                TaxDemandShift(TaxZone.Industrial));
 
             static int Clamp(int value) => Math.Max(-100, Math.Min(100, value));
         }
@@ -288,7 +290,8 @@ namespace XCity
                 int x = index / GridSize;
                 int z = index % GridSize;
                 BuildingModel model = _cells[x, z].Model;
-                var (coverage, radius) = ServiceCatalog.Get(model);
+                var (coverage, baseRadius) = ServiceCatalog.Get(model);
+                int radius = FundedRadius(model, baseRadius);
                 if (coverage == ServiceCoverage.None || !_powered[index] || _cells[x, z].Level == 0) continue;
                 int minX = Math.Max(0, x - radius), maxX = Math.Min(GridSize - 1, x + radius);
                 int minZ = Math.Max(0, z - radius), maxZ = Math.Min(GridSize - 1, z + radius);

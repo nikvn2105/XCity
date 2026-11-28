@@ -10,7 +10,7 @@ namespace XCity.Tests
         private readonly ITestOutputHelper _output;
         public EconomyTests(ITestOutputHelper output) => _output = output;
 
-        private static (int X, int Z) FindLand(int width, int depth)
+        internal static (int X, int Z) FindLand(int width, int depth)
         {
             int center = CitySimulation.GridSize / 2;
             for (int x = center - 60; x < CitySimulation.GridSize - width; x++)
@@ -50,7 +50,7 @@ namespace XCity.Tests
         }
 
         // A road along z at column x, with a power plant at its south end on the east side.
-        private static CitySimulation PoweredStreet(int x, int z, int length, uint seed = 3, bool unlocked = false)
+        internal static CitySimulation PoweredStreet(int x, int z, int length, uint seed = 3, bool unlocked = false)
         {
             var city = unlocked ? UnlockTests.UnlockedCity(seed) : new CitySimulation(seed);
             Assert.True(city.TryApplyBuild(Enumerable.Range(z, length).Select(dz => (x, dz)), CellType.Road));
