@@ -166,3 +166,31 @@ Test in lại các bảng và mốc, kiểm tra công trình đặt hợp lệ, 
 2. Thử tăng công suất mỗi trạm nước và mỗi trạm nước thải từ **40 lên 60 ô**. Đo lại tỷ lệ nhà có đủ hai tiện ích và số nhà lên cấp trong cùng bố cục. Đồng thời theo dõi thuế, vì nhiều nhà lên cấp hơn sẽ đẩy doanh thu lên.
 3. Giữ mốc **500 dân** cho chung cư và trường đầu tiên. Thử mốc **6.500 thay cho 5.000** cho đại học, tháp văn phòng và trung tâm thương mại để kéo dài tiến độ công trình lớn. Cần cho kịch bản mở rộng vượt 6.500 dân khi đo biến thể này.
 4. Thử tăng vừa phải chi vận hành nhóm dịch vụ mở ở 2.000 dân, chẳng hạn bệnh viện **35 → 50** và cứu hỏa **24 → 35** mỗi tick. Đây là phép thử sức nặng của quyết định xây dịch vụ. Với cùng trạng thái cuối, hai thay đổi chỉ làm giảm 26/tick, nên đánh giá riêng với đề xuất giảm thuế.
+
+## Đo lại sau giai đoạn 2a–2c (thuế, giá trị đất, mật độ) — chuẩn bị bước 2e
+
+Đo tại nhánh `claude/trusting-einstein-1p5whu` sau commit `5f4323d`, cùng khung báo cáo (`EconomyReportTests`). Thêm kịch bản **Thị trưởng tự động** (`Scenario.Growth`): khởi đầu 20 ô hỗn hợp + trạm bơm + xử lý nước thải; cứ 10 lượt, khu nào có nhu cầu > 0 và quỹ > 4.000 thì quy hoạch thêm (4 nhà, 2 thương mại, 2 công nghiệp; chung cư/văn phòng sau mốc 500), dịch vụ xây ngay khi mở khóa, mỗi ~30 nhà một công viên nhỏ. Thuế ba khu đặt bằng nhau.
+
+| Thuế | 500 dân | 2.000 dân | Dân lượt 1.000 | Ròng/tick lượt 1.000 | Lượt đạt 1 triệu | Hài lòng |
+|---:|---:|---:|---:|---:|---:|---:|
+| 8% | lượt 90 | lượt 583 | 3.164 | +2.579 | 868 | 58 |
+| 10% | lượt 92 | lượt 578 | 3.792 | +5.233 | 675 | 59 |
+| 13% | lượt 110 | lượt 643 | 3.572 | +6.862 | 569 | 56 |
+
+Chi lượt cuối (thuế 10%): đường 696, điện 1.500, giáo dục 40, y tế 35, cảnh sát 18, cứu hỏa 24, khác 117 — tổng ≈ 2.430 so với thu ≈ 7.660.
+
+### Phát hiện
+
+1. **Giữa game quá dễ giàu.** Từ ~2.000 dân, thu gấp ~3 lần chi; 1 triệu tiền trước lượt 700. Không có áp lực ngân sách nào sau giai đoạn đầu.
+2. **Thuế cao gần như không bị phạt.** 13% lớn gần bằng 10% (chậm hơn ~10%) nhưng lãi hơn ~30%; hài lòng chỉ −3. Người chơi sẽ luôn để thuế cao. 8% không giúp lớn nhanh hơn.
+3. **Đầu game ổn:** quỹ thấp nhất 20–32 nghìn, không phá sản khi mở rộng theo nhu cầu.
+4. **Mở rộng ồ ạt vẫn phá sản được** (kịch bản Xây dịch vụ sớm, ~900 dân): 17 nhà máy điện (1.020/lượt) + đường (578) ăn hết thuế. Điện là khoản chi nặng nhất ở mọi kịch bản.
+5. **Nước là nút thắt lên cấp:** chỉ ~23/250 nhà có đủ nước và thoát nước (mỗi trạm 40 ô), nên chỉ ~14 nhà lên cấp 2–3. Một phần do khung đo chỉ có 3 ô bờ biển.
+6. **Giới hạn của khung đo:** ~600 lô đất nên dừng ở ~3.800 dân; muốn đo tới 10.000 dân cần khung bản đồ lớn hơn và nhiều bờ nước.
+
+### Đề xuất cho 2e (chưa làm)
+
+- Thuế: mỗi điểm trên 10% trừ nhu cầu 5–6 (thay 3) và hài lòng 2 (thay 1); có thể cho thu nhập tăng chậm dần khi thuế > 12%.
+- Kéo chi giữa game lên: rác (2d) sẽ thêm một khoản; cân nhắc phí đường tăng theo quy mô, phí dịch vụ lớn hơn, hoặc giảm thuế gốc mỗi dân.
+- Nước: tăng sức chứa trạm (40 → 80 ô) hoặc giảm giá, để lên cấp nhà không bị nghẽn.
+- Mở rộng khung đo lên ~2.500 lô với nhiều bờ nước để kiểm chứng mốc 10.000 dân.

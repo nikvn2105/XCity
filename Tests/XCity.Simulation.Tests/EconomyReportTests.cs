@@ -8,7 +8,7 @@ namespace XCity.Tests
 {
     public sealed class EconomyReportTests
     {
-        public enum Scenario { Balanced, HousingHeavy, IndustryHeavy, EarlyServices }
+        public enum Scenario { Balanced, HousingHeavy, IndustryHeavy, EarlyServices, Growth }
 
         private const int Turns = 2000;
         private const int StreetDepth = 22;
@@ -23,9 +23,15 @@ namespace XCity.Tests
         [InlineData(Scenario.HousingHeavy)]
         [InlineData(Scenario.IndustryHeavy)]
         [InlineData(Scenario.EarlyServices)]
-        public void ReportEconomyOverTwoThousandTurns(Scenario scenario)
+        [InlineData(Scenario.Growth, 8)]
+        [InlineData(Scenario.Growth, 10)]
+        [InlineData(Scenario.Growth, 13)]
+        public void ReportEconomyOverTwoThousandTurns(Scenario scenario, int taxRate = CitySimulation.DefaultTaxRate)
         {
             var plan = new CityPlan();
+            foreach (TaxZone zone in new[] { TaxZone.Residential, TaxZone.Commercial, TaxZone.Industrial })
+                plan.City.SetTaxRate(zone, taxRate);
+            _output.WriteLine($"Scenario {scenario}, tax {taxRate}%");
             CitySimulation city = plan.City;
             var unlockedAt = new Dictionary<int, int>();
             var servicePacks = new HashSet<int>();
@@ -50,6 +56,11 @@ namespace XCity.Tests
                         BuildingModel.Warehouse, BuildingModel.Workshop, BuildingModel.RowHouse
                     });
                     break;
+                case Scenario.Growth:
+                    plan.Zone(20, StarterMix);
+                    plan.BuildShore(BuildingModel.WaterPump);
+                    plan.BuildShore(BuildingModel.SewagePlant);
+                    break;
                 case Scenario.EarlyServices:
                     plan.Zone(90, StarterMix);
                     plan.BuildShore(BuildingModel.WaterPump);
@@ -68,6 +79,24 @@ namespace XCity.Tests
                     {
                         plan.Zone(50, ExpansionMix);
                         expansion++;
+                    }
+                }
+
+                // Auto-mayor: every 10 turns zone what demand asks for while cash allows, plus a park per ~30 homes.
+                if (scenario == Scenario.Growth && !city.IsBankrupt)
+                {
+                    BuildAvailableServices(plan, servicePacks);
+                    if (turn % 10 == 0 && plan.LotsLeft > 8)
+                    {
+                        bool high = city.PeakPopulation >= 500;
+                        if (city.ResidentialDemand > 0 && city.Money > 4000)
+                            plan.Zone(4, new[] { high && turn % 20 == 0 ? BuildingModel.Apartment : BuildingModel.RowHouse });
+                        if (city.CommercialDemand > 0 && city.Money > 4000)
+                            plan.Zone(2, new[] { high ? BuildingModel.Office : BuildingModel.Market, BuildingModel.HighStreet });
+                        if (city.IndustrialDemand > 0 && city.Money > 4000)
+                            plan.Zone(2, new[] { BuildingModel.Workshop, BuildingModel.Warehouse });
+                        if (plan.Homes >= plan.Parks * 30 + 30 && city.Money > 3000)
+                            plan.BuildService(BuildingModel.SmallPark);
                     }
                 }
 
@@ -103,12 +132,15 @@ namespace XCity.Tests
             var homes = city.OccupiedIndices.Select(index => (X: index / CitySimulation.GridSize, Z: index % CitySimulation.GridSize))
                 .Where(p => city.GetCell(p.X, p.Z).Type == CellType.Residential && city.GetCell(p.X, p.Z).Level > 0)
                 .ToArray();
-            int residentialTax = homes.Where(p => city.GetZoneStatus(p.X, p.Z) == ZoneStatus.Developed)
-                .Sum(p => BuildingCatalog.Residents(city.GetCell(p.X, p.Z)) * 5 / 4);
+            int residentialTax = city.LastBudget.ResidentialTax;
             int waterAndSewage = homes.Count(p => city.HasWater(p.X, p.Z) && city.HasSewage(p.X, p.Z));
             int upgraded = homes.Count(p => city.GetCell(p.X, p.Z).Level > 1);
             _output.WriteLine($"Final homes (developed / water and sewage / upgraded): {homes.Length} / {waterAndSewage} / {upgraded}; " +
                 $"residential tax: {residentialTax}; business tax: {city.LastTaxIncome - residentialTax}");
+            BudgetReport b = city.LastBudget;
+            _output.WriteLine($"Budget: tax R/C/I {b.ResidentialTax}/{b.CommercialTax}/{b.IndustrialTax}; roads {b.Roads}, power {b.Power}, " +
+                $"education {b.Education}, health {b.Health}, police {b.Police}, fire {b.Fire}, other {b.Other}, loan {b.Loan}; " +
+                $"lots left {plan.LotsLeft}");
             _output.WriteLine($"Site: ({plan.Origin.X}, {plan.Origin.Z}); builds: {string.Join(", ", plan.BuildLog)}");
         }
 
@@ -165,6 +197,9 @@ namespace XCity.Tests
             public readonly List<string> BuildLog = new List<string>();
             public readonly (int X, int Z) Origin;
             public int LowestAfterBuild { get; private set; } = int.MaxValue;
+            public int LotsLeft => _lots.Count;
+            public int Homes { get; private set; }
+            public int Parks { get; private set; }
 
             public CityPlan()
             {
@@ -199,6 +234,8 @@ namespace XCity.Tests
 
                 BuildLot((shore ? _shore : _lots).Dequeue(), BuildingCatalog.Get(model).Type, model, cost);
                 _consumers++;
+                if (BuildingCatalog.Get(model).Type == CellType.Residential) Homes++;
+                if (model == BuildingModel.SmallPark) Parks++;
                 if (cost != Cost.Zones || model == BuildingModel.OfficeTower || model == BuildingModel.ShoppingMall)
                     BuildLog.Add($"{model}@{City.TickCount + 1}");
             }
