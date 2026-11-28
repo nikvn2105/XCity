@@ -65,7 +65,7 @@ namespace XCity
                 float u = Mathf.InverseLerp(rect.rect.xMin, rect.rect.xMax, position.x);
                 float v = Mathf.InverseLerp(rect.rect.yMin, rect.rect.yMax, position.y);
                 float span = GridSize * CellSize;
-                _camTarget = new Vector3(u * span, 0f, v * span);
+                _camTarget = new Vector3(u * span, WorldTerrain.SurfaceY(u * span, v * span, CellSize), v * span);
                 UpdateCameraTransform();
                 frame.SetActive(false);
             });

@@ -149,7 +149,7 @@ namespace XCity
             _cellSize = cellSize;
 
             float span = CitySimulation.GridSize * cellSize;
-            _mapBounds = new Bounds(new Vector3(span * 0.5f, 12f, span * 0.5f), new Vector3(span, 30f, span));
+            _mapBounds = new Bounds(new Vector3(span * 0.5f, 12f, span * 0.5f), new Vector3(span, 30f + 2f * WorldTerrain.MaxSurfaceY, span));
 
             _mesh = new Mesh { name = "CityHelicopters" };
             _mesh.MarkDynamic();
@@ -309,7 +309,7 @@ namespace XCity
                     if (cell.Type == CellType.Empty || cell.Type == CellType.Road || cell.Height <= 0f) continue;
                     developed++;
 
-                    Vector3 worldCenter = new Vector3((x + 0.5f) * _cellSize, 0f, (z + 0.5f) * _cellSize);
+                    Vector3 worldCenter = new Vector3((x + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z + 0.5f) * _cellSize);
                     switch (cell.Model)
                     {
                         case BuildingModel.Hospital:
@@ -411,7 +411,7 @@ namespace XCity
                     Position = startWp.HoverPos,
                     Start = startWp.HoverPos,
                     Target = startWp.HoverPos,
-                    CruiseHeight = 10.6f + idx * 0.7f,
+                    CruiseHeight = 10.6f + idx * 0.7f + (WorldTerrain.Current.Style == MapStyle.Classic ? 0f : WorldTerrain.MaxSurfaceY),
                     Yaw = (float)_rng.NextDouble() * 360f,
                     Phase = (float)_rng.NextDouble() * 6.283f,
                     IsHovering = idx == 0 && startWp.IsHelipad,

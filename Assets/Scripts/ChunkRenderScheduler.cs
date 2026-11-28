@@ -103,7 +103,7 @@ namespace XCity
                 for (int z = minZ; z <= maxZ; z++)
                 {
                     var center = new Vector3((x + 0.5f) * _chunkSpan, 4f, (z + 0.5f) * _chunkSpan);
-                    var bounds = new Bounds(center, new Vector3(_chunkSpan, 12f, _chunkSpan));
+                    var bounds = new Bounds(center, new Vector3(_chunkSpan, 12f + 2f * WorldTerrain.MaxSurfaceY, _chunkSpan));
                     var bufferedBounds = bounds;
                     bufferedBounds.Expand(_chunkSpan * 0.40f);
                     ChunkDetail current = _loaded[x, z];

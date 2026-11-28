@@ -36,14 +36,14 @@ namespace XCity.Tests
             for (int z = 1; z < Size - 1; z++)
             {
                 bankX = x; bankZ = z;
-                if (!CitySimulation.IsBuildable(x, z) || !TryRiverNeighbour(x, z, out int river)) continue;
+                if (!CitySimulation.IsBuildable(x, z, CellType.CivicService) || !TryRiverNeighbour(x, z, out int river)) continue;
                 int down = river;
                 for (int i = 0; i < 10 && down >= 0; i++) down = WorldTerrain.Downstream(down / Size, down % Size);
                 if (down < 0) continue;
                 int dx = down / Size, dz = down % Size;
                 foreach (var (px, pz) in new[] { (dx - 1, dz), (dx + 1, dz), (dx, dz - 1), (dx, dz + 1) })
                 {
-                    if (!WorldTerrain.IsLand(px, pz) || System.Math.Abs(px - x) + System.Math.Abs(pz - z) < 3) continue;
+                    if (!CitySimulation.IsBuildable(px, pz, CellType.CivicService) || System.Math.Abs(px - x) + System.Math.Abs(pz - z) < 3) continue;
                     pumpX = px; pumpZ = pz;
                     return true;
                 }

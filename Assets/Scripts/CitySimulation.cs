@@ -291,7 +291,8 @@ namespace XCity
 
         internal static int CellIndex(int x, int z) => x * GridSize + z;
 
-        internal static bool IsBuildable(int x, int z) => IsInBounds(x, z) && WorldTerrain.IsLand(x, z);
+        internal static bool IsBuildable(int x, int z, CellType type = CellType.Road) =>
+            WorldTerrain.IsLand(x, z) && (type == CellType.Road || type == CellType.Empty || !WorldTerrain.IsSlope(x, z));
 
         private void TrackCell(int x, int z, CellType type, CityCell previous = default)
         {
@@ -433,7 +434,7 @@ namespace XCity
                 return true;
             }
 
-            if (!IsBuildable(x, z) || (BuildingCatalog.NeedsShore(model) && !CanPlaceWaterfront(x, z, model))) return false;
+            if (!IsBuildable(x, z, type) || (BuildingCatalog.NeedsShore(model) && !CanPlaceWaterfront(x, z, model))) return false;
             var option = BuildingCatalog.Get(model);
             if (model == BuildingModel.Default ? BuildingCatalog.IsPublicService(type) : option.Cost == 0 || option.Type != type)
                 return false;

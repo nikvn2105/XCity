@@ -187,7 +187,7 @@ namespace XCity
 
         private IEnumerator FlyToInspectedCell(Vector2Int cell, Vector3 start, float startDistance)
         {
-            var target = new Vector3((cell.x + 0.5f) * CellSize, 0f, (cell.y + 0.5f) * CellSize);
+            var target = new Vector3((cell.x + 0.5f) * CellSize, WorldTerrain.SurfaceY(cell.x, cell.y), (cell.y + 0.5f) * CellSize);
             Vector3 expectedTarget = _camTarget;
             float expectedDistance = _camDistance;
             float startTime = Time.unscaledTime;

@@ -106,7 +106,7 @@ namespace XCity
             _cellSize = cellSize;
 
             float span = CitySimulation.GridSize * cellSize;
-            _mapBounds = new Bounds(new Vector3(span * 0.5f, 4f, span * 0.5f), new Vector3(span, 12f, span));
+            _mapBounds = new Bounds(new Vector3(span * 0.5f, 4f, span * 0.5f), new Vector3(span, 12f + 2f * WorldTerrain.MaxSurfaceY, span));
 
             _mesh = new Mesh { name = "IndustrialPlumes" };
             _mesh.MarkDynamic();

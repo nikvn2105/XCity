@@ -153,8 +153,9 @@ namespace XCity
                     }
                     else if (cell.Type == CellType.Road || !TryPickOverlayColor(x, z, cell, out color)) continue;
 
-                    Vector3 center = new Vector3((x + 0.5f) * _cellSize, 0f, (z + 0.5f) * _cellSize);
+                    Vector3 center = new Vector3((x + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z + 0.5f) * _cellSize);
                     float y = cell.Height > 0f ? CityChunkRenderer.BuildingBase + cell.Height + 0.14f : OverlayY;
+                    if (WorldTerrain.IsFreshWater(x, z)) y += BridgeProfile.WaterSurface;
                     _builder.SetFrame(center, 0);
                     _builder.AddQuad(
                         new Vector3(-half, y, -half),

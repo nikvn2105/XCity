@@ -128,6 +128,7 @@ namespace XCity
             float maxBound = GridSize * CellSize;
             _camTarget.x = Mathf.Clamp(_camTarget.x, 0f, maxBound);
             _camTarget.z = Mathf.Clamp(_camTarget.z, 0f, maxBound);
+            _camTarget.y = WorldTerrain.SurfaceY(_camTarget.x, _camTarget.z, CellSize);
         }
 
         private void TrackPanVelocity(Vector2 screenDelta)
