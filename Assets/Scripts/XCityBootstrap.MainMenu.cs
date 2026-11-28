@@ -23,6 +23,9 @@ namespace XCity
         private int _activeSaveSlot;
         private string _activeCityName;
         private bool _saveMigrationFailed;
+        private int _menuBackgroundSlot;
+        private string _menuBackgroundName;
+        private GameObject _menuLogo;
         private GameObject _mainMenu;
         private CanvasGroup _menuControls;
         private GameObject _menuActions;
@@ -63,18 +66,28 @@ namespace XCity
                     tick * TickInterval / DayNightSystem.CycleDurationSeconds) + 1,
                 message => Debug.LogWarning(message));
             _saveMigrationFailed = !_save.MigrateLegacy(UiText.DefaultCityName(1));
-            return new CitySimulation();
+            // The menu shows the last played city behind it, read-only (no slot is active, nothing saves).
+            int slot = FindContinueSlot();
+            if (slot != 0 && _save.TryLoad(slot, out var city, out var summary))
+            {
+                _menuBackgroundSlot = slot;
+                _menuBackgroundName = SavedSlotName(slot, summary);
+                return city;
+            }
+            return XCityPreviewCity.Create();
         }
 
-        private void ShowMainMenu()
+        private void ShowMainMenu(bool intro = false)
         {
             if (_mainMenu == null) BuildMainMenu();
+            FrameMenuCamera();
             CloseMenuDialog();
             _mainMenu.transform.SetAsLastSibling();
             _mainMenu.SetActive(true);
             _menuControls.interactable = true;
             ShowMenuHome();
             if (_saveMigrationFailed) _menuNotice.text = UiText.MigrationFailed;
+            if (intro) PlayIntro();
         }
 
         private bool ReturnToMainMenu()
@@ -104,14 +117,18 @@ namespace XCity
 
         private void BuildMainMenu()
         {
+            // Light scrim only: the circling city behind the menu stays visible.
             _mainMenu = CreatePanel(_safeAreaRoot, "MainMenu", Vector2.zero, Vector2.one,
-                Vector2.zero, Vector2.zero, UiTheme.Panel);
+                Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.18f));
             _menuControls = _mainMenu.AddComponent<CanvasGroup>();
             GameObject window = CreatePanel(_mainMenu.transform, "MenuWindow",
                 new Vector2(0.08f, 0.10f), new Vector2(0.92f, 0.90f),
-                Vector2.zero, Vector2.zero, UiTheme.PanelSolid);
+                Vector2.zero, Vector2.zero, new Color(UiTheme.Panel.r, UiTheme.Panel.g, UiTheme.Panel.b, 0.88f));
             UiTheme.Float(window.GetComponent<Image>(), 22f);
+            _menuWindow = (RectTransform)window.transform;
+            _menuWindowGroup = window.AddComponent<CanvasGroup>();
             AddMenuColumn(window.transform, 20, 10);
+            _menuLogo = CreateLogo(window.transform, 64f, 40);
             _menuTitle = AddMenuLabel(window.transform, UiText.GameTitle, UiTheme.TitleSize, 34f, UiTheme.Text);
             _menuNotice = AddMenuLabel(window.transform, "", UiTheme.SmallSize, 28f, UiTheme.Warning);
 
@@ -164,6 +181,11 @@ namespace XCity
 
         private void ShowMenuHome()
         {
+            // Home is a narrow column on the left so the city shows; the slot screen uses the wide window.
+            _menuWindow.anchorMin = new Vector2(0.03f, 0.06f);
+            _menuWindow.anchorMax = new Vector2(0.37f, 0.94f);
+            _menuLogo.SetActive(true);
+            _menuTitle.gameObject.SetActive(false);
             _menuTitle.text = UiText.GameTitle;
             _menuNotice.text = "";
             _continueButton.gameObject.SetActive(FindContinueSlot() != 0);
@@ -174,6 +196,10 @@ namespace XCity
         private void ShowSlots(bool creating)
         {
             _creatingCity = creating;
+            _menuWindow.anchorMin = new Vector2(0.08f, 0.10f);
+            _menuWindow.anchorMax = new Vector2(0.92f, 0.90f);
+            _menuLogo.SetActive(false);
+            _menuTitle.gameObject.SetActive(true);
             _menuTitle.text = creating ? UiText.NewCity : UiText.LoadCity;
             _menuNotice.text = "";
             _menuActions.SetActive(false);
@@ -262,6 +288,7 @@ namespace XCity
                         _activeSaveSlot = 0;
                         _cityDirty = false;
                     }
+                    if (_menuBackgroundSlot == slot) _menuBackgroundSlot = 0;
                     if (PlayerPrefs.GetInt(LastSaveSlotKey, 0) == slot)
                     {
                         PlayerPrefs.DeleteKey(LastSaveSlotKey);
@@ -274,6 +301,14 @@ namespace XCity
 
         private void LoadSavedCity(int slot)
         {
+            // The city behind the menu is already this slot: start playing it without reloading.
+            if (_activeSaveSlot == 0 && slot == _menuBackgroundSlot)
+            {
+                _activeSaveSlot = slot;
+                _activeCityName = _menuBackgroundName;
+                PlayerPrefs.SetInt(LastSaveSlotKey, slot);
+                PlayerPrefs.Save();
+            }
             if (_activeSaveSlot == slot)
             {
                 _nextAutosave = Time.unscaledTime + 15f;

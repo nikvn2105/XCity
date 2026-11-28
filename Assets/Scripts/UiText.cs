@@ -6,6 +6,27 @@ namespace XCity
         public const string StrokeCost = "Chi phí: $";
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";
 
+        // Tutorial quest card.
+        public static string QuestStep(int step, int total) => $"NHIỆM VỤ {step}/{total}";
+        public static string QuestDone(string title) => $"Hoàn thành: {title}";
+        public const string TutorialDone = "Đã hoàn thành hướng dẫn cơ bản. Chúc bạn xây thành phố vui!";
+        public static readonly string[] QuestTitles =
+        {
+            "Vẽ con đường đầu tiên",
+            "Đặt nhà máy điện",
+            "Quy hoạch khu dân cư",
+            "Thêm thương mại hoặc công nghiệp",
+            "Đặt trạm bơm nước"
+        };
+        public static readonly string[] QuestBodies =
+        {
+            "Chọn Đường, chạm điểm đầu rồi điểm cuối (hoặc kéo) để vẽ.",
+            "Chọn Tiện ích, chạm một ô sát con đường. Điện truyền theo đường.",
+            "Chọn Nhà ở, chạm hoặc kéo dọc hai bên đường.",
+            "Chọn Thương mại (hoặc Công nghiệp) để người dân có việc làm.",
+            "Mở mũi tên trên Tiện ích, chọn Trạm bơm, đặt sát bờ nước."
+        };
+
         // Road tool.
         public const string RoadTapStart = "Chạm điểm đầu rồi điểm cuối, hoặc kéo để vẽ đường";
         public const string RoadTapEnd = "Chạm điểm cuối để xây · Chạm lại điểm đầu để dừng";
@@ -27,6 +48,7 @@ namespace XCity
 
         // Main menu and saves.
         public const string GameTitle = "XCity";
+        public const string Wordmark = "XCITY";
         public const string ContinueCity = "Tiếp tục";
         public const string NewCity = "Thành phố mới";
         public const string LoadCity = "Tải";

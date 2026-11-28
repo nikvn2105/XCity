@@ -127,7 +127,7 @@ namespace XCity
             if (_city.DroppedCellsOnLoad > 0)
                 ShowToast(string.Format(UiText.DroppedOnLoad, _city.DroppedCellsOnLoad), UiTheme.Warning, UiIcon.Info);
             RestoreFpsCounter();
-            if (_previewOutput == null && _activeSaveSlot == 0) ShowMainMenu();
+            if (_previewOutput == null && _activeSaveSlot == 0) ShowMainMenu(intro: true);
             if (_previewOutput != null) StartCoroutine(CapturePreviewShots());
         }
 
@@ -303,13 +303,13 @@ namespace XCity
             _hudStatusText.resizeTextMaxSize = UiTheme.TinySize + 1;
             SetupStrokeCost(statusRect, font);
 
-            SetupTutorial(topBar.transform, statusRect, font);
 
             SetupBuildBar();
             SetupWorldMap();
             SetupUXToolbar(_topButtons);
             SetupRotateButtons();
             SetupInfoView();
+            SetupTutorial();
 
             SelectTool(BuildTool.Road);
             RefreshHUD();
@@ -362,6 +362,7 @@ namespace XCity
             UpdateSafeArea();
             if (MainMenuOpen)
             {
+                OrbitMenuCamera();
                 UpdateFpsCounter();
                 return;
             }
@@ -1272,6 +1273,7 @@ namespace XCity
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;
             RefreshTopBar();
+            UpdateTutorialProgress();
             if (_hudStatusText != null)
             {
                 if (_activeTool != BuildTool.Pan && _inspectionOutline != null)
@@ -1311,8 +1313,6 @@ namespace XCity
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 string uxPrefix = GetUXStatusPrefix();
                 if (uxPrefix != null) hint = $"{uxPrefix}  |  {hint}";
-                string tutorialPrefix = GetTutorialStatusPrefix();
-                if (tutorialPrefix != null) hint = $"{tutorialPrefix}  |  {hint}";
                 if (_simSpeed <= 0f) hint = $"Đang tạm dừng  |  {hint}";
                 if (_city.TicksInDebt > 0 && !_city.IsBankrupt)
                     hint = $"Cảnh báo phá sản: còn {CitySimulation.BankruptcyTicks - _city.TicksInDebt} lượt · Vay hoặc cắt giảm chi phí  |  {hint}";
