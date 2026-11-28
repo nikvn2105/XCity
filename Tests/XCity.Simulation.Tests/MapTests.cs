@@ -26,6 +26,7 @@ namespace XCity.Tests
         [InlineData(MapStyle.Islands)]
         public void SeededMaps_AreDeterministicAndPlayable(MapStyle style)
         {
+            float[] classic = MapGenerator.Generate(MapSpec.Classic, out _);
             for (int seed = 1; seed <= 6; seed++)
             {
                 var spec = new MapSpec(style, seed);
@@ -33,6 +34,8 @@ namespace XCity.Tests
                 float[] b = MapGenerator.Generate(spec, out var startAgain);
                 Assert.Equal(a, b);
                 Assert.Equal(start, startAgain);
+                // Never the classic fallback: every seed here must pass the quality check itself.
+                Assert.NotEqual(classic, a);
 
                 // The start area is all land with sea close by.
                 int half = MapGenerator.StartArea / 2;

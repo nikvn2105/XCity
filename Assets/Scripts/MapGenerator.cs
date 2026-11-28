@@ -27,7 +27,7 @@ namespace XCity
             {
                 Fill(height, spec.Style, spec.Seed + attempt);
                 float land = LandShare(height);
-                (float min, float max) = spec.Style == MapStyle.Islands ? (0.25f, 0.55f) : (0.40f, 0.75f);
+                (float min, float max) = spec.Style == MapStyle.Islands ? (0.18f, 0.55f) : (0.40f, 0.75f);
                 if (land < min || land > max) continue;
                 var found = FindStart(height);
                 if (found == null) continue;
@@ -42,17 +42,30 @@ namespace XCity
         {
             var rng = new Random(seed);
             int ox = rng.Next(1, 100000), oz = rng.Next(1, 100000);
-            // Island centres: one big continent, or several medium islands.
-            int count = style == MapStyle.Continent ? 1 : 5 + rng.Next(3);
-            var centres = new (float X, float Z, float Rx, float Rz)[count];
-            for (int i = 0; i < count; i++)
+            // Continent: a core with peninsulas and a few offshore islets. Islands: many smaller islands.
+            var centres = new System.Collections.Generic.List<(float X, float Z, float Rx, float Rz)>();
+            float Next(float min, float max) => min + (float)rng.NextDouble() * (max - min);
+            if (style == MapStyle.Continent)
             {
-                bool continent = style == MapStyle.Continent;
-                centres[i] = (
-                    continent ? 0.5f + (float)(rng.NextDouble() - 0.5) * 0.1f : 0.18f + (float)rng.NextDouble() * 0.64f,
-                    continent ? 0.5f + (float)(rng.NextDouble() - 0.5) * 0.1f : 0.18f + (float)rng.NextDouble() * 0.64f,
-                    continent ? 0.38f + (float)rng.NextDouble() * 0.06f : 0.10f + (float)rng.NextDouble() * 0.09f,
-                    continent ? 0.38f + (float)rng.NextDouble() * 0.06f : 0.10f + (float)rng.NextDouble() * 0.09f);
+                float cx = Next(0.45f, 0.55f), cz = Next(0.45f, 0.55f);
+                centres.Add((cx, cz, Next(0.33f, 0.38f), Next(0.33f, 0.38f)));
+                int lobes = 3 + rng.Next(2);
+                for (int i = 0; i < lobes; i++)
+                {
+                    double angle = rng.NextDouble() * Math.PI * 2;
+                    float reach = Next(0.24f, 0.30f);
+                    centres.Add((cx + (float)Math.Cos(angle) * reach, cz + (float)Math.Sin(angle) * reach,
+                        Next(0.12f, 0.19f), Next(0.12f, 0.19f)));
+                }
+                int islets = 2 + rng.Next(3);
+                for (int i = 0; i < islets; i++)
+                    centres.Add((Next(0.08f, 0.92f), Next(0.08f, 0.92f), Next(0.04f, 0.07f), Next(0.04f, 0.07f)));
+            }
+            else
+            {
+                int count = 6 + rng.Next(4);
+                for (int i = 0; i < count; i++)
+                    centres.Add((Next(0.14f, 0.86f), Next(0.14f, 0.86f), Next(0.07f, 0.14f), Next(0.07f, 0.14f)));
             }
 
             for (int x = 0; x < Size; x++)
@@ -62,8 +75,8 @@ namespace XCity
                 float land = -1f;
                 foreach (var c in centres) land = Math.Max(land, WorldTerrain.Island(nx, nz, c.X, c.Z, c.Rx, c.Rz));
                 // Coastline detail: large bays, then smaller headlands.
-                float shape = 0.42f * (WorldTerrain.Noise(x + ox, z + oz, 64) - 0.5f) +
-                    0.18f * (WorldTerrain.Noise(x + oz, z + ox, 21) - 0.5f);
+                float shape = 0.55f * (WorldTerrain.Noise(x + ox, z + oz, 48) - 0.5f) +
+                    0.22f * (WorldTerrain.Noise(x + oz, z + ox, 17) - 0.5f);
                 height[x * Size + z] = Math.Min(land + shape, WorldTerrain.EdgeLimit(nx, nz));
             }
         }
