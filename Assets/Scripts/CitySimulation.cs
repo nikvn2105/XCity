@@ -590,9 +590,10 @@ namespace XCity
             LastTaxIncome = taxIncome;
             int repayment = Math.Min(LoanBalance, LoanRepayment);
             budget.Loan = repayment;
+            budget.Admin = AdministrationCost(population);
             LastBudget = budget;
             LoanBalance -= repayment;
-            LastNetIncome = taxIncome + netIncome - repayment;
+            LastNetIncome = taxIncome + netIncome - repayment - budget.Admin;
             Money += LastNetIncome;
             TicksInDebt = Money < 0 ? TicksInDebt + 1 : 0;
             TickCount++;

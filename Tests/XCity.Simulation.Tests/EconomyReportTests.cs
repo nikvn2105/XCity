@@ -126,7 +126,8 @@ namespace XCity.Tests
             Assert.Equal(0, city.UnpoweredZones);
             Assert.Equal(startingCash + operatingResult - plan.Capex.Sum(), (long)city.Money);
             var upkeep = plan.Upkeep();
-            Assert.Equal(city.LastTaxIncome - upkeep.Road - upkeep.Power - upkeep.Services - upkeep.Water, city.LastNetIncome);
+            Assert.Equal(city.LastTaxIncome - upkeep.Road - upkeep.Power - upkeep.Services - upkeep.Water -
+                city.LastBudget.Admin, city.LastNetIncome);
             _output.WriteLine($"Milestones (500/2000/5000): {Reached(unlockedAt, 500)} / {Reached(unlockedAt, 2000)} / {Reached(unlockedAt, 5000)}");
             _output.WriteLine($"Debt: {Turn(firstDebt)}; bankruptcy: {Turn(bankruptcy)}; 100k: {Turn(first100K)}; " +
                 $"1m: {Turn(firstMillion)}; minimum cash: {minimumCash}; peak: {city.PeakPopulation}; expansions: {expansion}");
@@ -144,7 +145,7 @@ namespace XCity.Tests
                 $"residential tax: {residentialTax}; business tax: {city.LastTaxIncome - residentialTax}");
             BudgetReport b = city.LastBudget;
             _output.WriteLine($"Budget: tax R/C/I {b.ResidentialTax}/{b.CommercialTax}/{b.IndustrialTax}; roads {b.Roads}, power {b.Power}, " +
-                $"education {b.Education}, health {b.Health}, police {b.Police}, fire {b.Fire}, garbage {b.Garbage}, other {b.Other}, loan {b.Loan}; " +
+                $"education {b.Education}, health {b.Health}, police {b.Police}, fire {b.Fire}, garbage {b.Garbage}, other {b.Other}, admin {b.Admin}, loan {b.Loan}; " +
                 $"lots left {plan.LotsLeft}");
             _output.WriteLine($"Site: ({plan.Origin.X}, {plan.Origin.Z}); builds: {string.Join(", ", plan.BuildLog)}");
         }

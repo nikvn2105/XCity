@@ -62,11 +62,12 @@ namespace XCity.Tests
             city.Tick();
             states.Add(Fingerprint(city));
             // Golden values captured on 6f1cdab before replacing the utility algorithms; re-captured for land
-            // value tax, utility capacity 80 (2e) and the garbage penalty (2d: this city has no facilities).
+            // value tax, utility capacity 80 (2e), the garbage penalty (2d: no facilities here) and the
+            // administration cost (2e).
             Assert.Equal(new[]
             {
                 0x0E36D0C693D6E214UL, 0x34EF967DA5191FD9UL, 0xD8680A6F2A7ED3C8UL,
-                0x34EF967DA5191FD9UL, 0x0E36D0C693D6E214UL, 0x1C19A5C6AB6F5203UL
+                0x34EF967DA5191FD9UL, 0x0E36D0C693D6E214UL, 0x0F4FDDC695B4732BUL
             }, states);
         }
 
@@ -118,14 +119,14 @@ namespace XCity.Tests
             // Golden values captured on 2449372 with two newly zoned cells; money re-captured when tax
             // started following land value and when utility capacity doubled (random states and money
             // unchanged; only the water state in the fingerprint moved) and when the garbage penalty cut
-            // taxable income in this unserved city (2d).
+            // taxable income in this unserved city (2d), and for the administration cost (2e).
             var expected = new (ulong Fingerprint, int Money, uint RandomState)[]
             {
-                (0xF618E5086BF57765UL, 2467755, 2647435461),
-                (0xE79F0533B0EB5EF1UL, 3935610, 307599695),
-                (0xE79F0533B0EB5EF1UL, 5403465, 2398689233),
-                (0xE79F0533B0EB5EF1UL, 6871320, 745495504),
-                (0xE79F0533B0EB5EF1UL, 8339175, 632435482)
+                (0xE54ED5084F6E1E35UL, 1073435, 2647435461),
+                (0xF2547533C31DAC41UL, 1146970, 307599695),
+                (0xF2547533C31DAC41UL, 1220505, 2398689233),
+                (0xF2547533C31DAC41UL, 1294040, 745495504),
+                (0xF2547533C31DAC41UL, 1367575, 632435482)
             };
             foreach (var state in expected)
             {

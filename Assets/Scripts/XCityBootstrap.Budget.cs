@@ -15,7 +15,7 @@ namespace XCity
         private readonly Text[] _taxRateTexts = new Text[3];
         private readonly Text[] _taxAmountTexts = new Text[3];
         private readonly Text[] _fundingTexts = new Text[5];
-        private readonly Text[] _spendingTexts = new Text[9];
+        private readonly Text[] _spendingTexts = new Text[10];
 
         private bool BudgetOpen => _budgetPanel != null && _budgetPanel.activeSelf;
 
@@ -36,7 +36,7 @@ namespace XCity
         {
             Font font = UiTheme.Font;
             _budgetPanel = CreatePanel(_safeAreaRoot, "Budget", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(-390, -215), new Vector2(390, 205), new Color(UiTheme.Panel.r, UiTheme.Panel.g, UiTheme.Panel.b, 0.94f));
+                new Vector2(-390, -235), new Vector2(390, 225), new Color(UiTheme.Panel.r, UiTheme.Panel.g, UiTheme.Panel.b, 0.94f));
             UiTheme.Float(_budgetPanel.GetComponent<Image>(), 18f);
 
             Text title = CreateLabel(_budgetPanel.transform, font, UiTheme.TitleSize, UiTheme.Text, TextAnchor.MiddleLeft);
@@ -66,7 +66,7 @@ namespace XCity
             Color[] lineColors =
             {
                 UiTheme.RoadGray, UiTheme.Utilities, UiTheme.Education, UiTheme.Services,
-                UiTheme.Commercial, UiTheme.Demolish, UiTheme.Residential, UiTheme.TextMuted, UiTheme.TextMuted
+                UiTheme.Commercial, UiTheme.Demolish, UiTheme.Residential, UiTheme.TextMuted, UiTheme.Gold, UiTheme.TextMuted
             };
             for (int i = 0; i < _spendingTexts.Length; i++)
             {
@@ -183,7 +183,7 @@ namespace XCity
             }
             for (int i = 0; i < _fundingTexts.Length; i++)
                 _fundingTexts[i].text = $"{_city.GetFunding((BudgetService)i)}%";
-            int[] lines = { budget.Roads, budget.Power, budget.Education, budget.Health, budget.Police, budget.Fire, budget.Garbage, budget.Other, budget.Loan };
+            int[] lines = { budget.Roads, budget.Power, budget.Education, budget.Health, budget.Police, budget.Fire, budget.Garbage, budget.Other, budget.Admin, budget.Loan };
             for (int i = 0; i < lines.Length; i++)
                 _spendingTexts[i].text = $"${lines[i]:N0}";
 

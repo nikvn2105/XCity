@@ -26,7 +26,7 @@ namespace XCity
         public const string Spending = "Chi";
         public static readonly string[] TaxZones = { "Thuế nhà ở", "Thuế thương mại", "Thuế công nghiệp" };
         public static readonly string[] SpendingLines =
-            { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", Garbage, "Khác (nước, cảng, công viên)", "Trả nợ" };
+            { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", Garbage, "Khác (nước, cảng, công viên)", "Hành chính", "Trả nợ" };
 
         // Tutorial quest card.
         public static string QuestStep(int step, int total) => $"NHIỆM VỤ {step}/{total}";

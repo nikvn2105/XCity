@@ -22,10 +22,10 @@ namespace XCity
     public struct BudgetReport
     {
         public int ResidentialTax, CommercialTax, IndustrialTax;
-        public int Roads, Power, Education, Health, Police, Fire, Garbage, Other, Loan;
+        public int Roads, Power, Education, Health, Police, Fire, Garbage, Other, Admin, Loan;
 
         public int Income => ResidentialTax + CommercialTax + IndustrialTax;
-        public int Spending => Roads + Power + Education + Health + Police + Fire + Garbage + Other + Loan;
+        public int Spending => Roads + Power + Education + Health + Police + Fire + Garbage + Other + Admin + Loan;
     }
 
     // Tax rates per zone and funding per service. 10% tax and 100% funding reproduce the old fixed economy.
@@ -48,6 +48,14 @@ namespace XCity
         private readonly int[] _funding = { DefaultFunding, DefaultFunding, DefaultFunding, DefaultFunding, DefaultFunding };
 
         public BudgetReport LastBudget { get; private set; }
+
+        // City administration grows with the square of the population up to 10,000 people: negligible
+        // in a small town (300: 9 per tick), a real cost mid-game (3,700: 1,369). Beyond that it rises
+        // one per resident (continuous at 10,000), so huge cities stay solvable and money cannot overflow.
+        internal const int AdministrationDivisor = 10000;
+
+        public static int AdministrationCost(int population) => population >= AdministrationDivisor
+            ? population : (int)((long)population * population / AdministrationDivisor);
 
         public int GetTaxRate(TaxZone zone) => _taxRates[(int)zone];
 

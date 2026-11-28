@@ -223,3 +223,15 @@ Thị trưởng tự động thêm bãi rác (lò đốt sau 2.000 dân) khi thu
 Rác chiếm ~19% chi ở ~3.700 dân nhưng giữa game vẫn dư (thu 7.368 so với chi 2.977).
 
 **Thử và đã hoàn lại:** giảm thuế gốc 20% (1 mỗi dân, 12 mỗi cấp doanh nghiệp) + phí đường 3. Đầu game sụp: thuế 8% phá sản ở lượt 143, kịch bản dịch vụ sớm phá sản. Kết luận: không giảm thu đều tay; cần một khoản chi **tăng theo quy mô** (chỉ nặng ở giữa và cuối game), ví dụ chi phí hành chính ≈ dân² / 10.000 mỗi lượt (300 dân ≈ 9, 1.000 ≈ 100, 3.700 ≈ 1.370).
+
+### Chi phí hành chính (2e đợt 2)
+
+Chi mỗi lượt = dân² / 10.000 dưới 10.000 dân, từ 10.000 trở lên = 1 mỗi dân (liền mạch tại 10.000; tránh tràn số tiền ở thành phố khổng lồ). Dòng "Hành chính" trong bảng ngân sách.
+
+| Thuế | Quỹ thấp nhất | Ròng/tick ~3.700 dân | Hành chính lúc đó |
+|---:|---:|---:|---:|
+| 8% | 15.031 (không đổi) | +1.066 (trước +2.176) | 1.110 |
+| 10% | 25.307 (không đổi) | +2.978 (trước +4.391) | 1.413 |
+| 13% | 30.041 | +458 | 23 |
+
+Đầu game không đổi; lãi giữa game giảm ~1/3. Chưa đo được 5.000–10.000 dân (khung đo hết đất ở ~3.800).
