@@ -20,9 +20,3 @@ của repo (Settings → Secrets and variables → Actions): `CODEMAGIC_API_TOKE
 
 Build từ nhánh dùng phiên bản trong Unity và mã commit ngắn, ví dụ
 `XCity-v0.1.0-f324ea5.apk`.
-
-## Sao lưu Google Drive (tùy chọn)
-Mỗi bản demo, workflow chép mã nguồn (zip), APK và IPA vào `XCity-backup/<tag>/` trên Drive nếu repo có secret `RCLONE_CONFIG`:
-1. Trên máy tính: cài rclone (rclone.org/downloads), chạy `rclone config` → `n` (new) → tên **`drive`** → loại `drive` → để trống client id/secret → scope `1` (full) hoặc `3` (file) → đăng nhập Google trong trình duyệt.
-2. Chạy `rclone config show drive`, sao chép toàn bộ khối `[drive] ...`.
-3. GitHub → Settings → Secrets and variables → Actions → New secret: tên `RCLONE_CONFIG`, dán khối đó. Không gửi khối này cho ai.

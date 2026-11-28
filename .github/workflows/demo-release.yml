@@ -261,16 +261,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/latest-demo-downloads.py
-      # Optional copy to Google Drive: source zip + APK + IPA in XCity-backup/<tag>/. Skipped without the secret.
-      - name: Back up to Google Drive
-        env:
-          RCLONE_CONFIG_TEXT: ${{ secrets.RCLONE_CONFIG }}
-        run: |
-          if [ -z "$RCLONE_CONFIG_TEXT" ]; then echo "No RCLONE_CONFIG secret; skipping Drive backup."; exit 0; fi
-          curl -fsSL https://rclone.org/install.sh | sudo bash
-          mkdir -p ~/.config/rclone && printf '%s\n' "$RCLONE_CONFIG_TEXT" > ~/.config/rclone/rclone.conf
-          git archive --format=zip -o "out/XCity-${GITHUB_REF_NAME}-source.zip" HEAD
-          rclone copy out "drive:XCity-backup/${GITHUB_REF_NAME}" --include "XCity-*"
       # A Mac job still waiting in an overloaded queue would keep this run open for a day: stop it.
       - name: Cancel a still-queued Mac job
         env:
