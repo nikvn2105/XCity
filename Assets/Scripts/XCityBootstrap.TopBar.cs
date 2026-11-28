@@ -260,6 +260,11 @@ namespace XCity
                 RefreshClock();
             }
 
+            UpdateToasts();
+        }
+
+        private void UpdateToasts()
+        {
             for (int i = _toasts.Count - 1; i >= 0; i--)
             {
                 float left = _toasts[i].Until - Time.unscaledTime;

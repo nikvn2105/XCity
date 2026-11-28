@@ -7,6 +7,17 @@ namespace XCity
         public const string StrokeCost = "Chi phí: $";
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";
 
+        public const string CrashLogTitle = "Nhật ký lỗi";
+        public const string CrashLogPreviousSession = "Lần trước có lỗi — xem trong Cài đặt";
+        public const string CrashLogCopy = "Sao chép";
+        public const string CrashLogEmpty = "Chưa có lỗi được ghi.";
+        public const string CrashLogRecent = "50 dòng cuối";
+        public const string CrashLogReadFailed = "Không thể đọc nhật ký lỗi.";
+        public const string CrashLogCopyFailed = "Không thể sao chép nhật ký lỗi.";
+        public const string CrashLogCopied = "Đã sao chép nhật ký lỗi.";
+        public const string CrashLogClearFailed = "Không thể xóa nhật ký lỗi.";
+        public static string CrashLogCount(int count) => $"{CrashLogTitle} · {count:N0} lỗi";
+
         // Density and land value.
         public static readonly string[] DensityNames = { "Mật độ thấp", "Mật độ vừa", "Mật độ cao" };
         public static string DensityLine(int density, int minLandValue) =>
