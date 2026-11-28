@@ -28,6 +28,13 @@ namespace XCity
         public static readonly string[] SpendingLines =
             { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", Garbage, "Khác (nước, cảng, công viên)", "Hành chính", "Trả nợ" };
 
+        // Map picker (new city).
+        public const string MapLabel = "Bản đồ";
+        public const string RandomMap = "Ngẫu nhiên";
+        public const string ClassicMapNote = "Bản đồ gốc, cố định";
+        public static string MapStyleName(int style) => style switch { 1 => "Lục địa", 2 => "Nhiều đảo", _ => "Quần đảo" };
+        public static string MapSeed(int seed) => $"Hạt giống {seed}";
+
         // Tutorial quest card.
         public static string QuestStep(int step, int total) => $"NHIỆM VỤ {step}/{total}";
         public static string QuestDone(string title) => $"Hoàn thành: {title}";

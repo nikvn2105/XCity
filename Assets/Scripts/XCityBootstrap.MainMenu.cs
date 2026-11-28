@@ -265,8 +265,9 @@ namespace XCity
             bool occupied = _save.HasSave(slot);
             string title = occupied
                 ? UiText.ConfirmOverwriteCity(SavedSlotName(slot, _save.ReadSummary(slot))) : UiText.CityName;
-            Transform dialog = OpenMenuDialog(title);
+            Transform dialog = OpenMenuDialog(title, large: true);
             InputField name = AddCityNameField(dialog, slot);
+            AddMapPicker(dialog);
             AddDialogActions(dialog, occupied ? UiText.OverwriteCity : UiText.CreateCity,
                 occupied ? UiTheme.Danger : UiTheme.Active, () => StartNewCity(slot, name.text));
         }
@@ -329,9 +330,13 @@ namespace XCity
             string name = string.IsNullOrWhiteSpace(inputName) ? UiText.DefaultCityName(slot) : inputName.Trim();
             // Preserve a valid previous primary as the backup when overwriting a slot.
             if (_save.HasSave(slot)) _save.TryLoad(slot, out _, out _);
+            // The new city lives on the chosen map; the scene reload that follows builds that terrain.
+            MapSpec previous = WorldTerrain.Current;
+            WorldTerrain.Use(NewMapSpec);
             var city = new CitySimulation();
             if (!_save.Write(slot, name, city))
             {
+                WorldTerrain.Use(previous);
                 _menuNotice.text = UiText.CreateFailed;
                 return;
             }
@@ -351,13 +356,14 @@ namespace XCity
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
-        private Transform OpenMenuDialog(string title)
+        private Transform OpenMenuDialog(string title, bool large = false)
         {
             CloseMenuDialog();
             _menuDialog = CreatePanel(_mainMenu.transform, "Confirm", Vector2.zero, Vector2.one,
                 Vector2.zero, Vector2.zero, UiTheme.Panel);
             var panel = CreatePanel(_menuDialog.transform, "Dialog",
-                new Vector2(0.22f, 0.25f), new Vector2(0.78f, 0.75f),
+                large ? new Vector2(0.14f, 0.08f) : new Vector2(0.22f, 0.25f),
+                large ? new Vector2(0.86f, 0.92f) : new Vector2(0.78f, 0.75f),
                 Vector2.zero, Vector2.zero, UiTheme.PanelSolid);
             UiTheme.Float(panel.GetComponent<Image>(), 18f);
             AddMenuColumn(panel.transform, 18, 12);

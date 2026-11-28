@@ -226,8 +226,8 @@ namespace XCity
             _cam.farClipPlane = 320f;
             camObj.AddComponent<AudioListener>();
 
-            float center = GridSize * CellSize * 0.5f;
-            _camTarget = new Vector3(center, 0f, center);
+            // An empty city starts over its map's guaranteed buildable start area.
+            _camTarget = new Vector3((WorldTerrain.Start.X + 0.5f) * CellSize, 0f, (WorldTerrain.Start.Z + 0.5f) * CellSize);
             foreach (int index in _city.OccupiedIndices)
             {
                 _camTarget = new Vector3((index / GridSize + 0.5f) * CellSize, 0f, (index % GridSize + 0.5f) * CellSize);
