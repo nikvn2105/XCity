@@ -115,6 +115,8 @@ namespace XCity
         public const string Close = "Đóng";
         public const string Locked = "Khóa";
         public const string InfoTitle = "Thông tin ô";
+        public const string FocusInspectedCell = "Đến gần";
+        public static string ConfirmInspectedDemolition(int cost) => $"Chạm lần nữa để phá · ${cost:N0}";
         public const string OverlayLegend =
             "Hạnh phúc\nĐỏ (10) · Vàng (55) · Xanh (100)\n\nPhủ dịch vụ\nLam: Giáo dục\nNgọc: Y tế\nChàm: Công an\nCam: Cứu hỏa\nXám: Khác";
 

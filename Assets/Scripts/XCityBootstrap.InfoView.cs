@@ -10,6 +10,11 @@ namespace XCity
         private const float MaxCamDistance = 2800f;
 
         private const float InfoPanelWidth = 290f;
+        private const float InfoActionMargin = 12f;
+        private const float InfoDemolitionSeconds = 3f;
+        private const float InfoFocusDistance = 40f;
+        private const float InfoFocusSeconds = 0.38f;
+        private static readonly Color InfoDemolitionTint = Color.Lerp(UiTheme.Button, UiTheme.Demolish, 0.42f);
         private RectTransform _infoPanel;
         private Text _infoBody;
         private Text _infoTitle;
@@ -19,6 +24,15 @@ namespace XCity
         private Coroutine _infoSlide;
         private bool _infoOpen;
         private Vector2Int? _infoCell;
+        private RectTransform _infoViewport;
+        private GameObject _infoActions;
+        private Button _infoDemolish;
+        private Text _infoDemolishLabel;
+        private Text _infoDemolishIcon;
+        private Coroutine _infoFocus;
+        private Coroutine _infoDemolitionTimeout;
+        private (Vector2Int Cell, CellType Type, BuildingModel Model, int Cost, int BridgeGroup)? _infoDemolition;
+        private float _infoDemolitionUntil;
 
         private void UpdateAtmosphereRanges()
         {
@@ -74,7 +88,7 @@ namespace XCity
             var scrollArea = BuildDecoration(_infoPanel, "InfoScroll", Vector2.zero, Vector2.one,
                 new Vector2(14, 12), new Vector2(-14, -74), Color.clear);
             scrollArea.raycastTarget = true;
-            var viewport = scrollArea.rectTransform;
+            var viewport = _infoViewport = scrollArea.rectTransform;
             viewport.gameObject.AddComponent<RectMask2D>();
             var scroll = viewport.gameObject.AddComponent<ScrollRect>();
             scroll.viewport = viewport;
@@ -88,9 +102,172 @@ namespace XCity
             _infoBody.color = UiTheme.TextSoft;
             _infoBody.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             scroll.content = _infoBody.rectTransform;
+            SetupInfoActions();
 
             _infoPanel.gameObject.SetActive(false);
             RefreshInfoViewHUD();
+        }
+
+        private void SetupInfoActions()
+        {
+            var row = BuildRect(_infoPanel, "InfoActions", Vector2.zero, new Vector2(1, 0),
+                new Vector2(InfoActionMargin, InfoActionMargin),
+                new Vector2(-InfoActionMargin, InfoActionMargin + UiTheme.MinTouch));
+            _infoActions = row.gameObject;
+            var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+            layout.childControlWidth = layout.childControlHeight = true;
+            layout.childForceExpandWidth = false;
+            layout.childForceExpandHeight = true;
+            layout.spacing = 8f;
+
+            var focus = AddInfoAction(row, "FocusCell", UiIcon.Eye, UiText.FocusInspectedCell, UiTheme.Button,
+                out _, out _);
+            var focusSize = focus.gameObject.GetComponent<LayoutElement>();
+            focusSize.preferredWidth = 96f;
+            focus.onClick.AddListener(FocusInspectedCell);
+
+            _infoDemolish = AddInfoAction(row, "DemolishCell", UiIcon.Delete, UiText.Bulldoze, InfoDemolitionTint,
+                out _infoDemolishLabel, out _infoDemolishIcon);
+            _infoDemolish.gameObject.GetComponent<LayoutElement>().flexibleWidth = 1f;
+            _infoDemolish.onClick.AddListener(DemolishInspectedCell);
+        }
+
+        private static Button AddInfoAction(Transform parent, string name, string glyph, string text, Color color,
+            out Text label, out Text icon)
+        {
+            var button = BuildButton(parent, name, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            button.image.color = color;
+            UiTheme.Round(button.image, 10f, outline: false);
+            var size = button.gameObject.AddComponent<LayoutElement>();
+            size.minWidth = size.minHeight = UiTheme.MinTouch;
+            icon = BuildLabel(button.transform, glyph, UiTheme.SmallSize + 1, Vector2.zero, new Vector2(0, 1),
+                new Vector2(4, 0), new Vector2(25, 0));
+            icon.font = UiTheme.IconFont;
+            icon.resizeTextForBestFit = false;
+            label = BuildLabel(button.transform, text, UiTheme.TinySize, Vector2.zero, Vector2.one,
+                new Vector2(26, 2), new Vector2(-4, -2));
+            label.resizeTextForBestFit = false;
+            return button;
+        }
+
+        private static bool IsInfoCellInBounds(Vector2Int point) =>
+            point.x >= 0 && point.y >= 0 && point.x < GridSize && point.y < GridSize;
+
+        private bool TryGetInfoActionCell(out Vector2Int point)
+        {
+            point = _inspectedCell.GetValueOrDefault();
+            return _activeTool == BuildTool.Pan && _inspectedCell.HasValue && IsInfoCellInBounds(point) &&
+                _city.GetCell(point.x, point.y).Type != CellType.Empty;
+        }
+
+        private void RefreshInfoActions()
+        {
+            bool show = TryGetInfoActionCell(out Vector2Int point);
+            // A bridge over water is itself a demolishable object. Bare water has no action.
+            bool demolish = show && _city.TryQuoteCell(point.x, point.y, CellType.Empty, BuildingModel.Default,
+                out _, out _);
+            if (_infoDemolition.HasValue && (!demolish || _infoDemolition.Value.Cell != point ||
+                Time.unscaledTime >= _infoDemolitionUntil))
+                ResetInfoDemolition();
+
+            _infoActions.SetActive(show);
+            _infoDemolish.gameObject.SetActive(demolish);
+            _infoViewport.offsetMin = new Vector2(14, show ? InfoActionMargin + UiTheme.MinTouch + 8f : 12f);
+        }
+
+        private void FocusInspectedCell()
+        {
+            if (!TryGetInfoActionCell(out Vector2Int point)) return;
+            ResetInfoDemolition();
+            if (_infoFocus != null) StopCoroutine(_infoFocus);
+            Vector3 start = _camTarget;
+            FocusCamera(start);
+            _infoFocus = StartCoroutine(FlyToInspectedCell(point, start, _camDistance));
+        }
+
+        private IEnumerator FlyToInspectedCell(Vector2Int cell, Vector3 start, float startDistance)
+        {
+            var target = new Vector3((cell.x + 0.5f) * CellSize, 0f, (cell.y + 0.5f) * CellSize);
+            Vector3 expectedTarget = _camTarget;
+            float expectedDistance = _camDistance;
+            float startTime = Time.unscaledTime;
+            // Give touch input a chance to cancel the flight before applying each camera step.
+            while (true)
+            {
+                yield return null;
+                if (_activeTool != BuildTool.Pan || _inspectedCell != cell || _isDragging ||
+                    _camTarget != expectedTarget || !Mathf.Approximately(_camDistance, expectedDistance))
+                    break;
+
+                float progress = Mathf.Clamp01((Time.unscaledTime - startTime) / InfoFocusSeconds);
+                float eased = Mathf.SmoothStep(0f, 1f, progress);
+                if (progress >= 1f)
+                {
+                    FocusCamera(target);
+                    _camDistance = InfoFocusDistance;
+                    UpdateCameraTransform();
+                    break;
+                }
+                _camTarget = expectedTarget = Vector3.Lerp(start, target, eased);
+                _camDistance = expectedDistance = Mathf.Lerp(startDistance, InfoFocusDistance, eased);
+                UpdateCameraTransform();
+            }
+            _infoFocus = null;
+        }
+
+        private void DemolishInspectedCell()
+        {
+            if (!TryGetInfoActionCell(out Vector2Int point) ||
+                !_city.TryQuoteCell(point.x, point.y, CellType.Empty, BuildingModel.Default,
+                    out int cost, out int bridgeGroup))
+            {
+                ResetInfoDemolition();
+                RefreshInfoActions();
+                return;
+            }
+
+            CityCell cell = _city.GetCell(point.x, point.y);
+            var quote = (point, cell.Type, cell.Model, cost, bridgeGroup);
+            if (_infoDemolition != quote || Time.unscaledTime >= _infoDemolitionUntil)
+            {
+                ResetInfoDemolition();
+                _infoDemolition = quote;
+                _infoDemolitionUntil = Time.unscaledTime + InfoDemolitionSeconds;
+                _infoDemolish.image.color = UiTheme.Danger;
+                _infoDemolishIcon.enabled = false;
+                _infoDemolishLabel.rectTransform.offsetMin = new Vector2(4, 2);
+                _infoDemolishLabel.text = UiText.ConfirmInspectedDemolition(cost);
+                _infoDemolitionTimeout = StartCoroutine(ExpireInfoDemolition());
+                return;
+            }
+
+            ResetInfoDemolition();
+            if (!_city.TrySetCell(point.x, point.y, CellType.Empty)) return;
+            _cityDirty = true;
+            _audio?.PlayBulldoze();
+            CloseInfoView();
+        }
+
+        private IEnumerator ExpireInfoDemolition()
+        {
+            yield return new WaitForSecondsRealtime(InfoDemolitionSeconds);
+            _infoDemolitionTimeout = null;
+            ResetInfoDemolition();
+        }
+
+        private void ResetInfoDemolition()
+        {
+            if (!_infoDemolition.HasValue) return;
+            _infoDemolition = null;
+            if (_infoDemolitionTimeout != null)
+            {
+                StopCoroutine(_infoDemolitionTimeout);
+                _infoDemolitionTimeout = null;
+            }
+            _infoDemolish.image.color = InfoDemolitionTint;
+            _infoDemolishIcon.enabled = true;
+            _infoDemolishLabel.rectTransform.offsetMin = new Vector2(26, 2);
+            _infoDemolishLabel.text = UiText.Bulldoze;
         }
 
         private void CloseInfoView()
@@ -103,7 +280,9 @@ namespace XCity
         private void RefreshInfoViewHUD()
         {
             if (_infoPanel == null) return;
-            bool inspecting = _activeTool == BuildTool.Pan && _inspectedCell.HasValue;
+            RefreshInfoActions();
+            bool inspecting = _activeTool == BuildTool.Pan && _inspectedCell.HasValue &&
+                IsInfoCellInBounds(_inspectedCell.Value);
             bool showLegend = _cityRenderer != null && _cityRenderer.InfoViewEnabled;
             bool show = inspecting || showLegend;
             if (show)
