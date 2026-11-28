@@ -7,8 +7,11 @@ namespace XCity
 {
     internal sealed class CityEmergencySystem : IDisposable
     {
-        private const float InitialCooldown = 26f;
-        private const float RepeatInterval = 42f;
+        // One attempt every 3 minutes of game time (~3 per 10-minute day); was every 42 s, far too often.
+        private const float InitialCooldown = 120f;
+        private const float RepeatInterval = 180f;
+        // Share of attempts a fire station's coverage prevents on the building that would have caught fire.
+        private const double PreventedByCoverage = 0.75;
         private const float BaseFireDuration = 24f;
 
         private static readonly Color32 FlameOrange = new Color32(255, 118, 28, 3);
@@ -145,6 +148,8 @@ namespace XCity
             if (_burnables.Count < 14) return;
 
             Vector2Int chosen = _burnables[_rng.Next(_burnables.Count)];
+            if ((_city.GetCoverage(chosen.x, chosen.y) & ServiceCoverage.Fire) != 0 && _rng.NextDouble() < PreventedByCoverage)
+                return;
             CityCell chosenCell = _city.GetCell(chosen.x, chosen.y);
             FireCell = chosen;
             FireHeight = chosenCell.Height;
