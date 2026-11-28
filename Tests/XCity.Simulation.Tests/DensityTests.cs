@@ -13,8 +13,8 @@ namespace XCity.Tests
             Assert.True(city.TrySetCell(x + 1, z + 8, CellType.Residential, BuildingModel.Apartment));
             if (withServices)
             {
-                Assert.True(city.TrySetCell(x + 1, z + 9, CellType.CivicService, BuildingModel.PoliceStation));
-                Assert.True(city.TrySetCell(x + 1, z + 10, CellType.CivicService, BuildingModel.Hospital));
+                Assert.True(city.TrySetCell(x + 1, z + 9, CellType.CivicService, BuildingModel.PolicePost));
+                Assert.True(city.TrySetCell(x + 1, z + 10, CellType.CivicService, BuildingModel.Clinic));
             }
             return (city, x, z);
         }

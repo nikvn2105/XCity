@@ -98,6 +98,11 @@ namespace XCity.Tests
                         plan.BuildShore(BuildingModel.WaterPump);
                         plan.BuildShore(BuildingModel.SewagePlant);
                     }
+                    // Full coverage: a service set at the zoning frontier every 100 turns, as a real player would.
+                    if (metropolis && turn % 100 == 0 && city.PeakPopulation >= 2000 && plan.LotsLeft > 16 && city.Money > 20000)
+                        foreach (var model in new[] { BuildingModel.PrimarySchool, BuildingModel.PoliceStation,
+                            BuildingModel.Hospital, BuildingModel.FireStation })
+                            plan.BuildService(model);
                     if (turn % 10 == 0 && plan.LotsLeft > 16)
                     {
                         bool high = city.PeakPopulation >= 500;
@@ -185,11 +190,12 @@ namespace XCity.Tests
             {
                 plan.BuildService(BuildingModel.Preschool);
                 plan.BuildService(BuildingModel.PrimarySchool);
-                plan.BuildService(BuildingModel.PoliceStation);
+                plan.BuildService(BuildingModel.PolicePost);
             }
             if (city.PeakPopulation >= 2000 && city.Money >= 10000 && built.Add(2000))
             {
                 plan.BuildService(BuildingModel.HighSchool);
+                plan.BuildService(BuildingModel.PoliceStation);
                 plan.BuildService(BuildingModel.Hospital);
                 plan.BuildService(BuildingModel.FireStation);
                 plan.BuildShore(BuildingModel.Harbor);

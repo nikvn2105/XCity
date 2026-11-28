@@ -117,15 +117,15 @@ namespace XCity
 
         public static int ServiceUpkeep(BuildingModel model) => model switch
         {
-            BuildingModel.PoliceStation => 18,
-            BuildingModel.Hospital => 35,
-            BuildingModel.FireStation => 24,
+            BuildingModel.PoliceStation => 90,
+            BuildingModel.Hospital => 175,
+            BuildingModel.FireStation => 120,
             BuildingModel.Harbor => 22,
             BuildingModel.WaterPump => 20,
             BuildingModel.SewagePlant => 25,
-            BuildingModel.PolicePost => 8,
-            BuildingModel.Clinic => 14,
-            BuildingModel.FireStationSmall => 10,
+            BuildingModel.PolicePost => 16,
+            BuildingModel.Clinic => 28,
+            BuildingModel.FireStationSmall => 20,
             BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).Upkeep,
             BuildingModel.Landfill or BuildingModel.Incinerator => GarbageCatalog.Get(model).Upkeep,
             _ => Get(model).Seats / 15
@@ -134,8 +134,8 @@ namespace XCity
         public static int UnlockPopulation(BuildingModel model) => model switch
         {
             BuildingModel.Apartment or BuildingModel.Office or BuildingModel.Factory or
-                BuildingModel.Preschool or BuildingModel.PrimarySchool or BuildingModel.PoliceStation => 500,
-            BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or BuildingModel.GasPlant or
+                BuildingModel.Preschool or BuildingModel.PrimarySchool => 500,
+            BuildingModel.PoliceStation or BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or BuildingModel.GasPlant or
                 BuildingModel.Harbor => 2000,
             BuildingModel.University or BuildingModel.OfficeTower or BuildingModel.ShoppingMall => 5000,
             BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).UnlockPopulation,

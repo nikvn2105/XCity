@@ -120,7 +120,7 @@ namespace XCity.Tests
             Assert.Equal(4, CitySimulation.AdministrationCost(300));
             Assert.Equal(50, CitySimulation.AdministrationCost(1000));
             Assert.Equal(5000, CitySimulation.AdministrationCost(10000));
-            Assert.Equal(25000, CitySimulation.AdministrationCost(50000)); // half a coin per resident past 10,000
+            Assert.Equal(53000, CitySimulation.AdministrationCost(50000)); // 1.2 per resident past 10,000
 
             var city = GrownStreet();
             city.Tick();

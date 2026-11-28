@@ -63,11 +63,11 @@ namespace XCity.Tests
             states.Add(Fingerprint(city));
             // Golden values captured on 6f1cdab before replacing the utility algorithms; re-captured for land
             // value tax, utility capacity 80 (2e), the garbage penalty (2d: no facilities here) and the
-            // administration cost and the power plant rebalance (2e).
+            // administration cost and the power plant rebalance (2e), and the late-game rebalance.
             Assert.Equal(new[]
             {
                 0x0E36D0C693D6E214UL, 0x34EF967DA5191FD9UL, 0xD8680A6F2A7ED3C8UL,
-                0x34EF967DA5191FD9UL, 0x0E36D0C693D6E214UL, 0x079433C68890914DUL
+                0x34EF967DA5191FD9UL, 0x0E36D0C693D6E214UL, 0xF72239686E9EE219UL
             }, states);
         }
 
@@ -120,14 +120,15 @@ namespace XCity.Tests
             // started following land value and when utility capacity doubled (random states and money
             // unchanged; only the water state in the fingerprint moved) and when the garbage penalty cut
             // taxable income in this unserved city (2d), and for the administration cost and power plant
-            // upkeep (2e).
+            // upkeep (2e), and for the late-game rebalance (5x service upkeep, admin 1.2 per resident past
+            // 10,000): this unserved 1.4-million-person fixture now runs at a loss; random states unchanged.
             var expected = new (ulong Fingerprint, int Money, uint RandomState)[]
             {
-                (0xDD926F084248FCE3UL, 1647925, 2647435461),
-                (0xEA209733B52D8A07UL, 2295950, 307599695),
-                (0xEA209733B52D8A07UL, 2943975, 2398689233),
-                (0xEA209733B52D8A07UL, 3592000, 745495504),
-                (0xEA209733B52D8A07UL, 4240025, 632435482)
+                (0x0D2256FCAE1A841BUL, 568973, 2647435461),
+                (0xFAA7ED953543848FUL, 138046, 307599695),
+                (0xFAA7ED953543848FUL, -292881, 2398689233),
+                (0xFAA7ED953543848FUL, -723808, 745495504),
+                (0xFAA7ED953543848FUL, -1154735, 632435482)
             };
             foreach (var state in expected)
             {

@@ -252,3 +252,16 @@ Mốc 500 / 2.000 / 5.000 dân: lượt 54 / 218 / 470. Không nợ; quỹ thấ
 ### Điện (28/11)
 
 Nhà máy điện cơ bản 24 → 60 ô, phí 60 → 90/lượt; thêm **Nhà máy điện khí** (mở ở 2.000 dân): 250 ô, giá 6.000, phí 300/lượt (save 15). Đô thị lớn (bot chỉ xây nhà máy cơ bản): 40 nhà máy thay vì 96, chi điện 3.600 thay vì 5.760; lên 11.780 dân, lãi +7.194/tick. Lãi cuối game tăng thêm — cần đo lại khi bot phủ dịch vụ đầy đủ (xem "Còn mở sau 2e").
+
+### Cân bằng cuối game (28/11)
+
+Bot Đô thị lớn nay xây thêm một bộ trường tiểu học, đồn công an, bệnh viện và trạm cứu hỏa mỗi 100 lượt (từ 2.000 dân) để phủ dịch vụ như người chơi thật. Trước khi chỉnh: 19.000 dân, hài lòng 76, lãi **+20.600/tick** (dịch vụ chỉ tốn ~1.200).
+
+Đã đổi (Anh NiK chọn "không trần dân"):
+- Phí dịch vụ lớn ×5: đồn công an 90, bệnh viện 175, trạm cứu hỏa 120. Bản nhỏ ×2: trạm công an 16, phòng khám 28, cứu hỏa nhỏ 20. Trường học giữ nguyên.
+- Hành chính trên 10.000 dân: 1,2 mỗi người (trước 0,5), liền mạch tại 10.000.
+- Đồn công an mở ở 2.000 dân (trước 500); đầu game dùng trạm công an.
+
+Kết quả Đô thị lớn: 20.200 dân, hài lòng 77, lãi **+11.800/tick** (chi hành chính 17.200, dịch vụ ~5.700). Mỗi người dân thêm vẫn lãi ~0,2 nên không có trần. Các kịch bản Tăng trưởng (8–10%) gần như không đổi.
+
+Còn mở: kịch bản "Xây dịch vụ sớm" (thị trấn 540 dân không lớn thêm, trước lãi +12) nay lỗ −16 và phá sản ở lượt 1.214; thành phố giả 1,4 triệu dân trong test hiệu năng (không dịch vụ) lỗ ~430.000/tick.

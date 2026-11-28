@@ -56,7 +56,7 @@ namespace XCity
         internal const int AdministrationThreshold = 10000;
 
         public static int AdministrationCost(int population) => population >= AdministrationThreshold
-            ? population / 2 : (int)((long)population * population / (2 * AdministrationThreshold));
+            ? AdministrationThreshold / 2 + (population - AdministrationThreshold) * 6 / 5 : (int)((long)population * population / (2 * AdministrationThreshold));
 
         public int GetTaxRate(TaxZone zone) => _taxRates[(int)zone];
 

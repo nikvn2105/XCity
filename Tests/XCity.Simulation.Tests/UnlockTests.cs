@@ -84,8 +84,8 @@ namespace XCity.Tests
             Assert.Equal(500, BuildingCatalog.UnlockPopulation(BuildingModel.Factory));
             Assert.Equal(500, BuildingCatalog.UnlockPopulation(BuildingModel.Preschool));
             Assert.Equal(500, BuildingCatalog.UnlockPopulation(BuildingModel.PrimarySchool));
-            Assert.Equal(500, BuildingCatalog.UnlockPopulation(BuildingModel.PoliceStation));
 
+            Assert.Equal(2000, BuildingCatalog.UnlockPopulation(BuildingModel.PoliceStation));
             Assert.Equal(2000, BuildingCatalog.UnlockPopulation(BuildingModel.HighSchool));
             Assert.Equal(2000, BuildingCatalog.UnlockPopulation(BuildingModel.Hospital));
             Assert.Equal(2000, BuildingCatalog.UnlockPopulation(BuildingModel.FireStation));
@@ -157,7 +157,7 @@ namespace XCity.Tests
                 city.Tick();
 
             Assert.True(city.PeakPopulation >= 500, $"expected peak >= 500, got {city.PeakPopulation}");
-            Assert.True(city.TrySetCell(x + 5, z + 6, CellType.CivicService, BuildingModel.PoliceStation));
+            Assert.True(city.TrySetCell(x + 5, z + 6, CellType.Commercial, BuildingModel.Office));
             int recordedPeak = city.PeakPopulation;
 
             Assert.True(city.TryApplyBuild(homes, CellType.Empty));
