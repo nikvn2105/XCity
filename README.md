@@ -3,10 +3,14 @@ XCity — 100% Code-Driven Unity City-Builder for iOS (Cities: Skylines style)
 
 ## Bản demo cộng đồng
 
-Đẩy một tag dạng `v0.1.0-demo.2` để chạy cả hai workflow build. Tải các tệp
-`XCity-v0.1.0-demo.2.apk` và `XCity-v0.1.0-demo.2-unsigned.ipa` trong phần
-Artifacts, rồi đính kèm trực tiếp vào GitHub pre-release của cùng tag. IPA cần
-được ký trước khi cài lên iPhone.
+Đẩy một tag dạng `v0.1.0-demo.3` (từ `main`): workflow **Demo release (APK + IPA)**
+tự build APK và dự án Xcode, nhờ Codemagic biên dịch IPA, rồi tạo pre-release có
+`XCity-v0.1.0-demo.3.apk`, `XCity-v0.1.0-demo.3-unsigned.ipa` và hai nút tải.
+IPA cần được ký trước khi cài lên iPhone.
+
+Cần hai secret của repo (Settings → Secrets and variables → Actions):
+`CODEMAGIC_API_TOKEN` (Codemagic → Settings → Integrations → Codemagic API) và
+`CODEMAGIC_APP_ID` (đoạn mã trong địa chỉ `codemagic.io/app/<APP_ID>`).
 
 Build từ nhánh dùng phiên bản trong Unity và mã commit ngắn, ví dụ
 `XCity-v0.1.0-f324ea5.apk`.

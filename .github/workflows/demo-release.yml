@@ -1,0 +1,180 @@
+name: Demo release (APK + IPA)
+
+# Push a tag like v0.1.0-demo.3: builds the Android APK and the iOS Xcode project here, has Codemagic
+# compile the unsigned IPA from that exact Xcode project (GitHub's macOS runners never start for this
+# repo), then publishes a pre-release with both files and the two download buttons.
+# Needs repository secrets CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID (see README).
+
+on:
+  push:
+    tags: ['v*-demo.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-release-${{ github.ref_name }}
+
+jobs:
+  ios-project:
+    name: Build Unity Xcode project
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Check demo tag
+        run: bash .github/scripts/demo-version.sh
+      - uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-2022.3.47f1-iOS-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-2022.3.47f1-iOS-
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: iOS
+          unityVersion: 2022.3.47f1
+          buildName: XCity
+          buildsPath: build
+          versioning: None
+      - name: Archive Xcode project with file modes and symlinks
+        run: |
+          test -f build/iOS/XCity/Unity-iPhone.xcodeproj/project.pbxproj
+          tar -cf XCity-XcodeProject.tar -C build/iOS XCity
+      - id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: XCity-XcodeProject-${{ github.ref_name }}
+          path: XCity-XcodeProject.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+      - uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          unityVersion: 2022.3.47f1
+          targetPlatform: Android
+          androidExportType: androidPackage
+          buildName: XCity
+          buildsPath: build
+          versioning: None
+      - name: Verify APK and signature
+        run: |
+          apk=build/Android/XCity.apk
+          unzip -tq "$apk"
+          unzip -Z1 "$apk" lib/arm64-v8a/libil2cpp.so
+          apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          "$apksigner" verify --verbose --print-certs "$apk"
+          sudo chown -R "$(id -u):$(id -g)" build/Android
+          mv "$apk" "build/Android/XCity-${GITHUB_REF_NAME}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XCity-apk
+          path: build/Android/XCity-${{ github.ref_name }}.apk
+          if-no-files-found: error
+          retention-days: 3
+
+  ipa:
+    name: Compile IPA on Codemagic
+    needs: ios-project
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Start Codemagic build and wait for it
+        env:
+          CM_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          CM_APP: ${{ secrets.CODEMAGIC_APP_ID }}
+          ARTIFACT_ID: ${{ needs.ios-project.outputs.artifact-id }}
+        run: |
+          set -euo pipefail
+          if [ -z "$CM_TOKEN" ] || [ -z "$CM_APP" ]; then
+            echo "::error::Add the CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID repository secrets"; exit 1
+          fi
+          body=$(jq -n --arg app "$CM_APP" --arg tag "$GITHUB_REF_NAME" --arg id "$ARTIFACT_ID" \
+            '{appId: $app, workflowId: "ios-unsigned-ipa", tag: $tag,
+              environment: {variables: {XCODE_ARTIFACT_ID: $id, DEMO_VERSION: $tag}}}')
+          build=$(curl -fsS -X POST https://api.codemagic.io/builds -H "x-auth-token: $CM_TOKEN" \
+            -H 'Content-Type: application/json' -d "$body" | jq -r .buildId)
+          echo "Codemagic build: https://codemagic.io/app/$CM_APP/build/$build"
+          for i in $(seq 1 140); do
+            sleep 30
+            json=$(curl -fsS -H "x-auth-token: $CM_TOKEN" "https://api.codemagic.io/builds/$build")
+            status=$(jq -r .build.status <<<"$json")
+            echo "status: $status"
+            case "$status" in
+              finished) break ;;
+              failed|canceled|timeout|skipped) echo "::error::Codemagic build $status"; exit 1 ;;
+            esac
+          done
+          [ "$status" = finished ] || { echo "::error::Codemagic build did not finish in time"; exit 1; }
+          url=$(jq -r --arg name "XCity-${GITHUB_REF_NAME}-unsigned.ipa" \
+            '.build.artefacts[] | select(.name == $name) | .url' <<<"$json")
+          [ -n "$url" ] || { echo "::error::No IPA in the Codemagic artefacts"; exit 1; }
+          curl -fsSL -H "x-auth-token: $CM_TOKEN" -o "XCity-${GITHUB_REF_NAME}-unsigned.ipa" "$url"
+          unzip -tq "XCity-${GITHUB_REF_NAME}-unsigned.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XCity-ipa
+          path: XCity-${{ github.ref_name }}-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 3
+      # The ~200 MB Xcode project only bridges the two machines; drop it once the IPA is safe.
+      - name: Delete the Xcode project artifact
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.ios-project.outputs.artifact-id }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID" || true
+
+  release:
+    name: Publish pre-release
+    needs: [android, ipa]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: XCity-apk
+          path: out
+      - uses: actions/download-artifact@v4
+        with:
+          name: XCity-ipa
+          path: out
+      - name: Create the pre-release with both files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          apk="out/XCity-${GITHUB_REF_NAME}.apk"
+          ipa="out/XCity-${GITHUB_REF_NAME}-unsigned.ipa"
+          test -f "$apk" && test -f "$ipa"
+          gh release create "$GITHUB_REF_NAME" "$apk" "$ipa" --prerelease \
+            --title "XCity $GITHUB_REF_NAME" --notes "IPA cần được ký (ví dụ xsign) trước khi cài lên iPhone."
+      # Releases made with this token do not trigger other workflows, so add the buttons here.
+      - name: Add the download buttons
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/latest-demo-downloads.py

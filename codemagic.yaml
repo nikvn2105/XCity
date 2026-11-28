@@ -1,5 +1,6 @@
-# Packages the unsigned IPA on a Codemagic Mac from the Xcode project that the GitHub
-# "Build XCity iOS (.ipa)" workflow already built on Linux (artifact XCity-XcodeProject).
+# Packages the unsigned IPA on a Codemagic Mac from an Xcode project that GitHub already built on Linux.
+# Started by hand: uses the newest XCity-XcodeProject artifact. Started by the "Demo release" workflow:
+# gets XCODE_ARTIFACT_ID (that exact project) and DEMO_VERSION (names the IPA) from the API call.
 # Needs a "github" variable group with GITHUB_TOKEN: fine-grained, this repo only, Actions: read.
 workflows:
   ios-unsigned-ipa:
@@ -17,10 +18,14 @@ workflows:
           # A pasted token can carry a newline, which makes curl reject the header (error 43).
           GITHUB_TOKEN=$(printf %s "${GITHUB_TOKEN:-}" | tr -d '[:space:]')
           if [ -z "$GITHUB_TOKEN" ]; then echo "GITHUB_TOKEN is missing: add it to the 'github' variable group"; exit 1; fi
-          api="https://api.github.com/repos/nikvn2105/XCity/actions/artifacts?name=XCity-XcodeProject&per_page=20"
-          url=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "$api" |
-            python3 -c 'import json,sys; a=[x for x in json.load(sys.stdin)["artifacts"] if not x["expired"]]; print(a[0]["archive_download_url"] if a else "")')
-          if [ -z "$url" ]; then echo "No unexpired XCity-XcodeProject artifact on GitHub"; exit 1; fi
+          if [ -n "${XCODE_ARTIFACT_ID:-}" ]; then
+            url="https://api.github.com/repos/nikvn2105/XCity/actions/artifacts/$XCODE_ARTIFACT_ID/zip"
+          else
+            api="https://api.github.com/repos/nikvn2105/XCity/actions/artifacts?name=XCity-XcodeProject&per_page=20"
+            url=$(curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" "$api" |
+              python3 -c 'import json,sys; a=[x for x in json.load(sys.stdin)["artifacts"] if not x["expired"]]; print(a[0]["archive_download_url"] if a else "")')
+            if [ -z "$url" ]; then echo "No unexpired XCity-XcodeProject artifact on GitHub"; exit 1; fi
+          fi
           mkdir -p ios-build
           curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o ios-build/project.zip "$url"
           unzip -q ios-build/project.zip -d ios-build
@@ -53,9 +58,11 @@ workflows:
           ditto "$app" "ipa-out/Payload/$(basename "$app")"
           ditto -c -k --keepParent ipa-out/Payload XCity-unsigned.ipa
           unzip -tq XCity-unsigned.ipa
+          # The demo release workflow downloads the IPA by this versioned name.
+          if [ -n "${DEMO_VERSION:-}" ]; then cp XCity-unsigned.ipa "XCity-$DEMO_VERSION-unsigned.ipa"; fi
       # Phones offer to install a .ipa link instead of saving it; a .zip downloads as a normal file.
       - name: Zip the IPA for phone download
         script: zip -j XCity-unsigned-ipa.zip XCity-unsigned.ipa
     artifacts:
-      - XCity-unsigned.ipa
+      - XCity-*unsigned.ipa
       - XCity-unsigned-ipa.zip

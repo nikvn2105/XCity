@@ -1,8 +1,7 @@
 name: Build XCity Android APK
 
+# Tagged demo releases build the APK in demo-release.yml; this stays for one-off manual builds.
 on:
-  push:
-    tags: ['v*-demo.*']
   workflow_dispatch:
 
 permissions:
