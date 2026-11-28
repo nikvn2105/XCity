@@ -15,6 +15,7 @@ namespace XCity
 
         private CityEmergencySystem _emergencies;
         private CityOverlaySystem _overlays;
+        private CityOverlaySystem _dirtyWater;
         private XCityAudioSystem _audio;
 
         private float _simSpeed = 1f;
@@ -39,6 +40,8 @@ namespace XCity
             _vehicles.SetEmergencySystem(_emergencies);
             _helicopters.SetEmergencySystem(_emergencies);
             _overlays = new CityOverlaySystem(_city, CellSize, _vertexColorMat, transform);
+            _dirtyWater = new CityOverlaySystem(_city, CellSize, _vertexColorMat, transform);
+            _dirtyWater.SetMode(CityOverlayMode.PollutedWater);
             _audio = new XCityAudioSystem(transform, _previewOutput != null);
             _emergencies.OnFireStarted += () =>
             {
@@ -271,11 +274,13 @@ namespace XCity
         {
             _emergencies?.SetView(view);
             _overlays?.SetView(view);
+            _dirtyWater?.SetView(view);
         }
 
         private void LateUpdateUX(float simDt)
         {
             _overlays?.Update();
+            _dirtyWater?.Update();
             _emergencies?.Update(simDt);
 
             _rciRefreshTimer += Time.unscaledDeltaTime;
@@ -314,6 +319,7 @@ namespace XCity
         {
             _emergencies?.Dispose();
             _overlays?.Dispose();
+            _dirtyWater?.Dispose();
             _audio?.Dispose();
         }
     }

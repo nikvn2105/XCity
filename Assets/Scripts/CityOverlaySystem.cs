@@ -14,7 +14,9 @@ namespace XCity
         Environment,
         Happiness,
         LandValue,
-        Garbage
+        Garbage,
+        // Always on, separate instance: tints dirty river and lake water. Not in the overlay cycle.
+        PollutedWater
     }
 
     internal sealed class CityOverlaySystem : IDisposable
@@ -106,7 +108,8 @@ namespace XCity
         public void Update()
         {
             if (Mode == CityOverlayMode.None || Mode == CityOverlayMode.Happiness) return;
-            if (_lastTick != _city.TickCount)
+            // Pollution only moves when something is built or removed (CellChanged), not every tick.
+            if (Mode != CityOverlayMode.PollutedWater && _lastTick != _city.TickCount)
             {
                 _lastTick = _city.TickCount;
                 _dirty = true;
@@ -146,22 +149,25 @@ namespace XCity
                 {
                     CityCell cell = _city.GetCell(x, z);
                     Color32 color;
+                    float size = half;
                     if (!WorldTerrain.IsLand(x, z))
                     {
-                        if (Mode != CityOverlayMode.Environment || cell.IsBridge || !_city.IsPollutedWater(x, z)) continue;
-                        color = new Color32(124, 92, 52, 255); // Dirty river or lake water.
+                        if (Mode != CityOverlayMode.PollutedWater || cell.IsBridge || !_city.IsPollutedWater(x, z)) continue;
+                        color = new Color32(92, 98, 58, 255); // Murky brown-green, whole cell so tiles join.
+                        size = _cellSize * 0.5f;
                     }
-                    else if (cell.Type == CellType.Road || !TryPickOverlayColor(x, z, cell, out color)) continue;
+                    else if (Mode == CityOverlayMode.PollutedWater || cell.Type == CellType.Road ||
+                        !TryPickOverlayColor(x, z, cell, out color)) continue;
 
                     Vector3 center = new Vector3((x + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z + 0.5f) * _cellSize);
                     float y = cell.Height > 0f ? CityChunkRenderer.BuildingBase + cell.Height + 0.14f : OverlayY;
                     if (WorldTerrain.IsFreshWater(x, z)) y += BridgeProfile.WaterSurface;
                     _builder.SetFrame(center, 0);
                     _builder.AddQuad(
-                        new Vector3(-half, y, -half),
-                        new Vector3(-half, y, half),
-                        new Vector3(half, y, half),
-                        new Vector3(half, y, -half),
+                        new Vector3(-size, y, -size),
+                        new Vector3(-size, y, size),
+                        new Vector3(size, y, size),
+                        new Vector3(size, y, -size),
                         Vector3.up, color);
                 }
             }
