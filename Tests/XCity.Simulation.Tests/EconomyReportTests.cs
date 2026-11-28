@@ -98,6 +98,10 @@ namespace XCity.Tests
                             plan.Zone(2, new[] { BuildingModel.Workshop, BuildingModel.Warehouse });
                         if (plan.Homes >= plan.Parks * 30 + 30 && city.Money > 3000)
                             plan.BuildService(BuildingModel.SmallPark);
+                        // Garbage: at most one facility per 50 turns while collection is clearly short (placement is
+                        // just the next free lot, so faster building would spam facilities out of reach).
+                        if (turn % 50 == 0 && city.GarbageProduced - city.GarbageCollected > 60 && city.Money > 5000)
+                            plan.BuildService(city.PeakPopulation >= 2000 ? BuildingModel.Incinerator : BuildingModel.Landfill);
                     }
                 }
 
@@ -140,7 +144,7 @@ namespace XCity.Tests
                 $"residential tax: {residentialTax}; business tax: {city.LastTaxIncome - residentialTax}");
             BudgetReport b = city.LastBudget;
             _output.WriteLine($"Budget: tax R/C/I {b.ResidentialTax}/{b.CommercialTax}/{b.IndustrialTax}; roads {b.Roads}, power {b.Power}, " +
-                $"education {b.Education}, health {b.Health}, police {b.Police}, fire {b.Fire}, other {b.Other}, loan {b.Loan}; " +
+                $"education {b.Education}, health {b.Health}, police {b.Police}, fire {b.Fire}, garbage {b.Garbage}, other {b.Other}, loan {b.Loan}; " +
                 $"lots left {plan.LotsLeft}");
             _output.WriteLine($"Site: ({plan.Origin.X}, {plan.Origin.Z}); builds: {string.Join(", ", plan.BuildLog)}");
         }

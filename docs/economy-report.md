@@ -208,3 +208,18 @@ Chi lượt cuối (thuế 10%): đường 696, điện 1.500, giáo dục 40, y
 | 16% | — | — | 156 | +9 | đứng yên, không phá sản |
 
 Còn lại cho đợt 2 (sau khi gộp rác 2d): chi giữa game vẫn thấp so với thu (lãi ~5.000/tick ở ~3.700 dân); đo lại khi rác thêm chi phí rồi mới chỉnh phí đường/dịch vụ hoặc thuế gốc.
+
+### Sau khi gộp rác (2d)
+
+Thị trưởng tự động thêm bãi rác (lò đốt sau 2.000 dân) khi thu gom thiếu > 60 đơn vị, tối đa một cơ sở mỗi 50 lượt.
+
+| Thuế | 2.000 dân | Dân lượt 1.000 | Ròng/tick lượt 1.000 | Chi rác |
+|---:|---:|---:|---:|---:|
+| 8% | lượt 470 | 3.332 | +2.176 | 552 |
+| 10% | lượt 494 | 3.760 | +4.391 | 552 |
+| 13% | — | 480 | +481 | 36 |
+| 16% | — | 156 | −11 | 18 |
+
+Rác chiếm ~19% chi ở ~3.700 dân nhưng giữa game vẫn dư (thu 7.368 so với chi 2.977).
+
+**Thử và đã hoàn lại:** giảm thuế gốc 20% (1 mỗi dân, 12 mỗi cấp doanh nghiệp) + phí đường 3. Đầu game sụp: thuế 8% phá sản ở lượt 143, kịch bản dịch vụ sớm phá sản. Kết luận: không giảm thu đều tay; cần một khoản chi **tăng theo quy mô** (chỉ nặng ở giữa và cuối game), ví dụ chi phí hành chính ≈ dân² / 10.000 mỗi lượt (300 dân ≈ 9, 1.000 ≈ 100, 3.700 ≈ 1.370).
