@@ -191,8 +191,8 @@ namespace XCity
                 }
 
                 c.Phase += dt * c.Template.StrideFreq;
-                ComputeSidewalkCurve(c.Cell, c.InDir, c.OutDir, c.SideSign, out Vector3 p0, out Vector3 p1, out Vector3 p2);
-                float length = (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f;
+                float length = CitizenPathLength(c);
+                bool hasCurve = _city.SegmentAt(c.Cell.x, c.Cell.y) != 0;
                 c.T += c.Template.WalkSpeed * dt / Mathf.Max(length, 0.1f);
 
                 if (c.T >= 1f)
@@ -216,6 +216,8 @@ namespace XCity
                         continue;
                     }
                     c.OutDir = c.Route != null ? c.Route[c.RouteStep] : ChooseOutDir(c.Cell.x, c.Cell.y, c.InDir);
+                    if (hasCurve || _city.SegmentAt(c.Cell.x, c.Cell.y) != 0)
+                        c.T = Mathf.Min(1f, c.T * length / CitizenPathLength(c));
                     if (_rng.Next(100) < 12 && TryPickAdjacentBuildingYaw(c.Cell.x, c.Cell.y, out float yaw))
                     {
                         c.PauseTimer = 2.0f + (float)_rng.NextDouble() * 1.8f;
@@ -375,6 +377,44 @@ namespace XCity
             return false;
         }
 
+        private float CurvedSidewalk(Vector2Int cell, int sign) =>
+            sign * (_city.GetCell(cell.x, cell.y).RoadType == RoadType.Avenue ? 0.475f : 0.39f);
+
+        private bool TryCurvedMotion(Citizen citizen, out CurvedRoadMotion motion)
+        {
+            motion = default;
+            var cell = citizen.Cell;
+            float legacySide = citizen.SideSign * 0.39f;
+            return _city.SegmentAt(cell.x, cell.y) != 0 &&
+                CurvedRoadMotion.TryCreate(_city, cell, citizen.InDir, citizen.OutDir,
+                    CurvedSidewalk(cell, citizen.SideSign), legacySide, legacySide, _cellSize, out motion);
+        }
+
+        private float CitizenPathLength(Citizen citizen)
+        {
+            if (TryCurvedMotion(citizen, out var motion)) return Mathf.Max(0.1f, motion.Length);
+            ComputeSidewalkCurve(citizen.Cell, citizen.InDir, citizen.OutDir, citizen.SideSign,
+                out Vector3 p0, out Vector3 p1, out Vector3 p2);
+            return Mathf.Max(0.1f, (Vector3.Distance(p1, p0) + Vector3.Distance(p2, p1) + Vector3.Distance(p2, p0)) * 0.5f);
+        }
+
+        private void SampleCitizen(Citizen citizen, out Vector3 pos, out Vector3 tangent)
+        {
+            if (TryCurvedMotion(citizen, out var motion))
+            {
+                motion.Evaluate(citizen.T, CurbY, out pos, out tangent);
+                return;
+            }
+
+            ComputeSidewalkCurve(citizen.Cell, citizen.InDir, citizen.OutDir, citizen.SideSign,
+                out Vector3 p0, out Vector3 p1, out Vector3 p2);
+            float t = citizen.T, u = 1f - t;
+            pos = u * u * p0 + 2f * u * t * p1 + t * t * p2;
+            tangent = 2f * u * (p1 - p0) + 2f * t * (p2 - p1);
+            if (tangent.sqrMagnitude < 1e-6f) tangent = p2 - p0;
+            CityChunkRenderer.ApplyRoadGrade(_city, citizen.Cell, _cellSize, ref pos, ref tangent);
+        }
+
         private void ComputeSidewalkCurve(Vector2Int cell, int inDir, int outDir, int sideSign, out Vector3 p0, out Vector3 p1, out Vector3 p2)
         {
             float half = _cellSize * 0.5f;
@@ -392,6 +432,9 @@ namespace XCity
                 p1 = center + sideIn * 0.4f;
             else
                 p1 = center + sideIn + sideOut;
+            CurvedRoadMotion.MatchNeighbor(_city, cell, inDir, true, CurvedSidewalk(cell, sideSign), _cellSize, ref p0);
+            CurvedRoadMotion.MatchNeighbor(_city, cell, outDir, false, CurvedSidewalk(cell, sideSign), _cellSize, ref p2);
+
         }
 
         private void RenderCitizens()
@@ -447,13 +490,7 @@ namespace XCity
             {
                 Citizen c = _citizens[i];
                 CitizenTemplate tpl = c.Template;
-                ComputeSidewalkCurve(c.Cell, c.InDir, c.OutDir, c.SideSign, out Vector3 p0, out Vector3 p1, out Vector3 p2);
-
-                float u = 1f - c.T;
-                Vector3 pos = u * u * p0 + 2f * u * c.T * p1 + c.T * c.T * p2;
-                Vector3 tangent = 2f * u * (p1 - p0) + 2f * c.T * (p2 - p1);
-                if (tangent.sqrMagnitude < 1e-6f) tangent = p2 - p0;
-                CityChunkRenderer.ApplyRoadGrade(_city, c.Cell, _cellSize, ref pos, ref tangent);
+                SampleCitizen(c, out Vector3 pos, out Vector3 tangent);
 
                 Quaternion rootRot = c.PauseTimer > 0f
                     ? Quaternion.Euler(0f, c.PauseYaw, 0f)

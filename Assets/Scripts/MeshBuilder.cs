@@ -387,6 +387,34 @@ namespace XCity
             mesh.RecalculateBounds();
         }
 
+        internal void FitRoadFacing(int start, Vector3 center, int quarterTurns, RoadPoint facing, float lotHalf)
+        {
+            Vector3 original = quarterTurns switch
+            {
+                1 => Vector3.right, 2 => Vector3.back, 3 => Vector3.left, _ => Vector3.forward
+            };
+            float cosine = original.x * facing.X + original.z * facing.Z;
+            float sine = original.z * facing.X - original.x * facing.Z;
+            float extent = lotHalf;
+            for (int i = start; i < _vertices.Count; i++)
+            {
+                Vector3 local = RotateFacing(_vertices[i] - center);
+                extent = Mathf.Max(extent, Mathf.Max(Mathf.Abs(local.x), Mathf.Abs(local.z)));
+                _vertices[i] = local + center;
+            }
+            float scale = lotHalf / extent;
+            for (int i = start; i < _vertices.Count; i++)
+            {
+                Vector3 local = _vertices[i] - center;
+                _vertices[i] = center + new Vector3(local.x * scale, local.y, local.z * scale);
+                Vector3 normal = RotateFacing(_normals[i]);
+                _normals[i] = new Vector3(normal.x, normal.y * scale, normal.z).normalized;
+            }
+
+            Vector3 RotateFacing(Vector3 v) =>
+                new Vector3(cosine * v.x + sine * v.z, v.y, cosine * v.z - sine * v.x);
+        }
+
         private Vector3 Rotate(Vector3 v)
         {
             switch (_quarterTurns)
