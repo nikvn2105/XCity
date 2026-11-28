@@ -69,12 +69,13 @@ namespace XCity
                 _mapStyleButtons[i].image.color = PickerStyles[i] == _newMapStyle ? UiTheme.Active : UiTheme.Button;
             _mapSeedText.text = _newMapStyle == MapStyle.Classic ? UiText.ClassicMapNote : UiText.MapSeed(_newMapSeed);
 
-            float[] height = MapGenerator.Generate(NewMapSpec, out var start);
+            float[] height = MapGenerator.Generate(NewMapSpec, out var start, out var water, out _);
             if (_mapPreviewTexture == null)
                 _mapPreviewTexture = new Texture2D(PreviewSize, PreviewSize, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear };
             int scale = CitySimulation.GridSize / PreviewSize;
             var pixels = new Color32[PreviewSize * PreviewSize];
             var sea = new Color32(24, 64, 90, 255);
+            var fresh = new Color32(69, 155, 192, 255);
             var low = new Color32(79, 138, 75, 255);
             var high = new Color32(143, 179, 106, 255);
             var mark = new Color32(245, 196, 81, 255);
@@ -83,10 +84,16 @@ namespace XCity
             for (int pz = 0; pz < PreviewSize; pz++)
             {
                 int x = px * scale, z = pz * scale;
-                float h = height[x * CitySimulation.GridSize + z];
+                int index = x * CitySimulation.GridSize + z;
+                float h = height[index];
                 bool startEdge = (Mathf.Abs(x - start.X) == half || Mathf.Abs(z - start.Z) == half) &&
                     Mathf.Abs(x - start.X) <= half && Mathf.Abs(z - start.Z) <= half;
-                pixels[pz * PreviewSize + px] = startEdge ? mark : h < 0f ? sea : Color32.Lerp(low, high, Mathf.Clamp01(h * 1.4f));
+                bool hasFreshWater = false;
+                for (int dx = 0; dx < scale && !hasFreshWater; dx++)
+                for (int dz = 0; dz < scale && !hasFreshWater; dz++)
+                    hasFreshWater = water[index + dx * CitySimulation.GridSize + dz] is WaterKind.River or WaterKind.Lake;
+                pixels[pz * PreviewSize + px] = startEdge ? mark : hasFreshWater ? fresh : h < 0f ? sea
+                    : Color32.Lerp(low, high, Mathf.Clamp01(h * 1.4f));
             }
             _mapPreviewTexture.SetPixels32(pixels);
             _mapPreviewTexture.Apply(false);

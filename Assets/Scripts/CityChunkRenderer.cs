@@ -566,8 +566,6 @@ namespace XCity
         private void AddCoast(int x, int z, CellType cellType)
         {
             float landH = WorldTerrain.LandHeight(x, z);
-            if (landH > 0.35f) return;
-
             bool waterE = !WorldTerrain.IsLand(x + 1, z);
             bool waterW = !WorldTerrain.IsLand(x - 1, z);
             bool waterN = !WorldTerrain.IsLand(x, z + 1);
@@ -584,12 +582,14 @@ namespace XCity
             const float bankTop = 0.009f;
             const float foamY = -1.024f;
             bool lowBeach = landH < 0.14f;
+            bool seaE = SeaAt(x + 1, z), seaW = SeaAt(x - 1, z);
+            bool seaN = SeaAt(x, z + 1), seaS = SeaAt(x, z - 1);
             Color32 bankColor = lowBeach ? BeachWetSand : BankEarth;
 
-            if (waterE) CoastEdge(edge, -edge, edge, edge, Vector3.right);
-            if (waterW) CoastEdge(-edge, edge, -edge, -edge, Vector3.left);
-            if (waterN) CoastEdge(edge, edge, -edge, edge, Vector3.forward);
-            if (waterS) CoastEdge(-edge, -edge, edge, -edge, Vector3.back);
+            if (waterE) CoastEdge(edge, -edge, edge, edge, Vector3.right, seaE);
+            if (waterW) CoastEdge(-edge, edge, -edge, -edge, Vector3.left, seaW);
+            if (waterN) CoastEdge(edge, edge, -edge, edge, Vector3.forward, seaN);
+            if (waterS) CoastEdge(-edge, -edge, edge, -edge, Vector3.back, seaS);
 
             if (!_infoView && landH < 0.22f)
             {
@@ -598,22 +598,25 @@ namespace XCity
                 Color32 sandCol = Color32.Lerp(BeachWetSand, BeachSand, 0.72f + shade * 0.28f);
                 const float sandY = 0.022f;
 
-                if (waterE) Rect(_surface, edge - sandWidth, -edge, edge, edge, sandY, sandCol);
-                if (waterW) Rect(_surface, -edge, -edge, -edge + sandWidth, edge, sandY, sandCol);
-                if (waterN) Rect(_surface, -edge, edge - sandWidth, edge, edge, sandY, sandCol);
-                if (waterS) Rect(_surface, -edge, -edge, edge, -edge + sandWidth, sandY, sandCol);
+                if (seaE) Rect(_surface, edge - sandWidth, -edge, edge, edge, sandY, sandCol);
+                if (seaW) Rect(_surface, -edge, -edge, -edge + sandWidth, edge, sandY, sandCol);
+                if (seaN) Rect(_surface, -edge, edge - sandWidth, edge, edge, sandY, sandCol);
+                if (seaS) Rect(_surface, -edge, -edge, edge, -edge + sandWidth, sandY, sandCol);
 
                 if (cellType == CellType.Empty)
                 {
-                    if (waterNE && !waterN && !waterE) Rect(_surface, edge - sandWidth, edge - sandWidth, edge, edge, sandY, sandCol);
-                    if (waterNW && !waterN && !waterW) Rect(_surface, -edge, edge - sandWidth, -edge + sandWidth, edge, sandY, sandCol);
-                    if (waterSE && !waterS && !waterE) Rect(_surface, edge - sandWidth, -edge, edge, -edge + sandWidth, sandY, sandCol);
-                    if (waterSW && !waterS && !waterW) Rect(_surface, -edge, -edge, -edge + sandWidth, -edge + sandWidth, sandY, sandCol);
+                    if (waterNE && SeaAt(x + 1, z + 1) && !waterN && !waterE) Rect(_surface, edge - sandWidth, edge - sandWidth, edge, edge, sandY, sandCol);
+                    if (waterNW && SeaAt(x - 1, z + 1) && !waterN && !waterW) Rect(_surface, -edge, edge - sandWidth, -edge + sandWidth, edge, sandY, sandCol);
+                    if (waterSE && SeaAt(x + 1, z - 1) && !waterS && !waterE) Rect(_surface, edge - sandWidth, -edge, edge, -edge + sandWidth, sandY, sandCol);
+                    if (waterSW && SeaAt(x - 1, z - 1) && !waterS && !waterW) Rect(_surface, -edge, -edge, -edge + sandWidth, -edge + sandWidth, sandY, sandCol);
                 }
             }
 
-            void CoastEdge(float x0, float z0, float x1, float z1, Vector3 normal)
+            bool SeaAt(int bx, int bz) => WorldTerrain.WaterKind(bx, bz) == WaterKind.Sea;
+
+            void CoastEdge(float x0, float z0, float x1, float z1, Vector3 normal, bool sea)
             {
+                if (sea && landH > 0.35f) return;
                 Vector3 bankOut = normal * 0.38f;
                 Vector3 foamInner = normal * 0.16f;
                 Vector3 foamOuter = normal * 0.40f;
@@ -623,7 +626,8 @@ namespace XCity
                 var topB = new Vector3(x1, bankTop, z1);
                 var botA = new Vector3(x0, waterline, z0) + bankOut;
                 var botB = new Vector3(x1, waterline, z1) + bankOut;
-                _surface.AddQuad(botA, botB, topB, topA, slopeNormal, bankColor);
+                _surface.AddQuad(botA, botB, topB, topA, slopeNormal, sea ? bankColor : new Color32(78, 113, 60, 255));
+                if (!sea) return;
 
                 var f0 = new Vector3(x0, foamY, z0) + foamInner;
                 var f1 = new Vector3(x1, foamY, z1) + foamInner;
@@ -928,8 +932,13 @@ namespace XCity
             }
 
             var pixels = new byte[size * size];
-            for (int i = 0; i < pixels.Length; i++)
+            for (int z = 0; z < size; z++)
+            for (int x = 0; x < size; x++)
+            {
+                if (WorldTerrain.IsFreshWater(x, z)) continue; // No surf foam on inland water.
+                int i = z * size + x;
                 pixels[i] = (byte)Mathf.RoundToInt(Mathf.Clamp01(1f - dist[i] / maxDist) * 255f);
+            }
 
             var tex = new Texture2D(size, size, TextureFormat.R8, mipChain: false, linear: true)
             {

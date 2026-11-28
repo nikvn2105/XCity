@@ -88,6 +88,7 @@ namespace XCity
             {
                 _worldMapTerrain = new Color32[MapResolution * MapResolution];
                 _worldMapPixels = new Color32[_worldMapTerrain.Length];
+                var fresh = new Color32(89, 169, 199, 255);
                 var water = new Color32(59, 103, 129, 255);
                 var sand = new Color32(167, 153, 104, 255);
                 var grass = new Color32(121, 157, 107, 255);
@@ -101,6 +102,17 @@ namespace XCity
                         float level = WorldTerrain.LandHeight(x, z);
                         _worldMapTerrain[py * MapResolution + px] = level < 0f ? water : level < 0.075f
                             ? sand : Color32.Lerp(grass, trees, WorldTerrain.Vegetation(x, z));
+                    }
+                }
+                if (WorldTerrain.Current.Style != MapStyle.Classic)
+                {
+                    // Sample every fresh-water cell so narrow rivers remain visible when downscaled.
+                    for (int x = 0; x < GridSize; x++)
+                    for (int z = 0; z < GridSize; z++)
+                    {
+                        if (!WorldTerrain.IsFreshWater(x, z)) continue;
+                        int px = x * MapResolution / GridSize, py = z * MapResolution / GridSize;
+                        _worldMapTerrain[py * MapResolution + px] = fresh;
                     }
                 }
             }

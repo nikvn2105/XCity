@@ -171,17 +171,19 @@ namespace XCity
             return true;
         }
 
-        internal bool CanPlaceHarbor(int x, int z) =>
-            IsBuildable(x, z) && TryHarborFacing(x, z, out _, out int waterX, out int waterZ) &&
+        internal bool CanPlaceWaterfront(int x, int z, BuildingModel model) =>
+            IsBuildable(x, z) && TryHarborFacing(x, z, out _, out int waterX, out int waterZ, seaOnly: model == BuildingModel.Harbor) &&
             !_cells[waterX, waterZ].IsBridge;
 
-        internal static bool TryHarborFacing(int x, int z, out int turn, out int waterX, out int waterZ)
+        internal static bool TryHarborFacing(int x, int z, out int turn, out int waterX, out int waterZ, bool seaOnly = true)
         {
             for (turn = 0; turn < 4; turn++)
             {
                 waterX = x + (turn == 1 ? 1 : turn == 3 ? -1 : 0);
                 waterZ = z + (turn == 0 ? 1 : turn == 2 ? -1 : 0);
-                if (IsInBounds(waterX, waterZ) && !WorldTerrain.IsLand(waterX, waterZ))
+                if (!IsInBounds(waterX, waterZ)) continue;
+                WaterKind kind = WorldTerrain.WaterKind(waterX, waterZ);
+                if (kind == WaterKind.Sea || (!seaOnly && kind != WaterKind.Land))
                     return true;
             }
             waterX = x;
