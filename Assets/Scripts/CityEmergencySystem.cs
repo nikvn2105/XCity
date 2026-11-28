@@ -7,11 +7,11 @@ namespace XCity
 {
     internal sealed class CityEmergencySystem : IDisposable
     {
-        // One attempt every 3 minutes of game time (~3 per 10-minute day); was every 42 s, far too often.
-        private const float InitialCooldown = 120f;
-        private const float RepeatInterval = 180f;
+        // One attempt every 6 minutes of game time (under 2 per 10-minute day); was every 42 s, far too often.
+        private const float InitialCooldown = 300f;
+        private const float RepeatInterval = 360f;
         // Share of attempts a fire station's coverage prevents on the building that would have caught fire.
-        private const double PreventedByCoverage = 0.75;
+        private const double PreventedByCoverage = 0.9;
         private const float BaseFireDuration = 24f;
 
         private static readonly Color32 FlameOrange = new Color32(255, 118, 28, 3);
