@@ -408,7 +408,7 @@ namespace XCity
             input.textComponent = label;
             input.characterLimit = CityNameLimit;
             input.lineType = InputField.LineType.SingleLine;
-            input.text = UiText.DefaultCityName(slot);
+            input.text = UiText.RandomCityName();
             return input;
         }
 
