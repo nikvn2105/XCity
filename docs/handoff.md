@@ -1,4 +1,13 @@
-# Bàn giao: dự án XCity (cập nhật 28/11/2026)
+# Bàn giao: dự án XCity (cập nhật 28/11/2026, 17:45 giờ VN)
+
+## Trạng thái nóng (đọc trước)
+- `main` = `61e41de` (dốc 3 ô + công cụ địa hình, save 17). Demo mới nhất: `v0.1.0-demo.11`.
+- Nhánh `claude/trusting-einstein-1p5whu` hơn `main` 2 commit, CHƯA lên main: 4b `f232c4e` (đoạn đường cong, save 18) và 4c `dfae0a4` (công cụ ba chạm, nút Thẳng/Cong). 143 test đạt.
+- Codex đang làm 4d trên `codex/curved-roads` (vẽ đường cong, giao lộ, xe theo đường cong). Khi xong: gộp 4d vào nhánh trên, chạy test + CompileCheck, hỏi Anh NiK rồi đẩy `main`, Anh NiK tạo tag demo kế (demo.12).
+- Lỗi mở: hộp chọn Đường trên máy chỉ hiện "Đường" và "Cầu" (thiếu 4 loại đường) — chờ Anh NiK xác nhận dòng phiên bản ở góc dưới phải màn hình để biết bản nào.
+- Gemini CLI: chưa có khóa API (Anh NiK chưa nhập). Gemini (chatbot) đã làm: shader nước, shader trời, rà UiText, tên thành phố, ý tưởng công trình (`docs/phase7-buildings.md`).
+- Giờ báo cáo cho Anh NiK: giờ Việt Nam.
+- Phát hành: Anh NiK tạo release từ `main` trên web (Publish, tích pre-release) → `demo-release.yml` build APK + IPA (Mac GitHub) và gắn 2 nút tải. Phiên cloud không đẩy được tag.
 
 ## Quy tắc làm việc với Anh NiK (bắt buộc)
 1. Gọi là "Anh NiK". Trả lời ngắn gọn, đủ ý, bằng tiếng Việt.
@@ -15,7 +24,7 @@
 - Repo github.com/nikvn2105/XCity. Nhánh làm việc của Claude: `claude/trusting-einstein-1p5whu`. Lộ trình: `docs/roadmap.md`. Cân bằng kinh tế: `docs/economy-report.md`.
 
 ## Kiểm tra bắt buộc trước khi đẩy
-- `dotnet test Tests/XCity.Simulation.Tests/XCity.Simulation.Tests.csproj` (hiện 115 test). File mô phỏng mới phải thêm tay vào `.csproj` của test.
+- `dotnet test Tests/XCity.Simulation.Tests/XCity.Simulation.Tests.csproj` (hiện 143 test). File mô phỏng mới phải thêm tay vào `.csproj` của test.
 - `dotnet build Tests/XCity.CompileCheck/XCity.CompileCheck.csproj` (biên dịch mọi script game với thư viện Unity tham chiếu). Không bao gồm `Assets/Editor/` (script đặt icon app).
 - Hai test "dấu vân tay" trong `UtilityPerfTests` ghi cứng tiền và trạng thái của một thành phố lớn: mỗi lần đổi kinh tế có chủ ý phải ghi lại giá trị mẫu (in ra rồi chép vào), kèm chú thích lý do; số ngẫu nhiên (`randomState`) phải giữ nguyên nếu tăng trưởng không đổi.
 
