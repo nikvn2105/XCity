@@ -190,9 +190,17 @@ namespace XCity
             if (_go.activeSelf != visible) _go.SetActive(visible);
         }
 
+        private int _renderedTerrainVersion;
+
         public void Update(float dt)
         {
-            if (dt <= 0f) return;
+            bool terrainChanged = _renderedTerrainVersion != _city.TerrainVersion;
+            _renderedTerrainVersion = _city.TerrainVersion;
+            if (dt <= 0f)
+            {
+                if (terrainChanged) RenderVehicles();
+                return;
+            }
             _animTime += dt;
 
             int roadVersion = _city.Roads.Version;

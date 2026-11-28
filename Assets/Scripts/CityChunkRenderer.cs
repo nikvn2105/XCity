@@ -78,6 +78,7 @@ namespace XCity
             _shoreTexture = CreateShoreTexture();
             Shader.SetGlobalTexture("_XCityShoreTex", _shoreTexture);
             _city.CellChanged += MarkDirty;
+            _city.TerrainChanged += MarkTerrainDirty;
         }
 
         public bool InfoViewEnabled => _infoView;
@@ -155,6 +156,8 @@ namespace XCity
             if (_infoView && (roadTouch || BuildingCatalog.IsPublicService(before) || BuildingCatalog.IsPublicService(after)))
                 MarkAllActiveInfoDirty();
         }
+
+        private void MarkTerrainDirty(int x, int z) => MarkChunk(x, z, includeScenery: true);
 
         private void MarkChunk(int x, int z, bool includeScenery)
         {
@@ -1311,6 +1314,7 @@ namespace XCity
         public void Dispose()
         {
             _city.CellChanged -= MarkDirty;
+            _city.TerrainChanged -= MarkTerrainDirty;
             foreach (Mesh mesh in _surfaces)
                 if (mesh != null) UnityEngine.Object.Destroy(mesh);
             foreach (Mesh mesh in _scenery)

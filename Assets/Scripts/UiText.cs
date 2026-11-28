@@ -3,6 +3,14 @@ namespace XCity
     // Every player-facing string lives here, so an English table can be added later (roadmap phase 8).
     public static class UiText
     {
+        public const string Terraform = "Địa hình";
+        public const string RaiseTerrain = "Nâng";
+        public const string LowerTerrain = "Hạ";
+        public const string LevelTerrain = "San phẳng";
+        public const string TerraformHint = "Chạm hoặc kéo qua đất trống để chỉnh tầng";
+        public const string LevelTerrainHint = "Kéo để san theo tầng của ô đầu tiên";
+        public static string TerraformPrice(int price) => $"Chi phí: ${price:N0}/ô/tầng";
+
         public const string SlopeRoadOnly = "Ô sườn dốc chỉ đặt được đường";
         public const string StrokeCost = "Chi phí: $";
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";

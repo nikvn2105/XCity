@@ -197,6 +197,8 @@ namespace XCity
         public int mapSeed;
         public CityCell[] cells;
         public int[] cellIndices;
+        public int[] terrainIndices;
+        public byte[] terrainTiers;
     }
 
     public sealed partial class CitySimulation
@@ -227,7 +229,7 @@ namespace XCity
         internal const float PowerPlantHeight = 3.2f;
         // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding; 14: map style and seed;
         // 15: gas power plant.
-        internal const int CurrentSchemaVersion = 16;
+        internal const int CurrentSchemaVersion = 17;
         public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -254,6 +256,7 @@ namespace XCity
         private sealed class UndoStep
         {
             public List<(int X, int Z, CityCell Cell)> Cells;
+            public List<(int X, int Z, byte Tier)> Terrain;
             public int Spent;
         }
 
@@ -396,10 +399,11 @@ namespace XCity
             return true;
         }
 
-        private void PushUndo(List<(int X, int Z, CityCell Cell)> cells, int spent)
+        private void PushUndo(List<(int X, int Z, CityCell Cell)> cells, int spent,
+            List<(int X, int Z, byte Tier)> terrain = null)
         {
             if (_undoSteps.Count == MaxUndoSteps) _undoSteps.RemoveAt(0);
-            _undoSteps.Add(new UndoStep { Cells = cells, Spent = spent });
+            _undoSteps.Add(new UndoStep { Cells = cells, Spent = spent, Terrain = terrain });
         }
 
         // Steps are undone newest first, so each restored cell is exactly the state that step replaced.
@@ -410,6 +414,13 @@ namespace XCity
 
             UndoStep step = _undoSteps[_undoSteps.Count - 1];
             _undoSteps.RemoveAt(_undoSteps.Count - 1);
+            if (step.Terrain != null)
+            {
+                foreach (var (x, z, tier) in step.Terrain) SetTerrainTier(x, z, tier);
+                Money += step.Spent;
+                NotifyTerrainChanged(step.Terrain);
+                return true;
+            }
             for (int i = step.Cells.Count - 1; i >= 0; i--)
             {
                 var entry = step.Cells[i];
@@ -681,6 +692,7 @@ namespace XCity
                 snapshot.cellIndices[offset] = index;
                 snapshot.cells[offset++] = _cells[index / GridSize, index % GridSize];
             }
+            WriteTerrainEdits(snapshot);
             return snapshot;
         }
 
@@ -697,71 +709,81 @@ namespace XCity
             if (snapshot.schemaVersion >= 14 &&
                 (snapshot.mapStyle < (int)MapStyle.Classic || snapshot.mapStyle > (int)MapStyle.Islands)) return false;
             var map = snapshot.schemaVersion >= 14 ? new MapSpec((MapStyle)snapshot.mapStyle, snapshot.mapSeed) : MapSpec.Classic;
-            WorldTerrain.Use(map);
 
             bool legacy = snapshot.schemaVersion < 6;
             if (legacy ? snapshot.cells.Length != LegacySize * LegacySize :
                 snapshot.cellIndices == null || snapshot.cells.Length != snapshot.cellIndices.Length ||
                 snapshot.cells.Length > GridSize * GridSize) return false;
 
-            var restored = new CitySimulation((uint)snapshot.randomState)
+            MapSpec previousMap = WorldTerrain.Current;
+            var previousEdits = WorldTerrain.CopyEdits();
+            try
             {
-                Money = snapshot.money,
-                LastTaxIncome = snapshot.schemaVersion >= 3 ? snapshot.lastTaxIncome : 0,
-                LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
-                LoanBalance = snapshot.loanBalance,
-                TicksInDebt = snapshot.ticksInDebt,
-                TickCount = snapshot.tick
-            };
-            int previous = -1;
-            for (int i = 0; i < snapshot.cells.Length; i++)
-            {
-                CityCell cell = snapshot.cells[i];
-                if (snapshot.schemaVersion < 16)
+                WorldTerrain.Use(map);
+                var restored = new CitySimulation((uint)snapshot.randomState)
                 {
-                    cell.RoadType = RoadType.Street;
-                    cell.OneWayExit = RoadConnections.None;
-                }
-                if (!IsValidSavedCell(cell, snapshot.schemaVersion)) return false;
-                int index = legacy ? CellIndex(i / LegacySize + LegacyOffset, i % LegacySize + LegacyOffset) :
-                    snapshot.cellIndices[i];
-                if (index <= previous || index >= GridSize * GridSize || (!legacy && cell.Type == CellType.Empty))
-                    return false;
-                previous = index;
-                if (cell.Type == CellType.Empty) continue;
-                int x = index / GridSize;
-                int z = index % GridSize;
-                // Saves from before terraces can hold buildings on what is now a slope; drop those too.
-                if (cell.IsBridge ? IsBuildable(x, z) : !IsBuildable(x, z, cell.Type))
+                    Money = snapshot.money,
+                    LastTaxIncome = snapshot.schemaVersion >= 3 ? snapshot.lastTaxIncome : 0,
+                    LastNetIncome = snapshot.schemaVersion >= 3 ? snapshot.lastNetIncome : 0,
+                    LoanBalance = snapshot.loanBalance,
+                    TicksInDebt = snapshot.ticksInDebt,
+                    TickCount = snapshot.tick
+                };
+                if (!restored.RestoreTerrainEdits(snapshot)) return false;
+                int previous = -1;
+                for (int i = 0; i < snapshot.cells.Length; i++)
                 {
-                    restored.DroppedCellsOnLoad++;
-                    continue;
+                    CityCell cell = snapshot.cells[i];
+                    if (snapshot.schemaVersion < 16)
+                    {
+                        cell.RoadType = RoadType.Street;
+                        cell.OneWayExit = RoadConnections.None;
+                    }
+                    if (!IsValidSavedCell(cell, snapshot.schemaVersion)) return false;
+                    int index = legacy ? CellIndex(i / LegacySize + LegacyOffset, i % LegacySize + LegacyOffset) :
+                        snapshot.cellIndices[i];
+                    if (index <= previous || index >= GridSize * GridSize || (!legacy && cell.Type == CellType.Empty))
+                        return false;
+                    previous = index;
+                    if (cell.Type == CellType.Empty) continue;
+                    int x = index / GridSize;
+                    int z = index % GridSize;
+                    // Saves from before terraces can hold buildings on what is now a slope; drop those too.
+                    if (cell.IsBridge ? IsBuildable(x, z) : !IsBuildable(x, z, cell.Type))
+                    {
+                        restored.DroppedCellsOnLoad++;
+                        continue;
+                    }
+                    restored._cells[x, z] = cell;
+                    restored.TrackCell(x, z, cell.Type);
+                    if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
                 }
-                restored._cells[x, z] = cell;
-                restored.TrackCell(x, z, cell.Type);
-                if (cell.Type == CellType.Residential) restored.Population += BuildingCatalog.Residents(cell);
-            }
 
-            var strandedWaterfront = new List<int>();
-            foreach (int index in restored._occupied)
-            {
-                int x = index / GridSize;
-                int z = index % GridSize;
-                BuildingModel model = restored._cells[x, z].Model;
-                if (BuildingCatalog.NeedsShore(model) && !restored.CanPlaceWaterfront(x, z, model))
-                    strandedWaterfront.Add(index);
+                var strandedWaterfront = new List<int>();
+                foreach (int index in restored._occupied)
+                {
+                    int x = index / GridSize;
+                    int z = index % GridSize;
+                    BuildingModel model = restored._cells[x, z].Model;
+                    if (BuildingCatalog.NeedsShore(model) && !restored.CanPlaceWaterfront(x, z, model))
+                        strandedWaterfront.Add(index);
+                }
+                foreach (int index in strandedWaterfront)
+                {
+                    restored._cells[index / GridSize, index % GridSize] = default;
+                    restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);
+                    restored.DroppedCellsOnLoad++;
+                }
+                restored.PeakPopulation = Math.Max(snapshot.peakPopulation, restored.Population);
+                restored.RestoreBudget(snapshot);
+                restored.RecalculateEconomy();
+                city = restored;
+                return true;
             }
-            foreach (int index in strandedWaterfront)
+            finally
             {
-                restored._cells[index / GridSize, index % GridSize] = default;
-                restored.TrackCell(index / GridSize, index % GridSize, CellType.Empty);
-                restored.DroppedCellsOnLoad++;
+                if (city == null) WorldTerrain.Use(previousMap, previousEdits);
             }
-            restored.PeakPopulation = Math.Max(snapshot.peakPopulation, restored.Population);
-            restored.RestoreBudget(snapshot);
-            restored.RecalculateEconomy();
-            city = restored;
-            return true;
         }
 
         private static bool IsValidSavedCell(CityCell cell, int version)

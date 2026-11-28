@@ -108,6 +108,9 @@ namespace XCity
                 case BuildTool.Bridge: return UiIcon.Road;
                 case BuildTool.PowerPlant: return UiIcon.Bolt;
                 case BuildTool.Bulldoze: return UiIcon.Delete;
+                case BuildTool.RaiseTerrain: return UiIcon.ExpandLess;
+                case BuildTool.LowerTerrain: return UiIcon.ExpandMore;
+                case BuildTool.LevelTerrain: return UiIcon.Layers;
             }
             return option.Model switch
             {
@@ -172,6 +175,10 @@ namespace XCity
                     ModelOption(BuildTool.CivicService, BuildingModel.SmallPark),
                     ModelOption(BuildTool.CivicService, BuildingModel.Plaza),
                     ModelOption(BuildTool.CivicService, BuildingModel.LargePark)),
+                Category(UiText.Terraform, UiIcon.Layers, UiTheme.Residential,
+                    new BuildOption(UiText.RaiseTerrain, BuildTool.RaiseTerrain),
+                    new BuildOption(UiText.LowerTerrain, BuildTool.LowerTerrain),
+                    new BuildOption(UiText.LevelTerrain, BuildTool.LevelTerrain)),
                 Category(UiText.Utilities, UiIcon.Bolt, UiTheme.Utilities, new BuildOption(UiText.PowerPlant, BuildTool.PowerPlant),
                     ModelOption(BuildTool.PowerPlant, BuildingModel.GasPlant),
                     ModelOption(BuildTool.CivicService, BuildingModel.WaterPump),
@@ -324,6 +331,7 @@ namespace XCity
         private string BuildOptionStats(BuildOption option, bool isMap)
         {
             if (isMap) return "";
+            if (IsTerraformAction(option.Tool)) return UiText.TerraformPrice(CitySimulation.TerraformCostPerLevel);
             if (option.Tool == BuildTool.Bridge)
                 return UiText.BridgePrice(CitySimulation.BridgeTileCost + RoadCatalog.UpgradeCost(RoadType.Street, _activeRoadType),
                     RoadCatalog.Cost(_activeRoadType)) + "\n" + UiText.Upkeep(RoadCatalog.Upkeep(_activeRoadType));

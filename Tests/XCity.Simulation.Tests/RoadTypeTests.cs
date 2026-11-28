@@ -80,8 +80,10 @@ namespace XCity.Tests
             Assert.Equal(ZoneStatus.WaitingForDevelopment, city.GetZoneStatus(x, z - 1));
         }
 
-        [Fact]
-        public void Save16RoundTripsAndSave15LoadsRoadsAsStreet()
+        [Theory]
+        [InlineData(16)]
+        [InlineData(17)]
+        public void TypedRoadsRoundTripAndSave15LoadsRoadsAsStreet(int schema)
         {
             var (x, z) = Inland();
             var city = new CitySimulation();
@@ -91,7 +93,8 @@ namespace XCity.Tests
 
             var options = new JsonSerializerOptions { IncludeFields = true };
             var snapshot = JsonSerializer.Deserialize<CitySnapshot>(JsonSerializer.Serialize(city.CreateSnapshot(), options), options);
-            Assert.Equal(16, snapshot.schemaVersion);
+            Assert.Equal(CitySimulation.CurrentSchemaVersion, snapshot.schemaVersion);
+            snapshot.schemaVersion = schema;
             Assert.True(CitySimulation.TryRestore(snapshot, out var restored));
             Assert.Equal(RoadConnections.East, restored.GetCell(x, z).OneWayExit);
             Assert.Equal(RoadType.OneWay, restored.GetCell(x, z).RoadType);

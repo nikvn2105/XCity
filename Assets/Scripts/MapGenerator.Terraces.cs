@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace XCity
 {
@@ -50,38 +51,45 @@ namespace XCity
             // Bias the three-cell band by half a cell so its two outer limits land on grid corners.
             for (int x = 0; x <= Size; x++)
             for (int z = 0; z <= Size; z++)
-            {
-                int weightedTiers = 0, totalWeight = 0;
-                for (int dx = -2; dx <= 0; dx++)
-                {
-                    int nx = x + dx;
-                    if ((uint)nx >= Size) continue;
-                    int row = nx * Size;
-                    int wx = dx == -1 ? 13 : 7;
-                    for (int dz = -2; dz <= 0; dz++)
-                    {
-                        int nz = z + dz;
-                        if ((uint)nz >= Size || water[row + nz] != WaterKind.Land) continue;
-                        int weight = wx * (dz == -1 ? 13 : 7);
-                        weightedTiers += tiers[row + nz] * weight;
-                        totalWeight += weight;
-                    }
-                }
-                if (totalWeight == 0) continue;
-                float elevation = WorldTerrain.TerraceStep * weightedTiers / totalWeight;
-                // Keep the land lip above any adjoining water surface without grading the water itself.
-                for (int dx = -1; dx <= 0; dx++)
-                for (int dz = -1; dz <= 0; dz++)
-                {
-                    int nx = x + dx, nz = z + dz;
-                    if ((uint)nx >= Size || (uint)nz >= Size) continue;
-                    int cell = nx * Size + nz;
-                    if (water[cell] == WaterKind.River || water[cell] == WaterKind.Lake)
-                        elevation = Math.Max(elevation, tiers[cell] * WorldTerrain.TerraceStep + BridgeProfile.WaterSurface + 0.05f);
-                }
-                corners[x * stride + z] = elevation;
-            }
+                corners[x * stride + z] = SurfaceCorner(tiers, water, x, z);
             return corners;
+        }
+
+        internal static float SurfaceCorner(byte[] tiers, WaterKind[] water, int x, int z,
+            int changedIndex = -1, byte proposedTier = 0, IReadOnlyDictionary<int, byte> planned = null)
+        {
+            int weightedTiers = 0, totalWeight = 0;
+            for (int dx = -2; dx <= 0; dx++)
+            {
+                int nx = x + dx;
+                if ((uint)nx >= Size) continue;
+                int row = nx * Size;
+                int wx = dx == -1 ? 13 : 7;
+                for (int dz = -2; dz <= 0; dz++)
+                {
+                    int nz = z + dz;
+                    if ((uint)nz >= Size || water[row + nz] != WaterKind.Land) continue;
+                    int weight = wx * (dz == -1 ? 13 : 7);
+                    int index = row + nz;
+                    byte tier = index == changedIndex ? proposedTier :
+                        planned != null && planned.TryGetValue(index, out byte next) ? next : tiers[index];
+                    weightedTiers += tier * weight;
+                    totalWeight += weight;
+                }
+            }
+            if (totalWeight == 0) return 0f;
+            float elevation = WorldTerrain.TerraceStep * weightedTiers / totalWeight;
+            // Keep the land lip above any adjoining water surface without grading the water itself.
+            for (int dx = -1; dx <= 0; dx++)
+            for (int dz = -1; dz <= 0; dz++)
+            {
+                int nx = x + dx, nz = z + dz;
+                if ((uint)nx >= Size || (uint)nz >= Size) continue;
+                int cell = nx * Size + nz;
+                if (water[cell] == WaterKind.River || water[cell] == WaterKind.Lake)
+                    elevation = Math.Max(elevation, tiers[cell] * WorldTerrain.TerraceStep + BridgeProfile.WaterSurface + 0.05f);
+            }
+            return elevation;
         }
 
         private static void GradeFreshWater(WaterKind[] water, int[] downstream, byte[] tiers)

@@ -331,12 +331,11 @@ namespace XCity
             // Preserve a valid previous primary as the backup when overwriting a slot.
             if (_save.HasSave(slot)) _save.TryLoad(slot, out _, out _);
             // The new city lives on the chosen map; the scene reload that follows builds that terrain.
-            MapSpec previous = WorldTerrain.Current;
             WorldTerrain.Use(NewMapSpec);
             var city = new CitySimulation();
             if (!_save.Write(slot, name, city))
             {
-                WorldTerrain.Use(previous);
+                _city.ActivateTerrain();
                 _menuNotice.text = UiText.CreateFailed;
                 return;
             }

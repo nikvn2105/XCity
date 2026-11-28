@@ -17,7 +17,10 @@ namespace XCity
         PowerPlant,
         School,
         CivicService,
-        Bridge
+        Bridge,
+        RaiseTerrain,
+        LowerTerrain,
+        LevelTerrain
     }
 
     public partial class XCityBootstrap : MonoBehaviour
@@ -614,6 +617,7 @@ namespace XCity
             _strokeCells.Clear();
             _roadTrace.Clear();
             _strokeRoadExits.Clear();
+            _plannedTerraform.Clear();
             _quotedBridges.Clear();
             _strokeCost = 0;
             _strokeOverBudget = false;
@@ -693,7 +697,7 @@ namespace XCity
             var selected = default(Vector2Int);
             float closest = float.PositiveInfinity;
             float vertical = ray.direction.y;
-            int topTier = WorldTerrain.Current.Style == MapStyle.Classic ? 0 : 3;
+            int topTier = WorldTerrain.HasTerraces ? 3 : 0;
             for (int tier = 0; tier <= topTier; tier++)
             {
                 float y = tier * WorldTerrain.TerraceStep;
@@ -851,7 +855,7 @@ namespace XCity
 
         private bool BlocksBuildingOnSlope =>
             _activeTool != BuildTool.Pan && _activeTool != BuildTool.Road &&
-            _activeTool != BuildTool.Bridge && _activeTool != BuildTool.Bulldoze;
+            _activeTool != BuildTool.Bridge && _activeTool != BuildTool.Bulldoze && !IsTerraformAction(_activeTool);
 
         private CellType StrokeType => _activeTool switch
         {
@@ -891,6 +895,7 @@ namespace XCity
 
         private Material QuoteStrokeMarker(Vector2Int cell)
         {
+            if (IsTerraformAction(_activeTool)) return QuoteTerraformMarker(cell);
             _strokeRoadExits.TryGetValue(cell, out RoadConnections exit);
             if (!_city.TryQuoteCell(cell.x, cell.y, StrokeType, _activeBuildingModel, out int cost, out int bridge, _strokeBudget,
                 _activeRoadType, exit))
@@ -928,6 +933,7 @@ namespace XCity
             _strokeBudget = _city.Money;
             _strokeCost = 0;
             _strokeOverBudget = false;
+            _plannedTerraform.Clear();
             _quotedBridges.Clear();
             for (int i = 0; i < _stroke.Count; i++)
                 _roadMarkers[i].sharedMaterial = QuoteStrokeMarker(_stroke[i]);
@@ -1029,8 +1035,9 @@ namespace XCity
         {
             if (_activeTool == BuildTool.Road && _strokeOverBudget) return false;
             CellType type = StrokeType;
-            bool applied = type == CellType.Road
-                ? _city.TryBuildRoad(GetStrokeCells(), _activeRoadType)
+            bool applied = IsTerraformAction(_activeTool)
+                ? _city.TryTerraform(GetStrokeCells(), SelectedTerrainTool)
+                : type == CellType.Road ? _city.TryBuildRoad(GetStrokeCells(), _activeRoadType)
                 : _city.TryApplyBuild(GetStrokeCells(), type, _activeBuildingModel);
             if (!applied) return false;
             _cityDirty = true;
@@ -1454,6 +1461,8 @@ namespace XCity
                     BuildTool.Pan => GetInspectionHint(),
                     BuildTool.Road => RoadHint,
                     BuildTool.Bridge => GetBridgeHint(),
+                    BuildTool.RaiseTerrain or BuildTool.LowerTerrain => UiText.TerraformHint,
+                    BuildTool.LevelTerrain => UiText.LevelTerrainHint,
                     // A gas plant gets its name and price appended below, like other catalog buildings.
                     BuildTool.PowerPlant => _activeBuildingModel == BuildingModel.Default
                         ? $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}" : "Chạm đặt nhà máy",

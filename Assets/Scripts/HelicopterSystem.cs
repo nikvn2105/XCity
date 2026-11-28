@@ -262,7 +262,8 @@ namespace XCity
             Vector3 horiz = Vector3.Lerp(h.Start, h.Target, smoothT);
             float climbBell = Mathf.Sin(h.FlightProgress * Mathf.PI);
             float baseY = Mathf.Lerp(h.Start.y, h.Target.y, smoothT);
-            float y = baseY + Mathf.Max(0f, h.CruiseHeight - baseY) * climbBell;
+            float cruiseHeight = h.CruiseHeight + (WorldTerrain.HasTerraces ? WorldTerrain.MaxSurfaceY : 0f);
+            float y = baseY + Mathf.Max(0f, cruiseHeight - baseY) * climbBell;
 
             Vector3 prevPos = h.Position;
             h.Position = new Vector3(horiz.x, y, horiz.z);
@@ -411,7 +412,7 @@ namespace XCity
                     Position = startWp.HoverPos,
                     Start = startWp.HoverPos,
                     Target = startWp.HoverPos,
-                    CruiseHeight = 10.6f + idx * 0.7f + (WorldTerrain.Current.Style == MapStyle.Classic ? 0f : WorldTerrain.MaxSurfaceY),
+                    CruiseHeight = 10.6f + idx * 0.7f,
                     Yaw = (float)_rng.NextDouble() * 360f,
                     Phase = (float)_rng.NextDouble() * 6.283f,
                     IsHovering = idx == 0 && startWp.IsHelipad,

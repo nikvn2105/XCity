@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace XCity
 {
@@ -83,27 +84,74 @@ namespace XCity
         private static float[] _corners = new float[(Size + 1) * (Size + 1)];
         private static float[] _height = MapGenerator.Generate(MapSpec.Classic, out _start, out _water, out _downstream, out _tiers);
         private static (int X, int Z) _start;
+        private static readonly Dictionary<int, byte> OriginalTiers = new Dictionary<int, byte>();
         private static readonly object Gate = new object();
 
         public static MapSpec Current { get; private set; } = MapSpec.Classic;
+        internal static bool HasTerraces => Current.Style != MapStyle.Classic || OriginalTiers.Count != 0;
 
         /// <summary>Centre of the guaranteed buildable start area (for the first camera position).</summary>
         public static (int X, int Z) Start => _start;
 
         /// <summary>
-        /// Switches the world to another map. Call before building a scene or restoring a city on it;
-        /// cities and renderers built earlier keep reading the old map's cells until rebuilt.
+        /// Activates a map and its city-specific terrain edits before building a scene or restoring a city.
         /// </summary>
-        public static void Use(MapSpec spec)
+        public static void Use(MapSpec spec, IReadOnlyDictionary<int, byte> edits = null)
         {
             lock (Gate)
             {
-                if (spec == Current) return;
-                _height = MapGenerator.Generate(spec, out _start, out _water, out _downstream, out _tiers);
-                _corners = spec.Style == MapStyle.Classic ? new float[(Size + 1) * (Size + 1)] :
-                    MapGenerator.BuildSurfaceCorners(_tiers, _water);
-                Current = spec;
+                if (spec == Current)
+                {
+                    foreach (var item in OriginalTiers) _tiers[item.Key] = item.Value;
+                    foreach (var item in OriginalTiers) RefreshEditedCorners(item.Key / Size, item.Key % Size);
+                }
+                else
+                {
+                    _height = MapGenerator.Generate(spec, out _start, out _water, out _downstream, out _tiers);
+                    _corners = spec.Style == MapStyle.Classic ? new float[(Size + 1) * (Size + 1)] :
+                        MapGenerator.BuildSurfaceCorners(_tiers, _water);
+                    Current = spec;
+                }
+                OriginalTiers.Clear();
+                if (edits == null) return;
+                foreach (var item in edits) SetTier(item.Key / Size, item.Key % Size, item.Value);
             }
+        }
+
+        internal static Dictionary<int, byte> CopyEdits()
+        {
+            if (OriginalTiers.Count == 0) return null;
+            var edits = new Dictionary<int, byte>(OriginalTiers.Count);
+            foreach (int index in OriginalTiers.Keys) edits.Add(index, _tiers[index]);
+            return edits;
+        }
+
+        internal static byte SetTier(int x, int z, byte tier)
+        {
+            int index = x * Size + z;
+            if (!OriginalTiers.TryGetValue(index, out byte original)) original = _tiers[index];
+            if (tier == original) OriginalTiers.Remove(index);
+            else OriginalTiers[index] = original;
+            _tiers[index] = tier;
+            RefreshEditedCorners(x, z);
+            return original;
+        }
+
+        // The corner kernel samples the inclusive offsets [-2, 0] in both axes.
+        // Only these nine corners and their touching land tiles can change.
+        private static void RefreshEditedCorners(int x, int z)
+        {
+            for (int cx = x; cx <= Math.Min(Size, x + 2); cx++)
+            for (int cz = z; cz <= Math.Min(Size, z + 2); cz++)
+                _corners[cx * (Size + 1) + cz] = MapGenerator.SurfaceCorner(_tiers, _water, cx, cz);
+        }
+
+        internal static bool WouldBeSlope(int x, int z, int changedIndex, byte tier, IReadOnlyDictionary<int, byte> planned)
+        {
+            float sw = Corner(x, z);
+            return sw != Corner(x + 1, z) || sw != Corner(x, z + 1) || sw != Corner(x + 1, z + 1);
+
+            float Corner(int cx, int cz) => MapGenerator.SurfaceCorner(_tiers, _water, cx, cz, changedIndex, tier, planned);
         }
 
         public static bool IsLand(int x, int z) =>
