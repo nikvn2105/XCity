@@ -40,7 +40,7 @@ namespace XCity
                 }
             }
 
-            // A multi-source distance field gives every inland cell a downhill route to the sea.
+            // Coast distance sets source and lake clearance, independently of the river routes.
             for (int head = 0; head < tail; head++)
             {
                 int cell = queue[head];
@@ -55,19 +55,23 @@ namespace XCity
             }
 
             int[] islands = LabelIslands(water, queue, out int largest);
+            int salt = (int)(unchecked((uint)seed * 2654435761u) % 99000u) + 1000;
             int lakeTarget = rng.Next(1, 5);
             var lakes = new List<(int Cell, int Radius)>(lakeTarget);
             for (int i = 0; i < lakeTarget; i++)
             {
-                int radius = rng.Next(3, 10);
-                int center = PickInland(rng, height, coast, islands, largest, radius + 8, lakes, null);
+                int radius = rng.Next(5, 15);
+                int center = PickInland(rng, height, coast, islands, largest, radius + 10, lakes, null);
                 if (center < 0) break;
                 lakes.Add((center, radius));
                 int cx = center / Size, cz = center % Size;
-                for (int dx = -radius; dx <= radius; dx++)
-                for (int dz = -radius; dz <= radius; dz++)
+                int extent = LakeExtent(radius);
+                for (int dx = -extent; dx <= extent; dx++)
+                for (int dz = -extent; dz <= extent; dz++)
                 {
-                    if (dx * dx + dz * dz > radius * radius) continue;
+                    float outline = WorldTerrain.Noise(cx + dx + salt, cz + dz + salt, 7);
+                    float edge = Math.Max(5f, Math.Min(14f, radius + 4f * (outline - 0.5f)));
+                    if (dx * dx + dz * dz > edge * edge) continue;
                     int index = (cx + dx) * Size + cz + dz;
                     water[index] = WaterKind.Lake;
                     height[index] = -0.2f;
@@ -75,15 +79,16 @@ namespace XCity
             }
 
             int target = style == MapStyle.Continent ? rng.Next(1, 4) : rng.Next(0, 2);
+            int[] route = target > 0 ? BuildRiverRoutes(water, coast, islands, largest, salt, style == MapStyle.Islands ? 24 : 34) : Array.Empty<int>();
             var sources = new List<int>(target);
             var path = new List<int>(Size);
             int rivers = 0;
             for (int attempt = 0; attempt < target * 12 && rivers < target; attempt++)
             {
                 int source = attempt == 0 && lakes.Count > 0 && (seed & 1) == 0
-                    ? LakeOutlet(lakes[0], water, coast)
+                    ? LakeOutlet(lakes[0], water, coast, route)
                     : PickInland(rng, height, coast, islands, largest, 22, lakes, sources);
-                if (source < 0 || !TraceRiver(source, rng.Next(1, 100000), water, height, coast, path))
+                if (source < 0 || !TraceRiver(source, water, route, path))
                     continue;
                 sources.Add(source);
                 CutRiver(path, rng.Next(2, 5), water);
@@ -167,7 +172,7 @@ namespace XCity
                 if (islands[cell] != largest || coast[cell] < clearance || height[cell] <= bestHeight) continue;
                 bool clear = true;
                 foreach (var lake in lakes)
-                    if (Distance(cell, lake.Cell) <= clearance + lake.Radius) clear = false;
+                    if (Distance(cell, lake.Cell) <= clearance + LakeExtent(lake.Radius)) clear = false;
                 if (sources != null)
                     foreach (int source in sources)
                         if (Distance(cell, source) < 42) clear = false;
@@ -181,50 +186,94 @@ namespace XCity
         private static int Distance(int a, int b) =>
             Math.Max(Math.Abs(a / Size - b / Size), Math.Abs(a % Size - b % Size));
 
-        private static int LakeOutlet((int Cell, int Radius) lake, WaterKind[] water, int[] coast)
+        private static int LakeExtent(int radius) => Math.Min(14, radius + 2);
+
+        private static int LakeOutlet((int Cell, int Radius) lake, WaterKind[] water, int[] coast, int[] route)
         {
             int best = -1;
-            for (int x = lake.Cell / Size - lake.Radius; x <= lake.Cell / Size + lake.Radius; x++)
-            for (int z = lake.Cell % Size - lake.Radius; z <= lake.Cell % Size + lake.Radius; z++)
+            int extent = LakeExtent(lake.Radius);
+            for (int x = lake.Cell / Size - extent; x <= lake.Cell / Size + extent; x++)
+            for (int z = lake.Cell % Size - extent; z <= lake.Cell % Size + extent; z++)
             {
                 int cell = x * Size + z;
                 if (water[cell] != WaterKind.Lake) continue;
                 for (int d = 0; d < 4; d++)
                 {
                     int next = Neighbour(cell, d);
-                    if (next >= 0 && water[next] == WaterKind.Land && coast[next] < coast[cell] &&
+                    if (next >= 0 && route[next] >= 0 &&
                         (best < 0 || coast[next] < coast[best])) best = next;
                 }
             }
             return best;
         }
 
-        private static bool TraceRiver(int source, int salt, WaterKind[] water, float[] height, int[] coast, List<int> path)
+        // Reverse Dijkstra from the shore. Traversing into a land cell always costs the
+        // same regardless of which neighbor led there, so the first insertion is optimal.
+        // The bounded integer weights let us use a circular bucket queue with one link per cell.
+        private static int[] BuildRiverRoutes(WaterKind[] water, int[] coast, int[] islands, int largest, int salt, int span)
+        {
+            const int bucketCount = 105; // max step is 2 + 96 + 6
+            var buckets = new int[bucketCount];
+            var links = new int[water.Length];
+            var route = new int[water.Length];
+            Array.Fill(buckets, -1);
+            Array.Fill(route, -1);
+            int pending = 0;
+
+            for (int cell = 0; cell < water.Length; cell++)
+            {
+                if (islands[cell] != largest || coast[cell] != 1 || water[cell] != WaterKind.Land) continue;
+                for (int d = 0; d < 4; d++)
+                {
+                    int next = Neighbour(cell, d);
+                    if (next < 0 || water[next] != WaterKind.Sea) continue;
+                    Enqueue(cell, next, 0);
+                    break;
+                }
+            }
+
+            for (int distance = 0; pending > 0; distance++)
+            {
+                int bucket = distance % bucketCount;
+                while (buckets[bucket] >= 0)
+                {
+                    int cell = buckets[bucket];
+                    buckets[bucket] = links[cell];
+                    pending--;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        int next = Neighbour(cell, d);
+                        if (next < 0 || route[next] >= 0 || water[next] != WaterKind.Land) continue;
+                        Enqueue(next, cell, distance);
+                    }
+                }
+            }
+            return route;
+
+            void Enqueue(int cell, int parent, int distance)
+            {
+                int x = cell / Size + salt, z = cell % Size + salt;
+                float broad = WorldTerrain.Noise(x, z, span);
+                int step = 2 + (int)(96f * broad * broad * broad) +
+                    (int)(6f * WorldTerrain.Noise(x + 263, z + 157, 9));
+                int bucket = (distance + step) % bucketCount;
+                route[cell] = parent;
+                links[cell] = buckets[bucket];
+                buckets[bucket] = cell;
+                pending++;
+            }
+        }
+
+        private static bool TraceRiver(int source, WaterKind[] water, int[] route, List<int> path)
         {
             path.Clear();
-            bool lateral = false;
             int cell = source;
             while (water[cell] == WaterKind.Land)
             {
                 path.Add(cell);
-                int best = -1;
-                float score = float.PositiveInfinity;
-                for (int d = 0; d < 4; d++)
-                {
-                    int next = Neighbour(cell, d);
-                    if (next < 0 || water[next] == WaterKind.Lake || coast[next] > coast[cell] ||
-                        (lateral && coast[next] == coast[cell])) continue;
-                    float weight = coast[next] * 0.25f + height[next] * 0.6f +
-                        WorldTerrain.Noise(next / Size + salt, next % Size + salt, 5) * 2.5f;
-                    if (weight >= score) continue;
-                    best = next;
-                    score = weight;
-                }
-                if (best < 0) return false;
-                lateral = coast[best] == coast[cell];
-                cell = best;
+                cell = route[cell];
+                if (cell < 0) return false;
             }
-            // Avoid counting a short tributary or a source that already falls on a river.
             return path.Count >= 12 && water[cell] == WaterKind.Sea;
         }
 

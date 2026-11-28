@@ -108,6 +108,52 @@ namespace XCity.Tests
         }
 
         [Fact]
+        public void Continent_RiversMeanderBeyondSingleCellStairSteps()
+        {
+            const int seeds = 10;
+            const int chord = 12;
+            double pathRatio = 0, smoothedRatio = 0;
+            for (int seed = 1; seed <= seeds; seed++)
+            {
+                MapGenerator.Generate(new MapSpec(MapStyle.Continent, seed), out _, out _, out int[] flow);
+                int source = -1, longest = 0;
+                for (int cell = 0; cell < flow.Length; cell++)
+                {
+                    if (flow[cell] < 0) continue;
+                    int length = 0;
+                    for (int next = cell; flow[next] >= 0; next = flow[next])
+                        Assert.True(++length < flow.Length, "River contains a cycle");
+                    if (length <= longest) continue;
+                    longest = length;
+                    source = cell;
+                }
+                Assert.True(longest >= chord * 2, $"Seed {seed} has no substantial river");
+
+                double smoothedLength = 0;
+                int end = source;
+                for (int steps = 0; steps < longest; steps += chord)
+                {
+                    int start = end;
+                    for (int i = 0; i < Math.Min(chord, longest - steps); i++) end = flow[end];
+                    smoothedLength += StraightDistance(start, end);
+                }
+                double direct = StraightDistance(source, end);
+                pathRatio += longest / direct;
+                smoothedRatio += smoothedLength / direct;
+            }
+
+            // The chord metric filters out raster stair steps on otherwise straight diagonal channels.
+            Assert.True(pathRatio / seeds >= 1.30, $"Average path ratio: {pathRatio / seeds:F3}");
+            Assert.True(smoothedRatio / seeds >= 1.15, $"Average smoothed ratio: {smoothedRatio / seeds:F3}");
+        }
+
+        private static double StraightDistance(int a, int b)
+        {
+            int dx = a / Size - b / Size, dz = a % Size - b % Size;
+            return Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        [Fact]
         public void WaterfrontRules_AndLandValueDistinguishRiverFromSea()
         {
             try
