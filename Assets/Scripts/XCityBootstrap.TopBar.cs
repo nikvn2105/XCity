@@ -50,6 +50,10 @@ namespace XCity
             // Stats: money | people | demand.
             Transform stats = CreateTopPanel(bar, "Stats", 14);
             _moneyText = CreateIconStat(stats, UiIcon.Wallet, UiTheme.Gold, 128f, font);
+            // Tapping the money opens the budget.
+            GameObject moneyStat = _moneyText.transform.parent.gameObject;
+            moneyStat.AddComponent<Image>().color = Color.clear;
+            moneyStat.AddComponent<Button>().onClick.AddListener(ToggleBudget);
             CreateDivider(stats);
             _peopleText = CreateIconStat(stats, UiIcon.People, UiTheme.Sky, 112f, font);
             CreateDivider(stats);

@@ -1273,6 +1273,7 @@ namespace XCity
             if (_undoButton != null) _undoButton.interactable = _city.CanUndoBuild;
             if (_loanButton != null) _loanButton.interactable = _city.CanTakeLoan;
             RefreshTopBar();
+            RefreshBudgetPanel();
             UpdateTutorialProgress();
             if (_hudStatusText != null)
             {

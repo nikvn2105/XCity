@@ -6,6 +6,14 @@ namespace XCity
         public const string StrokeCost = "Chi phí: $";
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";
 
+        // Budget panel.
+        public const string Budget = "Ngân sách";
+        public const string Income = "Thu";
+        public const string Spending = "Chi";
+        public static readonly string[] TaxZones = { "Thuế nhà ở", "Thuế thương mại", "Thuế công nghiệp" };
+        public static readonly string[] SpendingLines =
+            { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", "Khác (nước, cảng)", "Trả nợ" };
+
         // Tutorial quest card.
         public static string QuestStep(int step, int total) => $"NHIỆM VỤ {step}/{total}";
         public static string QuestDone(string title) => $"Hoàn thành: {title}";
