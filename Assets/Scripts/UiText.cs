@@ -71,6 +71,14 @@ namespace XCity
         };
 
         // Road tool.
+        public static string RoadName(RoadType type) => type switch
+        {
+            RoadType.Avenue => "Đại lộ 4 làn",
+            RoadType.OneWay => "Một chiều",
+            RoadType.Boulevard => "Đường hàng cây",
+            _ => "Đường nhỏ 2 làn"
+        };
+        public static string RoadCapacity(int capacity) => $"Sức chứa: {capacity:N0} xe/ô";
         public const string RoadTapStart = "Chạm điểm đầu rồi điểm cuối, hoặc kéo để vẽ đường";
         public const string RoadTapEnd = "Chạm điểm cuối để xây · Chạm lại điểm đầu để dừng";
 

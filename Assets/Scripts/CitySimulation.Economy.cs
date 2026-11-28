@@ -76,7 +76,7 @@ namespace XCity
         internal const int CommutersPerRoad = 10;
         private readonly int[] _cellComponent = new int[GridSize * GridSize];
         private readonly SortedSet<int> _serviceCells = new SortedSet<int>();
-        private readonly List<int> _componentRoads = new List<int>();
+        private readonly List<int> _componentRoadCapacity = new List<int>();
         private readonly Dictionary<int, int> _schoolStudents = new Dictionary<int, int>();
         private readonly List<(int Distance, int Index)> _schoolCandidates = new List<(int, int)>();
         private int[] _componentEmployment = new int[1];
@@ -187,7 +187,7 @@ namespace XCity
             RefreshPower();
             if (!_trafficDirty) return;
             _trafficDirty = false;
-            int networks = _componentRoads.Count;
+            int networks = _componentRoadCapacity.Count;
             ClearCapacity(ref _trafficWorkers, networks);
             ClearCapacity(ref _trafficJobs, networks);
             int[] workers = _trafficWorkers;
@@ -205,16 +205,23 @@ namespace XCity
             PublishTraffic(workers, jobs);
         }
 
+        internal int RoadCapacityAt(int x, int z)
+        {
+            if (!IsInBounds(x, z)) return 0;
+            RefreshPower();
+            return _componentRoadCapacity[_roadComponent[CellIndex(x, z)]];
+        }
+
         private void PublishTraffic(int[] workers, int[] jobs)
         {
-            int networks = _componentRoads.Count;
+            int networks = _componentRoadCapacity.Count;
             _trafficDirty = false;
             ClearCapacity(ref _componentEmployment, networks);
             ClearCapacity(ref _componentTraffic, networks);
             for (int n = 1; n < networks; n++)
             {
                 _componentEmployment[n] = jobs[n] == 0 ? 100 : Math.Min(100, workers[n] * 100 / jobs[n]);
-                _componentTraffic[n] = Math.Min(workers[n], jobs[n]) * 100 / Math.Max(1, _componentRoads[n] * CommutersPerRoad);
+                _componentTraffic[n] = Math.Min(workers[n], jobs[n]) * 100 / Math.Max(1, _componentRoadCapacity[n]);
             }
         }
 

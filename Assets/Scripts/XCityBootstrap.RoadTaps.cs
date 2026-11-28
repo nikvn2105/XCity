@@ -31,6 +31,8 @@ namespace XCity
             HideStreetPreview();
             _stroke.Clear();
             _strokeCells.Clear();
+            _roadTrace.Clear();
+            _strokeRoadExits.Clear();
             _quotedBridges.Clear();
             _strokeCost = 0;
             _strokeOverBudget = false;

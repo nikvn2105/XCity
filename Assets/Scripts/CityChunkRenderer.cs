@@ -135,7 +135,7 @@ namespace XCity
             CellType after = _city.GetCell(x, z).Type;
             bool roadTouch = before == CellType.Road || after == CellType.Road;
 
-            if (before != after)
+            if (before != after || roadTouch)
             {
                 MarkChunk(x, z, includeScenery: true);
                 if (roadTouch)
@@ -259,6 +259,9 @@ namespace XCity
                     {
                         center.y = 0f; // Bridge profiles already include bank elevation.
                         AddBridge(center, bridge, full, emitScenery, x, z);
+                        AddRoadDetails(_surface, center, x, z, cell, bridge);
+                        if (emitScenery && cell.RoadType == RoadType.Boulevard)
+                            AddBoulevardTrees(center, default, x, z, bridge);
                         continue;
                     }
                     if (!WorldTerrain.IsLand(x, z)) continue;
@@ -270,11 +273,14 @@ namespace XCity
                         if (grade.IsRamp || cliff.Active)
                         {
                             AddRamp(_surface, grade, cliff, x, z);
-                            if (emitScenery && !grade.IsRamp)
+                            if (emitScenery && !grade.IsRamp && cell.RoadType != RoadType.Boulevard)
                                 AddStreetScenery(center, x, z, _cellSize * 0.39f);
                         }
-                        else if (full) AddStreet(center, x, z, emitScenery);
+                        else if (full) AddStreet(center, x, z, emitScenery && cell.RoadType != RoadType.Boulevard);
                         else AddOverviewStreet(center, x, z);
+                        AddRoadDetails(_surface, center, x, z, cell);
+                        if (emitScenery && cell.RoadType == RoadType.Boulevard)
+                            AddBoulevardTrees(center, grade, x, z);
                     }
                     else
                         AddLot(cell, x, z, full, emitScenery, cliff);
@@ -303,7 +309,6 @@ namespace XCity
             int maxTileZ = Mathf.Min(endCz * ChunkSize, CitySimulation.GridSize);
 
             float half = _cellSize * 0.5f;
-            float lane = half * 0.67f;
 
             for (int x = minTileX; x < maxTileX; x++)
             {
@@ -344,7 +349,11 @@ namespace XCity
                         _farSurface.SetFrame(Vector3.zero, 0);
                         FlushSpan();
                         _farSurface.SetFrame(new Vector3(x0 + half, elevation, z0 + half), 0);
-                        if (cell.Type == CellType.Road) AddRamp(_farSurface, grade, cliff, x, z);
+                        if (cell.Type == CellType.Road)
+                        {
+                            AddRamp(_farSurface, grade, cliff, x, z);
+                            AddRoadDetails(_farSurface, new Vector3(x0 + half, elevation, z0 + half), x, z, cell);
+                        }
                         else AddSoftGround(_farSurface, cliff, GetFarTileColor(cell, x, z), x, z);
                     }
                     _farSurface.SetFrame(Vector3.zero, 0);
@@ -356,13 +365,15 @@ namespace XCity
                         Color32 roadColor = _infoView ? GetInfoRoadColor(x, z) : Asphalt;
                         int turn = bridge.Axis == CitySimulation.BridgeAlongX ? 1 : 0;
                         _farSurface.SetFrame(new Vector3(x0 + half, 0f, z0 + half), turn);
+                        float spanLane = RoadHalfWidth(cell.RoadType);
                         Strip(-half, 0f, bridge.Start + RoadY, bridge.Middle + RoadY);
                         Strip(0f, half, bridge.Middle + RoadY, bridge.End + RoadY);
+                        AddRoadDetails(_farSurface, new Vector3(x0 + half, 0f, z0 + half), x, z, cell, bridge);
                         _farSurface.SetFrame(Vector3.zero, 0);
 
                         void Strip(float from, float to, float lower, float upper) =>
-                            _farSurface.AddQuad(new Vector3(-lane, lower, from), new Vector3(-lane, upper, to),
-                                new Vector3(lane, upper, to), new Vector3(lane, lower, from), Vector3.up, roadColor);
+                            _farSurface.AddQuad(new Vector3(-spanLane, lower, from), new Vector3(-spanLane, upper, to),
+                                new Vector3(spanLane, upper, to), new Vector3(spanLane, lower, from), Vector3.up, roadColor);
                         continue;
                     }
 
@@ -375,19 +386,22 @@ namespace XCity
                     if (cell.Type == CellType.Road)
                     {
                         FlushSpan();
+                        float roadHalfWidth = RoadHalfWidth(cell.RoadType);
                         Color32 groundUnderRoad = _infoView ? GetInfoGroundColor(cell, x, z) : Paving;
                         _farSurface.AddFlatQuad(x0, z0, x1, z1, elevation + 0.007f, groundUnderRoad);
                         Color32 roadColor = _infoView ? GetInfoRoadColor(x, z) : Asphalt;
                         float centerX = x0 + half;
                         float centerZ = z0 + half;
                         RoadConnections links = _city.Roads.GetConnections(x, z);
-                        float rx0 = (links & RoadConnections.West) != 0 ? x0 : centerX - lane;
-                        float rx1 = (links & RoadConnections.East) != 0 ? x1 : centerX + lane;
-                        float rz0 = (links & RoadConnections.South) != 0 ? z0 : centerZ - lane;
-                        float rz1 = (links & RoadConnections.North) != 0 ? z1 : centerZ + lane;
-                        _farSurface.AddFlatQuad(rx0, centerZ - lane, rx1, centerZ + lane, elevation + RoadY, roadColor);
-                        if (rz0 < centerZ - lane || rz1 > centerZ + lane)
-                            _farSurface.AddFlatQuad(centerX - lane, rz0, centerX + lane, rz1, elevation + RoadY, roadColor);
+                        float rx0 = (links & RoadConnections.West) != 0 ? x0 : centerX - roadHalfWidth;
+                        float rx1 = (links & RoadConnections.East) != 0 ? x1 : centerX + roadHalfWidth;
+                        float rz0 = (links & RoadConnections.South) != 0 ? z0 : centerZ - roadHalfWidth;
+                        float rz1 = (links & RoadConnections.North) != 0 ? z1 : centerZ + roadHalfWidth;
+                        _farSurface.AddFlatQuad(rx0, centerZ - roadHalfWidth, rx1, centerZ + roadHalfWidth, elevation + RoadY, roadColor);
+                        if (rz0 < centerZ - roadHalfWidth || rz1 > centerZ + roadHalfWidth)
+                            _farSurface.AddFlatQuad(centerX - roadHalfWidth, rz0, centerX + roadHalfWidth, rz1, elevation + RoadY, roadColor);
+                        AddRoadDetails(_farSurface, new Vector3(centerX, elevation, centerZ), x, z, cell);
+                        _farSurface.SetFrame(Vector3.zero, 0);
                         continue;
                     }
 
@@ -455,7 +469,7 @@ namespace XCity
             _surface.SetFrame(center, turn);
             if (emitScenery) _props.SetFrame(center, turn);
             float half = _cellSize * 0.5f;
-            float lane = half * 0.67f;
+            float lane = RoadHalfWidth(_city.GetCell(x, z).RoadType);
             float edge = half * 0.94f;
             var concrete = new Color32(147, 153, 150, 255);
             var steel = new Color32(77, 94, 97, 255);
@@ -521,7 +535,7 @@ namespace XCity
                 _surface.AddQuad(new Vector3(-edge, Grade(from) + bottom, from), new Vector3(-edge, Grade(to) + bottom, to),
                     new Vector3(edge, Grade(to) + bottom, to), new Vector3(edge, Grade(from) + bottom, from),
                     Vector3.down, concrete);
-                if (full)
+                if (full && _city.GetCell(x, z).RoadType == RoadType.Street)
                     Strip(-0.041f, 0.041f, Mathf.Max(from, -0.31f), Mathf.Min(to, 0.31f), PaintY, LanePaint);
             }
 
@@ -805,11 +819,92 @@ namespace XCity
                 cliff.RoadY(grade, links, u, v) - grade.Base + RoadY, v * _cellSize);
         }
 
+        private float RoadHalfWidth(RoadType type) => _cellSize * (type == RoadType.Avenue ? 0.455f : 0.335f);
+
+        private void AddRoadDetails(MeshBuilder mesh, Vector3 center, int x, int z, CityCell cell, BridgeProfile? bridge = null)
+        {
+            if (_infoView || (cell.RoadType != RoadType.OneWay && cell.RoadType != RoadType.Avenue)) return;
+            mesh.SetFrame(center, 0);
+            RoadGrade grade = bridge.HasValue ? default : _city.GetRoadGrade(x, z);
+            RoadConnections connections = _city.Roads.GetConnections(x, z);
+            bool straight = connections == (RoadConnections.North | RoadConnections.South) ||
+                connections == (RoadConnections.East | RoadConnections.West);
+            for (int d = 0; d < 4; d++)
+            {
+                RoadConnections direction = (RoadConnections)(1 << d);
+                Vector3 forward = direction switch
+                {
+                    RoadConnections.West => Vector3.left,
+                    RoadConnections.East => Vector3.right,
+                    RoadConnections.South => Vector3.back,
+                    _ => Vector3.forward
+                };
+                Vector3 across = new Vector3(forward.z, 0f, -forward.x);
+
+                if ((connections & direction) != 0)
+                {
+                    float start = straight ? 0f : 0.31f;
+                    if (cell.RoadType == RoadType.Avenue)
+                    {
+                        // Leave the middle of junctions and sharp bends clear for turning traffic.
+                        if (straight) Strip(0f, 0.5f, 0f, 0.025f, Curb);
+                        Strip(start + 0.035f, 0.46f, 0.195f, 0.009f, Paint);
+                        Strip(start + 0.035f, 0.46f, -0.195f, 0.009f, Paint);
+                    }
+                    else
+                    {
+                        Strip(start, 0.5f, 0.26f, 0.009f, Paint);
+                        Strip(start, 0.5f, -0.26f, 0.009f, Paint);
+                    }
+                }
+                if (cell.RoadType == RoadType.OneWay && cell.OneWayExit == direction)
+                {
+                    Strip(-0.16f, 0.06f, 0f, 0.016f, Paint);
+                    mesh.AddTriangle(Point(0.18f, 0f), Point(0.035f, -0.065f), Point(0.035f, 0.065f), Vector3.up, Paint);
+                }
+
+                Vector3 Point(float along, float acrossLane)
+                {
+                    Vector3 local = forward * along + across * acrossLane;
+                    float surface = bridge.HasValue
+                        ? bridge.Value.HeightAt((bridge.Value.Axis == CitySimulation.BridgeAlongX ? local.x : local.z) + 0.5f)
+                        : grade.Sample(local.x, local.z) - grade.Base;
+                    return local * _cellSize + Vector3.up * (surface + PaintY + 0.012f);
+                }
+
+                void Strip(float from, float to, float side, float halfWidth, Color32 color)
+                {
+                    float middle = (from + to) * 0.5f;
+                    Patch(from, middle);
+                    Patch(middle, to);
+                    void Patch(float a, float b) => mesh.AddQuad(Point(a, side - halfWidth), Point(b, side - halfWidth),
+                        Point(b, side + halfWidth), Point(a, side + halfWidth), Vector3.up, color);
+                }
+            }
+        }
+
+        private void AddBoulevardTrees(Vector3 center, RoadGrade grade, int x, int z, BridgeProfile? bridge = null)
+        {
+            RoadConnections links = _city.Roads.GetConnections(x, z);
+            bool alongX = (links & CitySimulation.BridgeAlongX) != 0;
+            bool alongZ = (links & CitySimulation.BridgeAlongZ) != 0;
+            if (alongX == alongZ) return; // Keep corners and junctions clear.
+            _props.SetFrame(center, 0);
+            uint seed = BuildingMeshFactory.Hash(x, z, 419);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float u = alongX ? 0f : side * 0.39f;
+                float v = alongX ? side * 0.39f : 0f;
+                TreeMeshFactory.AddStreetTree(_props, new Vector3(u * _cellSize,
+                    (bridge?.Middle ?? (grade.Sample(u, v) - grade.Base)) + CurbY, v * _cellSize), 0.48f, seed + (uint)(side + 1));
+            }
+        }
+
         private void AddOverviewStreet(Vector3 center, int x, int z)
         {
             RoadConnections links = _city.Roads.GetConnections(x, z);
             float half = _cellSize * 0.5f;
-            float lane = half * 0.67f;
+            float lane = RoadHalfWidth(_city.GetCell(x, z).RoadType);
             Color32 sidewalk = _infoView ? GetInfoGroundColor(_city.GetCell(x, z), x, z) : Paving;
             Color32 roadColor = _infoView ? GetInfoRoadColor(x, z) : Asphalt;
             Rect(_surface, -half, -half, half, half, RoadY - 0.012f, sidewalk);
@@ -826,7 +921,7 @@ namespace XCity
         {
             RoadConnections links = _city.Roads.GetConnections(x, z);
             float half = _cellSize * 0.5f;
-            float lane = half * 0.67f;
+            float lane = RoadHalfWidth(_city.GetCell(x, z).RoadType);
             float shoulder = (half + lane) * 0.5f;
             int degree = 0;
             foreach (RoadConnections direction in Directions)
@@ -851,7 +946,7 @@ namespace XCity
 
                     if (degree >= 3)
                         AddCrosswalk(lane, half);
-                    else
+                    else if (_city.GetCell(x, z).RoadType is RoadType.Street or RoadType.Boulevard)
                         Rect(_surface, -0.044f, shoulder - 0.17f, 0.044f, shoulder + 0.17f, PaintY, LanePaint);
                 }
                 else

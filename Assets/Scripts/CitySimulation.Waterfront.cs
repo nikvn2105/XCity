@@ -164,9 +164,10 @@ namespace XCity
             return GetRoadGrade(x, z).Sample(gridX - x - 0.5f, gridZ - z - 0.5f);
         }
 
-        internal BridgeQuote QuoteBridge(int x, int z, int endX, int endZ, out int cost)
+        internal BridgeQuote QuoteBridge(int x, int z, int endX, int endZ, out int cost, RoadType roadType = RoadType.Street)
         {
             cost = 0;
+            if (roadType > RoadType.Boulevard) return BridgeQuote.SpanObstructed;
             if (!IsBuildable(x, z) || !IsBuildable(endX, endZ)) return BridgeQuote.BanksRequired;
             if (x != endX && z != endZ) return BridgeQuote.StraightSpanRequired;
             int distance = Math.Abs(endX - x) + Math.Abs(endZ - z);
@@ -178,39 +179,47 @@ namespace XCity
 
             int dx = Math.Sign(endX - x);
             int dz = Math.Sign(endZ - z);
-            for (int i = 1; i < distance; i++)
+            RoadConnections axis = dx == 0 ? BridgeAlongZ : BridgeAlongX;
+            for (int i = 0; i <= distance; i++)
             {
-                int cx = x + i * dx;
-                int cz = z + i * dz;
-                if (WorldTerrain.IsLand(cx, cz) || _cells[cx, cz].Type != CellType.Empty || IsHarborBerth(cx, cz))
+                int cx = x + i * dx, cz = z + i * dz;
+                CityCell cell = _cells[cx, cz];
+                bool bank = i == 0 || i == distance;
+                if (!bank && (WorldTerrain.IsLand(cx, cz) || IsHarborBerth(cx, cz) ||
+                    (cell.Type != CellType.Empty && cell.BridgeAxis != axis)))
                     return BridgeQuote.SpanObstructed;
+
+                cost += cell.Type == CellType.Road
+                    ? RoadCatalog.UpgradeCost(cell.RoadType, roadType)
+                    : bank ? RoadCatalog.Cost(roadType) : BridgeTileCost + RoadCatalog.UpgradeCost(RoadType.Street, roadType);
             }
 
-            cost = (distance - 1) * BridgeTileCost + (start == CellType.Empty ? RoadCost : 0) +
-                (end == CellType.Empty ? RoadCost : 0);
             return Money >= cost ? BridgeQuote.Ready : BridgeQuote.InsufficientFunds;
         }
 
-        internal bool TryBuildBridge(int x, int z, int endX, int endZ)
+        internal bool TryBuildBridge(int x, int z, int endX, int endZ, RoadType roadType = RoadType.Street)
         {
-            if (IsBankrupt || QuoteBridge(x, z, endX, endZ, out int cost) != BridgeQuote.Ready) return false;
+            if (IsBankrupt || QuoteBridge(x, z, endX, endZ, out int cost, roadType) != BridgeQuote.Ready) return false;
 
             int dx = Math.Sign(endX - x);
             int dz = Math.Sign(endZ - z);
             int distance = Math.Abs(endX - x) + Math.Abs(endZ - z);
             var changed = new List<(int X, int Z, CityCell Cell)>(distance + 1);
+            RoadConnections exit = RoadCatalog.ExitForStep(roadType, dx, dz, RoadConnections.None);
             for (int i = 0; i <= distance; i++)
             {
                 int cx = x + i * dx;
                 int cz = z + i * dz;
-                if (_cells[cx, cz].Type == CellType.Road) continue;
+                CityCell previous = _cells[cx, cz];
+                if (previous.Type == CellType.Road && previous.RoadType == roadType && previous.OneWayExit == exit) continue;
                 RoadConnections axis = i == 0 || i == distance ? RoadConnections.None :
                     dx == 0 ? BridgeAlongZ : BridgeAlongX;
-                changed.Add((cx, cz, _cells[cx, cz]));
-                _cells[cx, cz] = new CityCell { Type = CellType.Road, BridgeAxis = axis };
-                TrackCell(cx, cz, CellType.Road);
+                changed.Add((cx, cz, previous));
+                _cells[cx, cz] = new CityCell { Type = CellType.Road, BridgeAxis = axis, RoadType = roadType, OneWayExit = exit };
+                TrackCell(cx, cz, CellType.Road, previous);
             }
 
+            if (changed.Count == 0) return false;
             PushUndo(changed, cost);
             Money -= cost;
             _powerDirty = true;
