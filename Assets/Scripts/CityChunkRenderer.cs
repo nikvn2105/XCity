@@ -745,34 +745,36 @@ namespace XCity
 
         private void AddSoftGround(MeshBuilder mesh, SoftCliff cliff, Color32 grass, int x, int z)
         {
-            for (int ix = 0; ix < RoadGrade.PatchCount; ix++)
-            for (int iz = 0; iz < RoadGrade.PatchCount; iz++)
+            for (int ix = 0; ix < SoftCliff.GroundPatchCount; ix++)
+            for (int iz = 0; iz < SoftCliff.GroundPatchCount; iz++)
             {
-                float x0 = RoadGrade.Boundary(ix), x1 = RoadGrade.Boundary(ix + 1);
-                float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
-                AddCliffPatch(mesh, ix, iz, Point(x0, z0), Point(x0, z1), Point(x1, z1), Point(x1, z0), grass, x, z);
+                float x0 = SoftCliff.GroundBoundary(ix), x1 = SoftCliff.GroundBoundary(ix + 1);
+                float z0 = SoftCliff.GroundBoundary(iz), z1 = SoftCliff.GroundBoundary(iz + 1);
+                AddCliffPatch(mesh, SoftCliff.GroundFlip(ix, iz), Point(x0, z0), Point(x0, z1), Point(x1, z1), Point(x1, z0), grass, x, z);
             }
 
             Vector3 Point(float u, float v) => new Vector3(u * _cellSize, cliff.Vertex(u, v) + 0.007f, v * _cellSize);
         }
 
-        private void AddCliffPatch(MeshBuilder mesh, int ix, int iz, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
+        private void AddCliffPatch(MeshBuilder mesh, bool flip, Vector3 a, Vector3 b, Vector3 c, Vector3 d,
             Color32 grass, int x, int z)
         {
+            float steepness = 1f - Vector3.Cross(b - a, d - a).normalized.y;
+            float top = Mathf.Max(Mathf.Max(a.y, b.y), Mathf.Max(c.y, d.y));
             Color32 ca = Shade(a), cb = Shade(b), cc = Shade(c), cd = Shade(d);
-            if (RoadGrade.FlipDiagonal(ix, iz))
+            if (flip)
                 mesh.AddQuadColors(b, c, d, a, cb, cc, cd, ca, Vector3.up);
             else
                 mesh.AddQuadColors(a, b, c, d, ca, cb, cc, cd, Vector3.up);
 
             Color32 Shade(Vector3 p)
             {
-                if (p.y >= -0.03f) return grass;
+                if (steepness <= 0.02f) return grass;
                 float n = WorldTerrain.Noise(x * 10 + 128 + Mathf.RoundToInt(p.x * 2f),
                     z * 10 + 128 + Mathf.RoundToInt(p.z * 2f), 14);
                 var soil = Color32.Lerp(new Color32(139, 115, 86, 255), new Color32(114, 111, 101, 255), n);
-                var baseColor = Color32.Lerp(soil, new Color32(75, 68, 57, 255), Mathf.Clamp01(-p.y / 3f) * 0.46f);
-                return Color32.Lerp(grass, baseColor, Mathf.Clamp01(-p.y / 0.38f));
+                var baseColor = Color32.Lerp(soil, new Color32(75, 68, 57, 255), Mathf.Clamp01((top - p.y) / 2f) * 0.46f);
+                return Color32.Lerp(grass, baseColor, Mathf.Clamp01(steepness * 4f) * (0.32f + 0.68f * Mathf.Clamp01((top - p.y) / 0.40f)));
             }
         }
 
@@ -792,7 +794,7 @@ namespace XCity
                 float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
                 Vector3 a = Point(x0, z0), b = Point(x0, z1), c = Point(x1, z1), d = Point(x1, z0);
                 if (cliff.Active && !driveable)
-                    AddCliffPatch(mesh, ix, iz, a, b, c, d, GetNaturalGroundColor(x, z), x, z);
+                    AddCliffPatch(mesh, RoadGrade.FlipDiagonal(ix, iz), a, b, c, d, GetNaturalGroundColor(x, z), x, z);
                 else if (RoadGrade.FlipDiagonal(ix, iz))
                     mesh.AddQuad(b, c, d, a, Vector3.up, paving);
                 else
