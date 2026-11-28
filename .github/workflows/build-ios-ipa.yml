@@ -3,6 +3,7 @@ name: Build XCity iOS (.ipa)
 on:
   push:
     branches: [ main ]
+    tags: ['v*-demo.*']
   workflow_dispatch:
 
 permissions:
@@ -13,12 +14,20 @@ jobs:
     name: Build Unity Xcode Project
     runs-on: ubuntu-latest
     outputs:
+      demo-version: ${{ steps.demo.outputs.version }}
       xcode-artifact-id: ${{ steps.upload-xcode.outputs.artifact-id }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Determine demo version
+        id: demo
+        shell: bash
+        run: |
+          version="$(bash .github/scripts/demo-version.sh)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Cache Unity Library
         uses: actions/cache@v4
@@ -106,6 +115,8 @@ jobs:
 
       - name: Verify and package unsigned IPA
         shell: bash
+        env:
+          DEMO_VERSION: ${{ needs.build-unity-ios.outputs.demo-version }}
         run: |
           shopt -s nullglob
           apps=("$GITHUB_WORKSPACE"/DerivedData/Build/Products/Release-iphoneos/*.app)
@@ -125,14 +136,15 @@ jobs:
 
           mkdir -p ipa-out/Payload
           ditto "$app" "ipa-out/Payload/$(basename "$app")"
-          ditto -c -k --keepParent ipa-out/Payload XCity-unsigned.ipa
-          unzip -tq XCity-unsigned.ipa
+          ipa="XCity-$DEMO_VERSION-unsigned.ipa"
+          ditto -c -k --keepParent ipa-out/Payload "$ipa"
+          unzip -tq "$ipa"
 
       - name: Upload Unsigned IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: XCity-unsigned-ipa
-          path: XCity-unsigned.ipa
+          path: XCity-${{ needs.build-unity-ios.outputs.demo-version }}-unsigned.ipa
           if-no-files-found: error
           retention-days: 14
 

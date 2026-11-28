@@ -2,7 +2,7 @@ name: Build XCity Android APK
 
 on:
   push:
-    branches: [codex/android-community-apk]
+    tags: ['v*-demo.*']
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,13 @@ jobs:
         uses: actions/checkout@v4
         with:
           lfs: true
+
+      - name: Determine demo version
+        id: demo
+        shell: bash
+        run: |
+          version="$(bash .github/scripts/demo-version.sh)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Build Android APK
         uses: game-ci/unity-builder@v4
@@ -34,18 +41,21 @@ jobs:
 
       - name: Verify APK and signature
         shell: bash
+        env:
+          DEMO_VERSION: ${{ steps.demo.outputs.version }}
         run: |
           apk=build/Android/XCity.apk
           unzip -tq "$apk"
           unzip -Z1 "$apk" lib/arm64-v8a/libil2cpp.so
           apksigner="$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
           "$apksigner" verify --verbose --print-certs "$apk"
-          sha256sum "$apk"
+          mv "$apk" "build/Android/XCity-$DEMO_VERSION.apk"
+          sha256sum "build/Android/XCity-$DEMO_VERSION.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: XCity-android-apk
-          path: build/Android/XCity.apk
+          path: build/Android/XCity-${{ steps.demo.outputs.version }}.apk
           if-no-files-found: error
           retention-days: 30
