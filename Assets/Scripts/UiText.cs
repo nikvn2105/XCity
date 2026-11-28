@@ -28,6 +28,8 @@ namespace XCity
         public static readonly string[] SpendingLines =
             { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", Garbage, "Khác (nước, cảng, công viên)", "Hành chính", "Trả nợ" };
 
+        public static string PowerSupply(int cells) => $"Cấp điện: {cells:N0} ô";
+
         // Map picker (new city).
         public const string MapLabel = "Bản đồ";
         public const string RandomMap = "Ngẫu nhiên";

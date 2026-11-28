@@ -1125,7 +1125,7 @@ namespace XCity
                 ZoneStatus.Developed => label + (BuildingCatalog.IsPublicService(type) ? " · Đang hoạt động" : " · Đã phát triển"),
                 _ => type == CellType.PowerPlant
                     ? label + (_city.Roads.HasRoadAccess(point.x, point.y)
-                        ? $" · Cấp {CitySimulation.PowerPlantCapacity} ô" : " · Cần đường liền kề")
+                        ? $" · Cấp {CitySimulation.PowerCapacity(cell.Model)} ô" : " · Cần đường liền kề")
                     : label
             };
         }
@@ -1299,7 +1299,9 @@ namespace XCity
                     BuildTool.Pan => GetInspectionHint(),
                     BuildTool.Road => RoadHint,
                     BuildTool.Bridge => GetBridgeHint(),
-                    BuildTool.PowerPlant => $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}",
+                    // A gas plant gets its name and price appended below, like other catalog buildings.
+                    BuildTool.PowerPlant => _activeBuildingModel == BuildingModel.Default
+                        ? $"Chạm đặt nhà máy · {CitySimulation.PowerPlantCost:N0}" : "Chạm đặt nhà máy",
                     BuildTool.Bulldoze => "Kéo qua các ô cần phá bỏ",
                     BuildTool.School or BuildTool.CivicService => BuildingCatalog.NeedsShore(_activeBuildingModel)
                         ? GetShoreHint() : "Chạm để đặt công trình",

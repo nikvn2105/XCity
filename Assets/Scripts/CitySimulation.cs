@@ -46,7 +46,8 @@ namespace XCity
         Plaza,
         LargePark,
         Landfill,
-        Incinerator
+        Incinerator,
+        GasPlant
     }
 
     public enum Density
@@ -103,6 +104,8 @@ namespace XCity
                 BuildingModel.FireStationSmall => (CellType.CivicService, "Trạm cứu hỏa nhỏ", 500, 2.8f, 0),
                 BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Building(model),
                 BuildingModel.Landfill or BuildingModel.Incinerator => GarbageCatalog.Building(model),
+                BuildingModel.GasPlant => (CellType.PowerPlant, "Nhà máy điện khí", CitySimulation.GasPlantCost,
+                    CitySimulation.PowerPlantHeight, 0),
                 _ => default
             };
 
@@ -132,7 +135,7 @@ namespace XCity
         {
             BuildingModel.Apartment or BuildingModel.Office or BuildingModel.Factory or
                 BuildingModel.Preschool or BuildingModel.PrimarySchool or BuildingModel.PoliceStation => 500,
-            BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or
+            BuildingModel.HighSchool or BuildingModel.Hospital or BuildingModel.FireStation or BuildingModel.GasPlant or
                 BuildingModel.Harbor => 2000,
             BuildingModel.University or BuildingModel.OfficeTower or BuildingModel.ShoppingMall => 5000,
             BuildingModel.SmallPark or BuildingModel.Plaza or BuildingModel.LargePark => ParkCatalog.Get(model).UnlockPopulation,
@@ -204,14 +207,25 @@ namespace XCity
         private readonly CityCell[,] _cells = new CityCell[GridSize, GridSize];
         private readonly SortedSet<int> _occupied = new SortedSet<int>();
         public const int PowerPlantCost = 1000;
-        public const int PowerPlantCapacity = 24;
+        // Phase 2e power rebalance: the basic plant served 24 cells, so a 10,000-person city needed ~96 plants.
+        public const int PowerPlantCapacity = 60;
+        public const int GasPlantCost = 6000;
+        public const int GasPlantCapacity = 250;
+        internal const int GasPlantUpkeep = 300;
+
+        public static int PowerCapacity(BuildingModel model) =>
+            model == BuildingModel.GasPlant ? GasPlantCapacity : PowerPlantCapacity;
+
+        internal static int PowerUpkeep(BuildingModel model) =>
+            model == BuildingModel.GasPlant ? GasPlantUpkeep : PowerPlantUpkeep;
         public const int ResidentsPerLevel = 12;
         private const int MaxResidentialLevel = 3;
-        internal const int PowerPlantUpkeep = 60;
+        internal const int PowerPlantUpkeep = 90;
         internal const int RoadUpkeep = 2;
         internal const float PowerPlantHeight = 3.2f;
-        // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding; 14: map style and seed.
-        internal const int CurrentSchemaVersion = 14;
+        // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding; 14: map style and seed;
+        // 15: gas power plant.
+        internal const int CurrentSchemaVersion = 15;
         public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -430,7 +444,7 @@ namespace XCity
             {
                 CellType.Road => RoadCost,
                 CellType.Empty => AffordableDemolition(1, budget),
-                CellType.PowerPlant => PowerPlantCost,
+                CellType.PowerPlant => model == BuildingModel.Default ? PowerPlantCost : option.Cost,
                 _ => model == BuildingModel.Default ? ZoneCost : option.Cost
             };
             return true;
@@ -450,7 +464,7 @@ namespace XCity
             if (cell.Type == CellType.Residential) Population -= BuildingCatalog.Residents(cell);
             cell = type switch
             {
-                CellType.PowerPlant => new CityCell { Type = type, Level = 1, Height = PowerPlantHeight },
+                CellType.PowerPlant => new CityCell { Type = type, Model = model, Level = 1, Height = PowerPlantHeight },
                 CellType.School or CellType.CivicService =>
                     new CityCell { Type = type, Model = model, Level = 1, Height = option.Height },
                 _ => new CityCell { Type = type, Model = model }
@@ -500,8 +514,9 @@ namespace XCity
 
                 if (cell.Type == CellType.PowerPlant)
                 {
-                    netIncome -= PowerPlantUpkeep;
-                    budget.Power += PowerPlantUpkeep;
+                    int powerUpkeep = PowerUpkeep(cell.Model);
+                    netIncome -= powerUpkeep;
+                    budget.Power += powerUpkeep;
                     continue;
                 }
 
@@ -718,7 +733,7 @@ namespace XCity
             if (cell.Model != BuildingModel.Default)
             {
                 var option = BuildingCatalog.Get(cell.Model);
-                int modelVersion = GarbageCatalog.IsFacility(cell.Model) ? 13 : ParkCatalog.IsPark(cell.Model) ? 12 : cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
+                int modelVersion = cell.Model == BuildingModel.GasPlant ? 15 : GarbageCatalog.IsFacility(cell.Model) ? 13 : ParkCatalog.IsPark(cell.Model) ? 12 : cell.Model >= BuildingModel.PolicePost ? 10 : cell.Model >= BuildingModel.WaterPump ? 8 :
                     cell.Model == BuildingModel.Harbor ? 7 :
                     cell.Model >= BuildingModel.HighStreet ? 5 : 4;
                 if (version < modelVersion || option.Cost == 0 || option.Type != cell.Type) return false;
@@ -750,7 +765,7 @@ namespace XCity
             ClearCapacity(ref _sewageCapacity, networks);
             foreach (int index in _utilitySources)
                 if (_cells[index / GridSize, index % GridSize].Type == CellType.PowerPlant)
-                    _powerCapacity[AdjacentComponent(index)] += PowerPlantCapacity;
+                    _powerCapacity[AdjacentComponent(index)] += PowerCapacity(_cells[index / GridSize, index % GridSize].Model);
 
             _unpoweredZones = 0;
             if (_consumerOrderDirty)

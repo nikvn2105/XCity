@@ -300,7 +300,7 @@ namespace XCity.Tests
                         services += BuildingCatalog.ServiceUpkeep(cell.Model);
                 }
                 // Tick keeps these two rates private or inline. The report reconciles them against actual net income.
-                return (roads * 2, _plants * 60, services, water);
+                return (roads * 2, _plants * CitySimulation.PowerPlantUpkeep, services, water);
             }
 
             private static (int X, int Z) FindSite(int streetCount, int streetDepth, int shoreLots)

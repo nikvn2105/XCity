@@ -248,3 +248,7 @@ Mốc 500 / 2.000 / 5.000 dân: lượt 54 / 218 / 470. Không nợ; quỹ thấ
 - Lãi cuối game vẫn cao (~+3.700/tick ở 10.900 dân, 14 triệu sau 4.000 lượt), nhưng một phần do "thị trưởng tự động" chỉ xây một công trình mỗi loại dịch vụ: hài lòng tụt 64 → 43 và chi dịch vụ chỉ ~160. Người chơi thật sẽ phủ dịch vụ rộng hơn và tốn hơn nhiều. Cần đo lại khi bot phủ dịch vụ theo bán kính.
 - Nước: chỉ 125/744 nhà có đủ nước và thoát nước (9 ô bờ). Thành phố lớn xa bờ sẽ nghẽn lên cấp — xem xét ở giai đoạn 3 (sông, ao) hoặc thêm tháp nước không cần bờ.
 - Điện là khoản chi lớn nhất (96 nhà máy cho ~2.000 ô); giai đoạn sau nên có nhà máy công suất lớn hơn.
+
+### Điện (28/11)
+
+Nhà máy điện cơ bản 24 → 60 ô, phí 60 → 90/lượt; thêm **Nhà máy điện khí** (mở ở 2.000 dân): 250 ô, giá 6.000, phí 300/lượt (save 15). Đô thị lớn (bot chỉ xây nhà máy cơ bản): 40 nhà máy thay vì 96, chi điện 3.600 thay vì 5.760; lên 11.780 dân, lãi +7.194/tick. Lãi cuối game tăng thêm — cần đo lại khi bot phủ dịch vụ đầy đủ (xem "Còn mở sau 2e").

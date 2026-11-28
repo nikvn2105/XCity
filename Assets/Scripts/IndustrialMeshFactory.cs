@@ -87,7 +87,8 @@ namespace XCity
 
             if (cell.Type == CellType.PowerPlant)
             {
-                BuildPowerPlant(b);
+                if (cell.Model == BuildingModel.GasPlant) BuildGasPlant(b);
+                else BuildPowerPlant(b);
                 return;
             }
 
@@ -133,7 +134,12 @@ namespace XCity
             out Vector3 worldPos, out bool isCoolingSteam)
         {
             Vector3 localOffset;
-            if (cell.Type == CellType.PowerPlant)
+            if (cell.Type == CellType.PowerPlant && cell.Model == BuildingModel.GasPlant)
+            {
+                localOffset = new Vector3(-1.05f, GasStackHeight + 0.04f, -0.95f);
+                isCoolingSteam = false;
+            }
+            else if (cell.Type == CellType.PowerPlant)
             {
                 localOffset = new Vector3(-0.60f, 3.28f, -0.58f);
                 isCoolingSteam = true;
@@ -502,6 +508,38 @@ namespace XCity
                 RoofLight, RoofDark, topSurface: BuildingSurface.Roof);
             AddRooftopHvac(b, new Vector3(0.88f, baseY + mainH, -0.35f), 1.1f);
             AddLoadingDockRow(b, hallCenter, hallSize, 2, accent);
+        }
+
+        private const float GasStackHeight = 3.6f;
+
+        // Combined-cycle gas plant: long turbine hall, two slim exhaust stacks, gas tanks and a switchyard.
+        private static void BuildGasPlant(MeshBuilder b)
+        {
+            const float baseY = 0.04f;
+            Vector3 hallCenter = new Vector3(0.20f, baseY + 0.80f, 0.30f);
+            Vector3 hallSize = new Vector3(2.30f, 1.60f, 1.50f);
+            AddSteelHall(b, hallCenter, hallSize, CladdingPalette[1], PowerViolet, 4);
+            b.AddFacadeRect(hallCenter, hallSize, 0, -1.00f, 1.00f, baseY + 1.05f, baseY + 1.40f, DarkGlass, BuildingSurface.Glazing);
+            AddLoadingDockRow(b, hallCenter, hallSize, 1, PowerViolet);
+
+            // Heat-recovery boilers feeding two slim stacks at the back-left.
+            for (int i = 0; i < 2; i++)
+            {
+                float x = -1.05f + i * 0.55f;
+                b.AddBox(new Vector3(x, baseY + 0.70f, -0.95f), new Vector3(0.42f, 1.40f, 0.62f), SiloConcrete, SteelBeam);
+                b.AddCylinder(new Vector3(x, baseY + 1.40f, -0.95f), 0.15f, 0.13f, GasStackHeight - 1.40f, 10,
+                    SiloConcrete, true, FlueDark);
+                b.AddCylinder(new Vector3(x, baseY + GasStackHeight - 0.25f, -0.95f), 0.16f, 0.16f, 0.12f, 10,
+                    PowerViolet, false, default);
+            }
+
+            // Gas tanks and switchyard on the right.
+            b.AddCylinder(new Vector3(1.05f, baseY, -0.90f), 0.38f, 0.38f, 0.70f, 14, TankSilver, true, TankSilver);
+            b.AddCylinder(new Vector3(1.05f, baseY, -0.10f), 0.30f, 0.30f, 0.55f, 14, TankSilver, true, TankSilver);
+            b.AddBox(new Vector3(0.35f, baseY + 0.28f, -1.15f), new Vector3(0.36f, 0.56f, 0.40f), SteelBeam, TankSilver);
+            b.AddBox(new Vector3(0.10f, baseY + 0.62f, -1.40f), new Vector3(0.06f, 1.24f, 0.06f), SteelBeam, SteelBeam);
+            b.AddBox(new Vector3(0.60f, baseY + 0.62f, -1.40f), new Vector3(0.06f, 1.24f, 0.06f), SteelBeam, SteelBeam);
+            b.AddBox(new Vector3(0.35f, baseY + 1.22f, -1.40f), new Vector3(0.56f, 0.05f, 0.05f), SteelBeam, SteelBeam);
         }
 
         private static void BuildPowerPlant(MeshBuilder b)

@@ -323,7 +323,7 @@ namespace XCity
 
         private static (string Icon, Color Accent, string Kind) DescribeCell(CityCell cell)
         {
-            string icon = cell.Model != BuildingModel.Default
+            string icon = cell.Type != CellType.PowerPlant && cell.Model != BuildingModel.Default
                 ? OptionIcon(new BuildOption("", BuildTool.CivicService, cell.Model))
                 : cell.Type switch
                 {

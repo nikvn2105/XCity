@@ -164,6 +164,7 @@ namespace XCity
                     ModelOption(BuildTool.CivicService, BuildingModel.Plaza),
                     ModelOption(BuildTool.CivicService, BuildingModel.LargePark)),
                 Category(UiText.Utilities, UiIcon.Bolt, UiTheme.Utilities, new BuildOption(UiText.PowerPlant, BuildTool.PowerPlant),
+                    ModelOption(BuildTool.PowerPlant, BuildingModel.GasPlant),
                     ModelOption(BuildTool.CivicService, BuildingModel.WaterPump),
                     ModelOption(BuildTool.CivicService, BuildingModel.SewagePlant),
                     ModelOption(BuildTool.CivicService, BuildingModel.Landfill),
@@ -319,7 +320,8 @@ namespace XCity
             if (option.Tool == BuildTool.Road)
                 return UiText.Price(CitySimulation.RoadCost, true) + "\n" + UiText.Upkeep(CitySimulation.RoadUpkeep);
             if (option.Tool == BuildTool.PowerPlant)
-                return UiText.Price(CitySimulation.PowerPlantCost, false) + "\n" + UiText.Upkeep(CitySimulation.PowerPlantUpkeep);
+                return UiText.Price(option.Model == BuildingModel.Default ? CitySimulation.PowerPlantCost : BuildingCatalog.Get(option.Model).Cost, false) +
+                    "\n" + UiText.Upkeep(CitySimulation.PowerUpkeep(option.Model)) + "\n" + UiText.PowerSupply(CitySimulation.PowerCapacity(option.Model));
 
             if (GarbageCatalog.IsFacility(option.Model))
             {
