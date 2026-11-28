@@ -8,9 +8,9 @@ namespace XCity
         public const string StrokeOverBudget = "Thiếu ngân sách · Chi phí: $";
 
         public const string CrashLogTitle = "Nhật ký lỗi";
-        public const string CrashLogPreviousSession = "Lần trước có lỗi — xem trong Cài đặt";
+        public const string CrashLogPreviousSession = "Lần trước có lỗi · xem trong Cài đặt";
         public const string CrashLogCopy = "Sao chép";
-        public const string CrashLogEmpty = "Chưa có lỗi được ghi.";
+        public const string CrashLogEmpty = "Chưa có lỗi nào.";
         public const string CrashLogRecent = "50 dòng cuối";
         public const string CrashLogReadFailed = "Không thể đọc nhật ký lỗi.";
         public const string CrashLogCopyFailed = "Không thể sao chép nhật ký lỗi.";
@@ -21,9 +21,9 @@ namespace XCity
         // Density and land value.
         public static readonly string[] DensityNames = { "Mật độ thấp", "Mật độ vừa", "Mật độ cao" };
         public static string DensityLine(int density, int minLandValue) =>
-            minLandValue > 0 ? $"{DensityNames[density]} · cần đất ≥ {minLandValue}" : DensityNames[density];
-        public static string LandValueFact(int value) => $"Giá trị đất {value}";
-        public static string NeedsLandValue(int value) => $"Cần giá trị đất ≥ {value}";
+            minLandValue > 0 ? $"{DensityNames[density]} · cần giá đất ≥ {minLandValue}" : DensityNames[density];
+        public static string LandValueFact(int value) => $"Giá đất {value}";
+        public static string NeedsLandValue(int value) => $"Cần giá đất ≥ {value}";
 
         public const string Garbage = "Rác thải";
         public const string Landfill = "Bãi rác";
@@ -38,7 +38,7 @@ namespace XCity
         public const string Spending = "Chi";
         public static readonly string[] TaxZones = { "Thuế nhà ở", "Thuế thương mại", "Thuế công nghiệp" };
         public static readonly string[] SpendingLines =
-            { "Đường", "Điện", "Giáo dục", "Y tế", "Cảnh sát", "Cứu hỏa", Garbage, "Khác (nước, cảng, công viên)", "Hành chính", "Trả nợ" };
+            { "Đường", "Điện", "Giáo dục", "Y tế", "Công an", "Cứu hỏa", Garbage, "Tiện ích khác", "Hành chính", "Trả nợ" };
 
         public static string PowerSupply(int cells) => $"Cấp điện: {cells:N0} ô";
 
@@ -47,12 +47,12 @@ namespace XCity
         public const string RandomMap = "Ngẫu nhiên";
         public const string ClassicMapNote = "Bản đồ gốc, cố định";
         public static string MapStyleName(int style) => style switch { 1 => "Lục địa", 2 => "Nhiều đảo", _ => "Quần đảo" };
-        public static string MapSeed(int seed) => $"Hạt giống {seed}";
+        public static string MapSeed(int seed) => $"Mã bản đồ {seed}";
 
         // Tutorial quest card.
         public static string QuestStep(int step, int total) => $"NHIỆM VỤ {step}/{total}";
         public static string QuestDone(string title) => $"Hoàn thành: {title}";
-        public const string TutorialDone = "Đã hoàn thành hướng dẫn cơ bản. Chúc bạn xây thành phố vui!";
+        public const string TutorialDone = "Xong hướng dẫn cơ bản! Chúc bạn xây thành phố vui vẻ.";
         public static readonly string[] QuestTitles =
         {
             "Vẽ con đường đầu tiên",
@@ -64,19 +64,19 @@ namespace XCity
         public static readonly string[] QuestBodies =
         {
             "Chọn Đường, chạm điểm đầu rồi điểm cuối (hoặc kéo) để vẽ.",
-            "Chọn Tiện ích, chạm một ô sát con đường. Điện truyền theo đường.",
+            "Chọn Tiện ích, đặt sát đường. Điện tự truyền theo đường.",
             "Chọn Nhà ở, chạm hoặc kéo dọc hai bên đường.",
             "Chọn Thương mại (hoặc Công nghiệp) để người dân có việc làm.",
-            "Mở mũi tên trên Tiện ích, chọn Trạm bơm, đặt sát bờ nước."
+            "Mở mục Tiện ích, chọn Trạm bơm rồi đặt sát bờ nước."
         };
 
         // Road tool.
         public static string RoadName(RoadType type) => type switch
         {
             RoadType.Avenue => "Đại lộ 4 làn",
-            RoadType.OneWay => "Một chiều",
+            RoadType.OneWay => "Đường 1 chiều",
             RoadType.Boulevard => "Đường hàng cây",
-            _ => "Đường nhỏ 2 làn"
+            _ => "Đường 2 làn"
         };
         public static string RoadCapacity(int capacity) => $"Sức chứa: {capacity:N0} xe/ô";
         public const string RoadTapStart = "Chạm điểm đầu rồi điểm cuối, hoặc kéo để vẽ đường";
@@ -94,7 +94,7 @@ namespace XCity
 
         // Toasts.
         public const string FireStarted = "Có đám cháy! Chạm để xem";
-        public const string DebtWarning = "Ngân sách âm: vay tiền hoặc cắt giảm chi phí trước khi phá sản";
+        public const string DebtWarning = "Ngân sách âm: hãy vay tiền hoặc giảm chi trước khi phá sản";
         public const string DroppedOnLoad = "Đã gỡ {0} công trình không còn hợp lệ trên bản đồ";
 
         // Main menu and saves.
@@ -116,8 +116,8 @@ namespace XCity
         public const string SaveFailed = "Lưu thất bại. Thành phố vẫn đang mở.";
         public const string CreateFailed = "Không thể tạo bản lưu.";
         public const string LoadFailed = "Không thể tải bản lưu hoặc bản dự phòng.";
-        public const string DeleteFailed = "Không thể xóa hết các tệp của ô lưu.";
-        public const string MigrationFailed = "Chưa thể chuyển bản lưu cũ.";
+        public const string DeleteFailed = "Không thể xóa hết dữ liệu ô lưu.";
+        public const string MigrationFailed = "Không thể nâng cấp bản lưu cũ.";
         public static string DefaultCityName(int slot) => $"Thành phố {slot}";
         // Suggested names for a new city (fictional; real province names left out).
         private static readonly string[] CityNames =
@@ -226,11 +226,11 @@ namespace XCity
         public const string Environment = "Môi trường";
         public const string WaterSupply = "Nước";
         public const string Happiness = "Hạnh phúc";
-        public const string WorldMap = "Bản đồ thế giới";
+        public const string WorldMap = "Toàn bản đồ";
         public const string Close = "Đóng";
         public const string Locked = "Khóa";
         public const string InfoTitle = "Thông tin ô";
-        public const string FocusInspectedCell = "Đến gần";
+        public const string FocusInspectedCell = "Xem gần";
         public static string ConfirmInspectedDemolition(int cost) => $"Chạm lần nữa để phá · ${cost:N0}";
         public const string OverlayLegend =
             "Hạnh phúc\nĐỏ (10) · Vàng (55) · Xanh (100)\n\nPhủ dịch vụ\nLam: Giáo dục\nNgọc: Y tế\nChàm: Công an\nCam: Cứu hỏa\nXám: Khác";
@@ -240,7 +240,7 @@ namespace XCity
         public static string Unlocked(string names) => $"Đã mở khóa: {names}";
         public static string Price(int amount, bool perCell) => perCell ? $"Chi phí: ${amount:N0}/ô" : $"Chi phí: ${amount:N0}";
         public static string BridgePrice(int water, int bank) => $"Chi phí: ${water:N0}/ô nước\nĐầu cầu mới: ${bank:N0}/ô";
-        public static string Upkeep(int amount) => $"Duy trì: ${amount:N0}/tháng";
+        public static string Upkeep(int amount) => $"Duy trì: ${amount:N0}/lượt";
         public static string ParkHappiness(int points) => $"Hạnh phúc: +{points}";
         public static string Radius(int cells) => $"Bán kính: {cells:N0} ô";
         public static string Seats(int seats) => $"Học sinh: {seats:N0} chỗ";
@@ -250,12 +250,12 @@ namespace XCity
             BuildingModel.OfficeTower => "Tháp VP",
             BuildingModel.ShoppingMall => "Trung tâm TM",
             BuildingModel.HighStreet => "Phố cửa hàng",
-            BuildingModel.PolicePost => "Đồn nhỏ",
+            BuildingModel.PolicePost => "Công an nhỏ",
             BuildingModel.FireStationSmall => "Cứu hỏa nhỏ",
             BuildingModel.FireStation => "Cứu hỏa",
             BuildingModel.Harbor => "Cảng",
             BuildingModel.WaterPump => "Trạm bơm",
-            BuildingModel.SewagePlant => "Xử lý nước",
+            BuildingModel.SewagePlant => "Nước thải",
             BuildingModel.Workshop => "Xưởng",
             _ => name
         };

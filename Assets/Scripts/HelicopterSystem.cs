@@ -133,7 +133,7 @@ namespace XCity
                 {
                     HeliRole.FireRescue => "Trực thăng Cứu hỏa",
                     HeliRole.MedEvac => "Trực thăng Cấp cứu",
-                    HeliRole.Police => "Trực thăng Cảnh sát",
+                    HeliRole.Police => "Trực thăng Công an",
                     _ => "Trực thăng Đô thị"
                 };
                 return true;
