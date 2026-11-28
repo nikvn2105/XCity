@@ -334,7 +334,7 @@ namespace XCity
             CancelGesture();
             ClearFollow();
             StopCameraInertia();
-            _camTarget = new Vector3(point.x, 0f, point.z);
+            _camTarget = new Vector3(point.x, WorldTerrain.SurfaceY(point.x, point.z, CellSize), point.z);
             UpdateCameraTransform();
         }
 

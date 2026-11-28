@@ -14,13 +14,13 @@ namespace XCity
             return (uint)x < Size && (uint)z < Size ? x * Size + z : -1;
         }
 
-        private static int CarveWater(float[] height, MapStyle style, int seed, out WaterKind[] water, out int[] downstream)
+        private static int CarveWater(float[] height, MapStyle style, int seed, out WaterKind[] water, out int[] downstream, out int[] coast)
         {
             var rng = new Random(unchecked(seed * 397 ^ 0x537A));
             water = new WaterKind[height.Length];
             downstream = new int[height.Length];
             var queue = new int[height.Length];
-            var coast = new int[height.Length];
+            coast = new int[height.Length];
             Array.Fill(coast, -1);
 
             // The map has a continuous sea border. Flood it so isolated low spots are not ocean.

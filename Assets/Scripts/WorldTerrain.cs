@@ -58,7 +58,8 @@ namespace XCity
         // Signed land height per cell (>= 0 is land), computed once per map.
         private static WaterKind[] _water;
         private static int[] _downstream;
-        private static float[] _height = MapGenerator.Generate(MapSpec.Classic, out _start, out _water, out _downstream);
+        private static byte[] _tiers;
+        private static float[] _height = MapGenerator.Generate(MapSpec.Classic, out _start, out _water, out _downstream, out _tiers);
         private static (int X, int Z) _start;
         private static readonly object Gate = new object();
 
@@ -76,13 +77,32 @@ namespace XCity
             lock (Gate)
             {
                 if (spec == Current) return;
-                _height = MapGenerator.Generate(spec, out _start, out _water, out _downstream);
+                _height = MapGenerator.Generate(spec, out _start, out _water, out _downstream, out _tiers);
                 Current = spec;
             }
         }
 
         public static bool IsLand(int x, int z) =>
             x >= 0 && z >= 0 && x < Size && z < Size && _height[x * Size + z] >= 0f;
+
+        internal const float TerraceStep = 2f;
+        internal const float MaxSurfaceY = 3 * TerraceStep;
+
+        public static byte Tier(int x, int z) =>
+            (uint)x < Size && (uint)z < Size ? _tiers[x * Size + z] : (byte)0;
+
+        public static float SurfaceY(int x, int z) => Tier(x, z) * TerraceStep;
+
+        public static float SurfaceY(float worldX, float worldZ, float cellSize) =>
+            SurfaceY((int)Math.Floor(worldX / cellSize), (int)Math.Floor(worldZ / cellSize));
+
+        public static bool IsSlope(int x, int z)
+        {
+            if (Current.Style == MapStyle.Classic || !IsLand(x, z)) return false;
+            byte tier = Tier(x, z);
+            return Tier(x - 1, z) != tier || Tier(x + 1, z) != tier ||
+                Tier(x, z - 1) != tier || Tier(x, z + 1) != tier;
+        }
 
         public static float LandHeight(int x, int z) =>
             x >= 0 && z >= 0 && x < Size && z < Size ? _height[x * Size + z] : -1f;

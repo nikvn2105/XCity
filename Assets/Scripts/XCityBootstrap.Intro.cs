@@ -100,6 +100,7 @@ namespace XCity
             _camTarget = count == 0
                 ? new Vector3((WorldTerrain.Start.X + 0.5f) * CellSize, 0f, (WorldTerrain.Start.Z + 0.5f) * CellSize)
                 : new Vector3((sumX / (float)count + 0.5f) * CellSize, 0f, (sumZ / (float)count + 0.5f) * CellSize);
+            _camTarget.y = WorldTerrain.SurfaceY(_camTarget.x, _camTarget.z, CellSize);
             _camDistance = Mathf.Clamp(Mathf.Sqrt(count) * CellSize * 0.9f, 60f, 260f);
             _camPitch = 34f;
             UpdateCameraTransform();

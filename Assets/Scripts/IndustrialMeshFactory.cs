@@ -208,7 +208,7 @@ namespace XCity
                     break;
             }
 
-            worldPos = new Vector3((x + 0.5f) * cellSize, CityChunkRenderer.BuildingBase, (z + 0.5f) * cellSize) + rotated;
+            worldPos = new Vector3((x + 0.5f) * cellSize, WorldTerrain.SurfaceY(x, z) + CityChunkRenderer.BuildingBase, (z + 0.5f) * cellSize) + rotated;
             return true;
         }
 

@@ -16,12 +16,13 @@ namespace XCity.Tests
         [Fact]
         public void ClassicMap_MatchesTheOriginalFormulaEverywhere()
         {
-            float[] grid = MapGenerator.Generate(MapSpec.Classic, out _, out var water, out _);
+            float[] grid = MapGenerator.Generate(MapSpec.Classic, out _, out var water, out _, out var tiers);
             for (int x = 0; x < Size; x++)
             for (int z = 0; z < Size; z++)
             {
                 int i = x * Size + z;
                 Assert.Equal(WorldTerrain.ClassicHeight(x, z), grid[i]);
+                Assert.Equal(0, tiers[i]);
                 Assert.Equal(grid[i] >= 0 ? WaterKind.Land : WaterKind.Sea, water[i]);
             }
         }
@@ -35,11 +36,13 @@ namespace XCity.Tests
             for (int seed = 1; seed <= 6; seed++)
             {
                 var spec = new MapSpec(style, seed);
-                float[] a = MapGenerator.Generate(spec, out var start, out var water, out var flow);
-                float[] b = MapGenerator.Generate(spec, out var startAgain, out var waterAgain, out var flowAgain);
+                float[] a = MapGenerator.Generate(spec, out var start, out var water, out var flow, out var tiers);
+                float[] b = MapGenerator.Generate(spec, out var startAgain, out var waterAgain, out var flowAgain, out var tiersAgain);
                 Assert.Equal(a, b);
                 Assert.Equal(water, waterAgain);
                 Assert.Equal(flow, flowAgain);
+                Assert.Equal(tiers, tiersAgain);
+                if (style == MapStyle.Continent) Assert.True(tiers.Distinct().Count() >= 2);
                 Assert.Contains(WaterKind.Lake, water);
                 Assert.Equal(start, startAgain);
                 // Never the classic fallback: every seed here must pass the quality check itself.
@@ -49,7 +52,13 @@ namespace XCity.Tests
                 int half = MapGenerator.StartArea / 2;
                 for (int x = start.X - half; x < start.X + half; x++)
                 for (int z = start.Z - half; z < start.Z + half; z++)
+                {
                     Assert.True(a[x * Size + z] >= 0f, $"{style} seed {seed}: water inside the start area at ({x}, {z})");
+                    Assert.Equal(tiers[start.X * Size + start.Z], tiers[x * Size + z]);
+                }
+                Assert.Contains(Enumerable.Range(start.X - half - 4, MapGenerator.StartArea + 8)
+                    .SelectMany(x => Enumerable.Range(start.Z - half - 4, MapGenerator.StartArea + 8)
+                        .Select(z => water[x * Size + z])), kind => kind is WaterKind.River or WaterKind.Lake);
                 Assert.NotNull(MapGenerator.FindStart(a));
                 // A ring of sea always surrounds the map.
                 Assert.True(a[0] < 0f && a[Size * Size - 1] < 0f);
@@ -95,6 +104,8 @@ namespace XCity.Tests
                         if (next == -1) break;
                         Assert.Equal(1, Math.Abs(current / Size - next / Size) + Math.Abs(current % Size - next % Size));
                         Assert.Equal(WaterKind.River, WorldTerrain.WaterKind(next / Size, next % Size));
+                        Assert.True(WorldTerrain.SurfaceY(current / Size, current % Size) >=
+                            WorldTerrain.SurfaceY(next / Size, next % Size));
                         current = next;
                     }
                     Assert.True(HasNeighbour(current / Size, current % Size, WaterKind.Sea));
@@ -216,10 +227,42 @@ namespace XCity.Tests
             }
         }
 
+        [Fact]
+        public void TerracedEdge_RejectsBuildingsAndJoinsRoadsAtTheSameHeight()
+        {
+            try
+            {
+                WorldTerrain.Use(new MapSpec(MapStyle.Continent, 1));
+                var city = new CitySimulation();
+                var edge = (from x in Enumerable.Range(1, Size - 2)
+                            from z in Enumerable.Range(1, Size - 2)
+                            where WorldTerrain.IsLand(x, z) && WorldTerrain.IsLand(x + 1, z) &&
+                                WorldTerrain.Tier(x, z) != WorldTerrain.Tier(x + 1, z)
+                            select (x, z)).First();
+                var (ex, ez) = edge;
+                Assert.True(WorldTerrain.IsSlope(ex, ez));
+                Assert.False(city.TrySetCell(ex, ez, CellType.Residential));
+                Assert.False(city.TrySetCell(ex, ez, CellType.CivicService, BuildingModel.SmallPark));
+                Assert.True(city.TrySetCell(ex, ez, CellType.Road));
+                Assert.True(city.TrySetCell(ex + 1, ez, CellType.Road));
+                RoadGrade west = city.GetRoadGrade(ex, ez);
+                RoadGrade east = city.GetRoadGrade(ex + 1, ez);
+                Assert.True(west.IsRamp && east.IsRamp);
+                float joint = west.Sample(0.5f, 0f);
+                Assert.Equal(joint, east.Sample(-0.5f, 0f));
+                Assert.Equal(west.Sample(0.5f, 0.39f), east.Sample(-0.5f, 0.39f));
+                Assert.Equal(joint, city.RoadSurfaceY((ex + 1) * 4f, (ez + 0.5f) * 4f, 4f));
+            }
+            finally
+            {
+                WorldTerrain.Use(MapSpec.Classic);
+            }
+        }
+
         private static (int X, int Z) FindBank(WaterKind kind) =>
             (from x in Enumerable.Range(1, Size - 2)
              from z in Enumerable.Range(1, Size - 2)
-             where WorldTerrain.IsLand(x, z) && HasNeighbour(x, z, kind) &&
+             where CitySimulation.IsBuildable(x, z, CellType.CivicService) && HasNeighbour(x, z, kind) &&
                  (kind == WaterKind.Sea || !HasNeighbour(x, z, WaterKind.Sea))
              select (x, z)).First();
 

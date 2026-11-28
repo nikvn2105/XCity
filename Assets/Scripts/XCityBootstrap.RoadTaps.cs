@@ -53,7 +53,7 @@ namespace XCity
                 _roadAnchorMarker.transform.localScale = new Vector3(CellSize * 0.6f, 0.5f, CellSize * 0.6f);
             }
             _roadAnchor = cell;
-            _roadAnchorMarker.transform.position = new Vector3((cell.x + 0.5f) * CellSize, 0.3f, (cell.y + 0.5f) * CellSize);
+            _roadAnchorMarker.transform.position = new Vector3((cell.x + 0.5f) * CellSize, PreviewRise(cell) + 0.3f, (cell.y + 0.5f) * CellSize);
             _roadAnchorMarker.gameObject.SetActive(true);
         }
 

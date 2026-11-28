@@ -102,6 +102,7 @@ namespace XCity
         private Vector2Int _bridgeEnd;
         private BridgeQuote _bridgeQuote;
         private Vector2Int _lastStrokeSample;
+        private float _slopeWarningUntil;
         private const float ShoreWarningDuration = 3f;
         private float _shoreWarningUntil;
 
@@ -227,10 +228,10 @@ namespace XCity
             camObj.AddComponent<AudioListener>();
 
             // An empty city starts over its map's guaranteed buildable start area.
-            _camTarget = new Vector3((WorldTerrain.Start.X + 0.5f) * CellSize, 0f, (WorldTerrain.Start.Z + 0.5f) * CellSize);
+            _camTarget = new Vector3((WorldTerrain.Start.X + 0.5f) * CellSize, WorldTerrain.SurfaceY(WorldTerrain.Start.X, WorldTerrain.Start.Z), (WorldTerrain.Start.Z + 0.5f) * CellSize);
             foreach (int index in _city.OccupiedIndices)
             {
-                _camTarget = new Vector3((index / GridSize + 0.5f) * CellSize, 0f, (index % GridSize + 0.5f) * CellSize);
+                _camTarget = new Vector3((index / GridSize + 0.5f) * CellSize, WorldTerrain.SurfaceY(index / GridSize, index % GridSize), (index % GridSize + 0.5f) * CellSize);
                 break;
             }
             _dayNight = new DayNightSystem(_sunLight, _cam, _waterMat);
@@ -563,6 +564,8 @@ namespace XCity
                             _cityDirty = true;
                             _audio?.PlayBuild();
                         }
+                        else if (WorldTerrain.IsSlope(cell.x, cell.y))
+                            _slopeWarningUntil = Time.unscaledTime + ShoreWarningDuration;
                         else if (BuildingCatalog.NeedsShore(_activeBuildingModel))
                         {
                             _shoreWarningUntil = _city.CanPlaceWaterfront(cell.x, cell.y, _activeBuildingModel)
@@ -616,11 +619,11 @@ namespace XCity
             float closest = float.PositiveInfinity;
             point = default;
             float width = CellSize * CityChunkRenderer.BuildingWidthRatio;
-            if (!new Plane(Vector3.up, Vector3.zero).Raycast(ray, out float planeDistance))
+            if (!new Plane(Vector3.up, new Vector3(0f, BridgeProfile.WaterSurface, 0f)).Raycast(ray, out float planeDistance))
                 return false;
 
             Vector3 ground = ray.GetPoint(planeDistance);
-            Vector3 roof = ray.GetPoint(Mathf.Max(0f, planeDistance - 9f / Mathf.Max(0.001f, -ray.direction.y)));
+            Vector3 roof = ray.GetPoint(Mathf.Max(0f, planeDistance - (9f + WorldTerrain.MaxSurfaceY) / Mathf.Max(0.001f, -ray.direction.y)));
             int minX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(ground.x, roof.x) / CellSize) - 1, 0, GridSize - 1);
             int maxX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(ground.x, roof.x) / CellSize) + 1, 0, GridSize - 1);
             int minZ = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(ground.z, roof.z) / CellSize) - 1, 0, GridSize - 1);
@@ -632,7 +635,7 @@ namespace XCity
                     float height = _city.GetCell(x, z).Height;
                     if (height <= 0f) continue;
                     var center = new Vector3((x + 0.5f) * CellSize,
-                        CityChunkRenderer.BuildingBase + height * 0.5f, (z + 0.5f) * CellSize);
+                        WorldTerrain.SurfaceY(x, z) + CityChunkRenderer.BuildingBase + height * 0.5f, (z + 0.5f) * CellSize);
                     var bounds = new Bounds(center, new Vector3(width, height, width));
                     if (!bounds.IntersectRay(ray, out float distance) || distance >= closest) continue;
                     closest = distance;
@@ -640,29 +643,141 @@ namespace XCity
                 }
             }
 
+            bool hitSurface = TryPickTerrain(ray, planeDistance, out var surface, out float surfaceDistance);
             if (TryPickBridge(ray, planeDistance, out var bridge, out float bridgeDistance) &&
-                bridgeDistance < closest)
+                bridgeDistance < Mathf.Min(closest, surfaceDistance))
             {
                 point = bridge;
                 return true;
             }
-            return !float.IsPositiveInfinity(closest) || TryGetCell(position, out point);
+            if (closest <= surfaceDistance && !float.IsPositiveInfinity(closest)) return true;
+            point = surface;
+            return hitSurface && WorldTerrain.IsLand(point.x, point.y);
         }
 
         private bool TryGetCell(Vector2 position, out Vector2Int cell)
         {
             cell = default;
             Ray ray = _cam.ScreenPointToRay(position);
-            Plane ground = new Plane(Vector3.up, Vector3.zero);
-            if (!ground.Raycast(ray, out float distance)) return false;
-            if (_activeTool == BuildTool.Bulldoze && TryPickBridge(ray, distance, out cell, out _))
+            Plane water = new Plane(Vector3.up, new Vector3(0f, BridgeProfile.WaterSurface, 0f));
+            if (!water.Raycast(ray, out float distance)) return false;
+            bool found = TryPickTerrain(ray, distance, out cell, out float surfaceDistance);
+            if (_activeTool == BuildTool.Bulldoze && TryPickBridge(ray, distance, out var bridge, out float bridgeDistance) &&
+                bridgeDistance < surfaceDistance)
+            {
+                cell = bridge;
                 return true;
-            Vector3 hit = ray.GetPoint(distance);
-            cell = new Vector2Int(Mathf.FloorToInt(hit.x / CellSize), Mathf.FloorToInt(hit.z / CellSize));
-            if (cell.x < 0 || cell.y < 0 || cell.x >= GridSize || cell.y >= GridSize) return false;
-            // Build gestures need water hits too, so the simulation can mark them invalid.
-            return _activeTool != BuildTool.Pan || CitySimulation.IsBuildable(cell.x, cell.y) ||
-                _city.GetCell(cell.x, cell.y).IsBridge;
+            }
+            return found && (_activeTool != BuildTool.Pan || WorldTerrain.IsLand(cell.x, cell.y));
+        }
+
+        private bool TryPickTerrain(Ray ray, float waterDistance, out Vector2Int cell, out float nearest)
+        {
+            var selected = default(Vector2Int);
+            float closest = float.PositiveInfinity;
+            float vertical = ray.direction.y;
+            int topTier = WorldTerrain.Current.Style == MapStyle.Classic ? 0 : 3;
+            for (int tier = 0; tier <= topTier; tier++)
+            {
+                float y = tier * WorldTerrain.TerraceStep;
+                TestPlane(y, tier, true);
+                TestPlane(y + BridgeProfile.WaterSurface, tier, false);
+            }
+
+            if (topTier > 0)
+            {
+                Vector3 low = ray.GetPoint(waterDistance);
+                Vector3 high = ray.GetPoint(Mathf.Max(0f, waterDistance +
+                    (WorldTerrain.MaxSurfaceY + CityChunkRenderer.RoadY - BridgeProfile.WaterSurface) / vertical));
+                int minX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(low.x, high.x) / CellSize), 0, GridSize - 1);
+                int maxX = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(low.x, high.x) / CellSize), 0, GridSize - 1);
+                int minZ = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(low.z, high.z) / CellSize), 0, GridSize - 1);
+                int maxZ = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(low.z, high.z) / CellSize), 0, GridSize - 1);
+                for (int x = minX; x <= maxX; x++)
+                for (int z = minZ; z <= maxZ; z++)
+                {
+                    RoadGrade grade = _city.GetRoadGrade(x, z);
+                    if (WorldTerrain.IsSlope(x, z))
+                    {
+                        TestWall(x - 1, z, -0.5f, alongZ: true);
+                        TestWall(x + 1, z, 0.5f, alongZ: true);
+                        TestWall(x, z - 1, -0.5f, alongZ: false);
+                        TestWall(x, z + 1, 0.5f, alongZ: false);
+                    }
+                    if (!grade.IsRamp) continue;
+                    for (int ix = 0; ix < RoadGrade.PatchCount; ix++)
+                    for (int iz = 0; iz < RoadGrade.PatchCount; iz++)
+                    {
+                        float x0 = RoadGrade.Boundary(ix), x1 = RoadGrade.Boundary(ix + 1);
+                        float z0 = RoadGrade.Boundary(iz), z1 = RoadGrade.Boundary(iz + 1);
+                        Vector3 a = Point(x0, z0), b = Point(x0, z1), c = Point(x1, z1), d = Point(x1, z0);
+                        if (RoadGrade.FlipDiagonal(ix, iz))
+                        {
+                            TestTriangle(b, c, d);
+                            TestTriangle(b, d, a);
+                        }
+                        else
+                        {
+                            TestTriangle(a, b, c);
+                            TestTriangle(a, c, d);
+                        }
+                    }
+
+                    Vector3 Point(float u, float v) => new Vector3((x + 0.5f + u) * CellSize,
+                        grade.Sample(u, v) + CityChunkRenderer.RoadY, (z + 0.5f + v) * CellSize);
+
+                    void TestWall(int nx, int nz, float edge, bool alongZ)
+                    {
+                        float lower = WorldTerrain.SurfaceY(nx, nz);
+                        if (lower >= grade.Base || !WorldTerrain.IsLand(nx, nz)) return;
+                        float direction = alongZ ? ray.direction.x : ray.direction.z;
+                        if (Mathf.Abs(direction) < 0.0001f) return;
+                        float plane = ((alongZ ? x : z) + 0.5f + edge) * CellSize;
+                        float distance = (plane - (alongZ ? ray.origin.x : ray.origin.z)) / direction;
+                        if (distance < 0f || distance >= closest) return;
+                        Vector3 hit = ray.GetPoint(distance);
+                        float offset = (alongZ ? hit.z : hit.x) / CellSize - (alongZ ? z : x) - 0.5f;
+                        if (Mathf.Abs(offset) > 0.5f) return;
+                        RoadGrade neighbor = _city.GetRoadGrade(nx, nz);
+                        float bottom = alongZ ? neighbor.Sample(-edge, offset) : neighbor.Sample(offset, -edge);
+                        float top = alongZ ? grade.Sample(edge, offset) : grade.Sample(offset, edge);
+                        if (hit.y < bottom || hit.y > top) return;
+                        closest = distance;
+                        selected = new Vector2Int(x, z);
+                    }
+
+                    void TestTriangle(Vector3 a, Vector3 b, Vector3 c)
+                    {
+                        Vector3 normal = Vector3.Cross(b - a, c - a);
+                        float denom = Vector3.Dot(normal, ray.direction);
+                        if (Mathf.Abs(denom) < 0.0001f) return;
+                        float t = Vector3.Dot(normal, a - ray.origin) / denom;
+                        if (t < 0f || t >= closest) return;
+                        Vector3 hit = ray.GetPoint(t);
+                        if (Vector3.Dot(Vector3.Cross(b - a, hit - a), normal) < 0f ||
+                            Vector3.Dot(Vector3.Cross(c - b, hit - b), normal) < 0f ||
+                            Vector3.Dot(Vector3.Cross(a - c, hit - c), normal) < 0f) return;
+                        closest = t;
+                        selected = new Vector2Int(x, z);
+                    }
+                }
+            }
+
+            cell = selected;
+            nearest = closest;
+            return !float.IsPositiveInfinity(nearest);
+
+            void TestPlane(float y, int tier, bool land)
+            {
+                float distance = (y - ray.origin.y) / vertical;
+                if (distance < 0f || distance >= closest) return;
+                Vector3 hit = ray.GetPoint(distance);
+                int x = Mathf.FloorToInt(hit.x / CellSize), z = Mathf.FloorToInt(hit.z / CellSize);
+                if ((uint)x >= GridSize || (uint)z >= GridSize || WorldTerrain.Tier(x, z) != tier ||
+                    WorldTerrain.IsLand(x, z) != land || (land && _city.GetRoadGrade(x, z).IsRamp)) return;
+                closest = distance;
+                selected = new Vector2Int(x, z);
+            }
         }
 
         private bool TryPickBridge(Ray ray, float planeDistance, out Vector2Int tile, out float nearest)
@@ -671,7 +786,7 @@ namespace XCity
             nearest = float.PositiveInfinity;
             Vector3 low = ray.GetPoint(planeDistance);
             Vector3 high = ray.GetPoint(Mathf.Max(0f, planeDistance -
-                (BridgeProfile.MaxRise + 0.40f) / Mathf.Max(0.001f, -ray.direction.y)));
+                (WorldTerrain.MaxSurfaceY + BridgeProfile.MaxRise + 0.40f) / Mathf.Max(0.001f, -ray.direction.y)));
             int x0 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(low.x, high.x) / CellSize) - 1, 0, GridSize - 1);
             int x1 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Max(low.x, high.x) / CellSize) + 1, 0, GridSize - 1);
             int z0 = Mathf.Clamp(Mathf.FloorToInt(Mathf.Min(low.z, high.z) / CellSize) - 1, 0, GridSize - 1);
@@ -711,6 +826,9 @@ namespace XCity
             bool firstSample = _stroke.Count == 0 && !_strokeCostLabel.gameObject.activeSelf;
             if (_stroke.Count == 0) _strokeBudget = _city.Money;
             bool wasOverBudget = _strokeOverBudget;
+            bool changedSlope = BlocksBuildingOnSlope &&
+                (_stroke.Count == 0 || WorldTerrain.IsSlope(destination.x, destination.y) !=
+                    WorldTerrain.IsSlope(_lastStrokeSample.x, _lastStrokeSample.y));
             Vector2Int cursor = _stroke.Count == 0 ? destination : _lastStrokeSample;
             int stepsX = Mathf.Abs(destination.x - cursor.x);
             int stepsY = Mathf.Abs(destination.y - cursor.y);
@@ -737,9 +855,13 @@ namespace XCity
             _lastStrokeSample = destination;
             if (_activeTool == BuildTool.Road && !wasOverBudget && _strokeOverBudget)
                 RefreshStrokePreview();
-            if (firstSample) RefreshHUD();
+            if (firstSample || changedSlope) RefreshHUD();
             else UpdateStrokeCost();
         }
+
+        private bool BlocksBuildingOnSlope =>
+            _activeTool != BuildTool.Pan && _activeTool != BuildTool.Road &&
+            _activeTool != BuildTool.Bridge && _activeTool != BuildTool.Bulldoze;
 
         private CellType StrokeType => _activeTool switch
         {
@@ -811,7 +933,11 @@ namespace XCity
         {
             if (_activeTool == BuildTool.Bulldoze && _city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile bridge))
                 return Mathf.Max(bridge.Middle, Mathf.Max(bridge.Start, bridge.End));
-            return 0f;
+            if (_city.TryGetBridgeProfile(cell.x, cell.y, out BridgeProfile deck)) return deck.Middle;
+            if (!WorldTerrain.IsLand(cell.x, cell.y))
+                return WorldTerrain.SurfaceY(cell.x, cell.y) + BridgeProfile.WaterSurface;
+            RoadGrade grade = _city.GetRoadGrade(cell.x, cell.y);
+            return grade.Base + Mathf.Max(0f, Mathf.Max(Mathf.Max(grade.North, grade.South), Mathf.Max(grade.East, grade.West)));
         }
 
         private void UpdateBridgePreview(Vector2Int pointer)
@@ -841,7 +967,9 @@ namespace XCity
                 Vector2Int tile = start + step * i;
                 _stroke.Add(tile);
                 float rise = i > 0 && i < Mathf.Abs(span)
-                    ? BridgeProfile.Rise(i - 0.5f, Mathf.Abs(span) - 1) : 0f;
+                    ? BridgeProfile.TerrainDeck(i - 0.5f, Mathf.Abs(span) - 1,
+                        WorldTerrain.SurfaceY(start.x, start.y), WorldTerrain.SurfaceY(end.x, end.y))
+                    : WorldTerrain.SurfaceY(tile.x, tile.y);
                 ShowStreetPreview(i, tile, quote == BridgeQuote.Ready ? _roadPreviewMat : _invalidPreviewMat, rise);
             }
             if (hintChanged) RefreshHUD();
@@ -1062,7 +1190,8 @@ namespace XCity
 
             void SetCorner(int index, float u, float v)
             {
-                float grade = raised ? profile.HeightAt(profile.Axis == CitySimulation.BridgeAlongX ? u : v) : 0f;
+                float grade = raised ? profile.HeightAt(profile.Axis == CitySimulation.BridgeAlongX ? u : v)
+                    : _city.GetRoadGrade(point.x, point.y).Sample(u - 0.5f, v - 0.5f);
                 _inspectionOutline.SetPosition(index, new Vector3(x + u * CellSize, grade + 0.18f, z + v * CellSize));
             }
             _inspectionOutline.enabled = true;
@@ -1328,6 +1457,9 @@ namespace XCity
                     _strokeCostLabel.gameObject.SetActive(false);
                     _shownStrokeCost = -1;
                 }
+                if (BlocksBuildingOnSlope && (Time.unscaledTime < _slopeWarningUntil ||
+                    (_stroke.Count > 0 && WorldTerrain.IsSlope(_lastStrokeSample.x, _lastStrokeSample.y))))
+                    hint = UiText.SlopeRoadOnly;
                 int unpowered = _stroke.Count == 0 ? _city.UnpoweredZones : 0;
                 if (unpowered > 0) hint = $"Thiếu điện: {unpowered} ô  |  {hint}";
                 string uxPrefix = GetUXStatusPrefix();

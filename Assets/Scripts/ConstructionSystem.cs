@@ -261,7 +261,7 @@ namespace XCity
         {
             Vector3 origin = new Vector3(
                 (s.X + 0.5f) * _cellSize,
-                CityChunkRenderer.BuildingBase,
+                WorldTerrain.SurfaceY(s.X, s.Z) + CityChunkRenderer.BuildingBase,
                 (s.Z + 0.5f) * _cellSize);
             _builder.SetFrame(origin, s.QuarterTurns);
 

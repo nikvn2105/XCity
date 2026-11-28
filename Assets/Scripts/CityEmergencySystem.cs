@@ -153,7 +153,7 @@ namespace XCity
             CityCell chosenCell = _city.GetCell(chosen.x, chosen.y);
             FireCell = chosen;
             FireHeight = chosenCell.Height;
-            FireWorldPos = new Vector3((chosen.x + 0.5f) * _cellSize, CityChunkRenderer.BuildingBase, (chosen.y + 0.5f) * _cellSize);
+            FireWorldPos = new Vector3((chosen.x + 0.5f) * _cellSize, WorldTerrain.SurfaceY(chosen.x, chosen.y) + CityChunkRenderer.BuildingBase, (chosen.y + 0.5f) * _cellSize);
             _hasFireStation = fireStationNearby;
             _remaining = BaseFireDuration;
             HasActiveFire = true;

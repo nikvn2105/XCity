@@ -16,7 +16,12 @@ namespace XCity
 
         public static float[] Generate(MapSpec spec, out (int X, int Z) start,
             out WaterKind[] water, out int[] downstream)
+            => Generate(spec, out start, out water, out downstream, out _);
+
+        public static float[] Generate(MapSpec spec, out (int X, int Z) start,
+            out WaterKind[] water, out int[] downstream, out byte[] tiers)
         {
+            tiers = new byte[Size * Size];
             var height = new float[Size * Size];
             if (spec.Style == MapStyle.Classic)
             {
@@ -35,18 +40,19 @@ namespace XCity
             {
                 int seed = unchecked(spec.Seed + attempt);
                 Fill(height, spec.Style, seed);
-                int rivers = CarveWater(height, spec.Style, seed, out water, out downstream);
+                int rivers = CarveWater(height, spec.Style, seed, out water, out downstream, out var coast);
                 if (spec.Style == MapStyle.Continent && rivers == 0) continue;
                 float land = LandShare(height);
                 (float min, float max) = spec.Style == MapStyle.Islands ? (0.18f, 0.55f) : (0.40f, 0.75f);
                 if (land < min || land > max) continue;
-                var found = FindStart(height, water);
+                var found = FindStart(height, water, requireFreshWater: true);
                 if (found == null) continue;
                 start = found.Value;
+                BuildTerraces(height, water, downstream, coast, start, tiers);
                 return height;
             }
             // Every attempt failed (should not happen): fall back to the classic map rather than an unplayable one.
-            return Generate(MapSpec.Classic, out start, out water, out downstream);
+            return Generate(MapSpec.Classic, out start, out water, out downstream, out tiers);
         }
 
         private static void Fill(float[] height, MapStyle style, int seed)
@@ -101,7 +107,7 @@ namespace XCity
         }
 
         // The all-land 40 x 40 block near water, preferring fresh water on seeded maps.
-        internal static (int X, int Z)? FindStart(float[] height, WaterKind[] water = null)
+        internal static (int X, int Z)? FindStart(float[] height, WaterKind[] water = null, bool requireFreshWater = false)
         {
             const int step = 8;
             (int X, int Z)? best = null;
@@ -115,7 +121,7 @@ namespace XCity
                 if ((bestFresh || water == null) && distance >= bestDistance) continue;
                 WaterKind nearby = WaterNear(height, water, x, z);
                 bool fresh = nearby is WaterKind.River or WaterKind.Lake;
-                if (nearby == WaterKind.Land || (bestFresh && !fresh) ||
+                if (nearby == WaterKind.Land || ((requireFreshWater || bestFresh) && !fresh) ||
                     (bestFresh == fresh && distance >= bestDistance) || !AllLand(height, x, z, StartArea))
                     continue;
                 bestFresh = fresh;

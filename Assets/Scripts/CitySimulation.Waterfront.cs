@@ -20,20 +20,30 @@ namespace XCity
         internal const float WaterSurface = -1.05f;
         private const float RisePerTile = 0.85f;
 
-        public BridgeProfile(RoadConnections axis, int index, int count)
+        private readonly float _bankStart;
+        private readonly float _bankEnd;
+
+        public BridgeProfile(RoadConnections axis, int index, int count, float bankStart = 0f, float bankEnd = 0f)
         {
             Axis = axis;
             Index = index;
             Count = count;
+            _bankStart = bankStart;
+            _bankEnd = bankEnd;
         }
 
         public RoadConnections Axis { get; }
         public int Index { get; }
         public int Count { get; }
         public bool HasNavigationOpening => Math.Abs(Index + 0.5f - Count * 0.5f) <= 1.5f;
-        public float Start => Rise(Index, Count);
-        public float Middle => Rise(Index + 0.5f, Count);
-        public float End => Rise(Index + 1f, Count);
+        public float Start => Grade(Index);
+        public float Middle => Grade(Index + 0.5f);
+        public float End => Grade(Index + 1f);
+
+        private float Grade(float offset) => TerrainDeck(offset, Count, _bankStart, _bankEnd);
+
+        internal static float TerrainDeck(float offset, int count, float start, float end) =>
+            start + (end - start) * (offset / count) + Rise(offset, count);
 
         internal static float Rise(float offset, int count) =>
             Math.Max(0f, Math.Min(MaxRise, Math.Min(offset, count - offset) * RisePerTile));
@@ -44,6 +54,46 @@ namespace XCity
 
         public float SlopeAt(float progress) => progress <= 0.5f
             ? (Middle - Start) * 2f : (End - Middle) * 2f;
+    }
+
+    internal readonly struct RoadGrade
+    {
+        // Ramp begins at the edge of the flat junction and meets the adjoining tile halfway in height.
+        private const float RampStart = 0.21f;
+        public const float SharedEdge = 0.40f; // Includes sidewalks and their pedestrian paths.
+        public const int PatchCount = 5;
+        public readonly float Base, West, East, South, North;
+
+        public RoadGrade(float surface, float west = 0f, float east = 0f, float south = 0f, float north = 0f)
+        {
+            Base = surface;
+            West = west;
+            East = east;
+            South = south;
+            North = north;
+        }
+
+        public static float Boundary(int index) => index switch
+        {
+            0 => -0.5f, 1 => -SharedEdge, 2 => -RampStart,
+            3 => RampStart, 4 => SharedEdge, _ => 0.5f
+        };
+
+        public static bool FlipDiagonal(int x, int z) => x == z && (x == 0 || x == PatchCount - 1);
+
+        public bool IsRamp => West != 0f || East != 0f || South != 0f || North != 0f;
+
+        public float Sample(float u, float v)
+        {
+            float x = Weight(u, RampStart), z = Weight(v, RampStart);
+            float edgeX = u < 0f ? West : East, edgeZ = v < 0f ? South : North;
+            // Keep the outer corner on its own terrace, with a diagonal crease matching the mesh.
+            return Base + edgeX * Math.Min(x, 1f - Weight(v, SharedEdge)) +
+                edgeZ * Math.Min(z, 1f - Weight(u, SharedEdge));
+        }
+
+        private static float Weight(float value, float threshold) =>
+            Math.Max(0f, Math.Min(1f, (Math.Abs(value) - threshold) / (0.5f - threshold)));
     }
 
     public sealed partial class CitySimulation
@@ -81,11 +131,37 @@ namespace XCity
             while (IsInBounds(x + dx * count, z + dz * count) &&
                 _cells[x + dx * count, z + dz * count].BridgeAxis == axis)
                 count++;
+            float bankStart = WorldTerrain.SurfaceY(x - dx, z - dz);
+            float bankEnd = WorldTerrain.SurfaceY(x + dx * count, z + dz * count);
             for (int i = 0; i < count; i++)
-                _bridgeProfiles[CellIndex(x + dx * i, z + dz * i)] = new BridgeProfile(axis, i, count);
+                _bridgeProfiles[CellIndex(x + dx * i, z + dz * i)] = new BridgeProfile(axis, i, count, bankStart, bankEnd);
 
             profile = _bridgeProfiles[index];
             return true;
+        }
+
+        internal RoadGrade GetRoadGrade(int x, int z)
+        {
+            float surface = WorldTerrain.SurfaceY(x, z);
+            if (!WorldTerrain.IsSlope(x, z) || !IsInBounds(x, z) || _cells[x, z].Type != CellType.Road)
+                return new RoadGrade(surface);
+            RoadConnections links = Roads.GetConnections(x, z);
+            return new RoadGrade(surface, Edge(RoadConnections.West, x - 1, z), Edge(RoadConnections.East, x + 1, z),
+                Edge(RoadConnections.South, x, z - 1), Edge(RoadConnections.North, x, z + 1));
+
+            float Edge(RoadConnections flag, int nx, int nz) =>
+                (links & flag) != 0 && WorldTerrain.IsLand(nx, nz)
+                    ? (WorldTerrain.SurfaceY(nx, nz) - surface) * 0.5f : 0f;
+        }
+
+        internal float RoadSurfaceY(float worldX, float worldZ, float cellSize)
+        {
+            float gridX = worldX / cellSize, gridZ = worldZ / cellSize;
+            int x = (int)Math.Floor(gridX), z = (int)Math.Floor(gridZ);
+            if (!IsInBounds(x, z)) return 0f;
+            if (TryGetBridgeProfile(x, z, out BridgeProfile bridge))
+                return bridge.HeightAt(bridge.Axis == BridgeAlongX ? gridX - x : gridZ - z);
+            return GetRoadGrade(x, z).Sample(gridX - x - 0.5f, gridZ - z - 0.5f);
         }
 
         internal BridgeQuote QuoteBridge(int x, int z, int endX, int endZ, out int cost)

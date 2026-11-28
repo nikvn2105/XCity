@@ -182,7 +182,7 @@ namespace XCity
                     if (cell.Level > 0)
                     {
                         _waitingRendered[x, z] = false;
-                        var centerLocal = new Vector3((x - startX + 0.5f) * _cellSize, 0f, (z - startZ + 0.5f) * _cellSize);
+                        var centerLocal = new Vector3((x - startX + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z - startZ + 0.5f) * _cellSize);
                         int quarterTurns = PickQuarterTurns(_city, x, z);
                         if (full)
                             BuildingMeshFactory.Build(meshBuilder, x, z, cell, quarterTurns, centerLocal);
@@ -194,7 +194,7 @@ namespace XCity
                     {
                         _waitingRendered[x, z] = true;
                         int quarterTurns = PickQuarterTurns(_city, x, z);
-                        Vector3 centerLocal = new Vector3((x - startX + 0.5f) * _cellSize, 0f, (z - startZ + 0.5f) * _cellSize);
+                        Vector3 centerLocal = new Vector3((x - startX + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z - startZ + 0.5f) * _cellSize);
                         BuildingMeshFactory.BuildGroundwork(meshBuilder, x, z, cell.Type, quarterTurns, centerLocal);
                     }
                     else
@@ -266,7 +266,7 @@ namespace XCity
                             float depth = width * 0.86f;
                             var center = new Vector3(
                                 (x - originX + 0.5f) * _cellSize,
-                                CityChunkRenderer.BuildingBase + height * 0.5f,
+                                WorldTerrain.SurfaceY(x, z) + CityChunkRenderer.BuildingBase + height * 0.5f,
                                 (z - originZ + 0.5f) * _cellSize);
                             _farBuilder.AddSimpleBox(center, new Vector3(width, height, depth), walls, roof);
                         }
