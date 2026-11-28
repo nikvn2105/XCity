@@ -25,7 +25,7 @@ Cách này rủi ro thấp: nếu lớp đoạn hỏng, game vẫn chạy bằng
 | Bước | Nội dung | Cỡ | Ai (đề xuất) |
 |---|---|---|---|
 | 4a | **Loại đường trên lưới**: nhỏ (2 làn), đại lộ (4 làn, sức chứa ×2, đắt hơn, giá trị đất nhà ở kém hơn), một chiều (tìm đường xét chiều đi), có hàng cây (đắt hơn, +giá trị đất). Lưu loại mỗi ô (save 16). Kẹt xe tính theo sức chứa từng loại. Vẽ khác nhau. | M | Codex |
-| 4b | **Lớp đoạn + rải xuống lưới**: dữ liệu đoạn/nút, rải ô, xóa đoạn → xóa ô, hoàn tác, save (đoạn lưu kèm ô, save 17). Chưa có công cụ vẽ cong: đường kéo hôm nay tạo đoạn thẳng. Test: rải đúng ô, liền mạch, save/tải. | M | Claude |
+| 4b ✅ | **Lớp đoạn + rải xuống lưới**: dữ liệu đoạn/nút, rải ô, xóa đoạn → xóa ô, hoàn tác, save (đoạn lưu kèm ô, save 17). Chưa có công cụ vẽ cong: đường kéo hôm nay tạo đoạn thẳng. Test: rải đúng ô, liền mạch, save/tải. | M | Claude |
 | 4c | **Công cụ vẽ cong**: chạm điểm đầu, kéo/chạm điểm uốn, chạm điểm cuối (giống 2 chạm hiện có), bám nút gần, bán kính tối thiểu, tự cắt thành giao lộ khi cắt nhau, xem trước giá. | M | Claude |
 | 4d | **Vẽ đường cong + giao lộ**, xe/người chạy theo đoạn, nhà xoay theo đoạn. | L (nặng nhất) | Codex |
 | 4e | Chuyển save cũ: gộp các dãy ô đường thẳng giữa hai giao lộ thành đoạn (để đường cũ cũng vẽ đẹp). Không bắt buộc: thiếu bước này đường cũ vẫn vẽ kiểu ô. | S | Claude |

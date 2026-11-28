@@ -82,7 +82,7 @@ namespace XCity.Tests
             Assert.True(WorldTerrain.IsSlope(x + 1, z));
             var options = new JsonSerializerOptions { IncludeFields = true };
             var snapshot = JsonSerializer.Deserialize<CitySnapshot>(JsonSerializer.Serialize(city.CreateSnapshot(), options), options);
-            Assert.Equal(17, snapshot.schemaVersion);
+            Assert.Equal(CitySimulation.CurrentSchemaVersion, snapshot.schemaVersion);
             Assert.Equal(new[] { CitySimulation.CellIndex(x, z) }, snapshot.terrainIndices);
             WorldTerrain.Use(MapSpec.Classic);
             Assert.True(CitySimulation.TryRestore(snapshot, out var restored));

@@ -199,6 +199,7 @@ namespace XCity
         public int[] cellIndices;
         public int[] terrainIndices;
         public byte[] terrainTiers;
+        public RoadSegment[] roadSegments;
     }
 
     public sealed partial class CitySimulation
@@ -229,7 +230,7 @@ namespace XCity
         internal const float PowerPlantHeight = 3.2f;
         // 11: tax rates and service funding; 12: parks; 13: garbage facilities and funding; 14: map style and seed;
         // 15: gas power plant.
-        internal const int CurrentSchemaVersion = 17;
+        internal const int CurrentSchemaVersion = 18;
         public const int UtilityCapacity = 80; // raised from 40 in phase 2e: water was the upgrade bottleneck
         // Fixed grid-sized buffers so a power refresh after every build allocates nothing.
         private readonly bool[] _powered = new bool[GridSize * GridSize];
@@ -302,6 +303,7 @@ namespace XCity
         private void TrackCell(int x, int z, CellType type, CityCell previous = default)
         {
             int index = CellIndex(x, z);
+            TrackSegmentCell(index, type);
             if (type == CellType.Empty) _occupied.Remove(index);
             else _occupied.Add(index);
             if (BuildingCatalog.IsPublicService(type)) _serviceCells.Add(index);
@@ -693,6 +695,7 @@ namespace XCity
                 snapshot.cells[offset++] = _cells[index / GridSize, index % GridSize];
             }
             WriteTerrainEdits(snapshot);
+            WriteRoadSegments(snapshot);
             return snapshot;
         }
 
@@ -776,6 +779,7 @@ namespace XCity
                 }
                 restored.PeakPopulation = Math.Max(snapshot.peakPopulation, restored.Population);
                 restored.RestoreBudget(snapshot);
+                restored.RestoreRoadSegments(snapshot);
                 restored.RecalculateEconomy();
                 city = restored;
                 return true;
