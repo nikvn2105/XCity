@@ -39,7 +39,10 @@ namespace XCity
             _emergencies.SetPreviewMode(_previewOutput != null);
             _vehicles.SetEmergencySystem(_emergencies);
             _helicopters.SetEmergencySystem(_emergencies);
-            _overlays = new CityOverlaySystem(_city, CellSize, _vertexColorMat, transform);
+            var overlayShader = Resources.Load<Shader>("XCityOverlay");
+            _overlays = new CityOverlaySystem(_city, CellSize,
+                overlayShader != null ? new Material(overlayShader) : _vertexColorMat, transform);
+            Shader.SetGlobalFloat("_XCityInfoView", 0f);
             _dirtyWater = new CityOverlaySystem(_city, CellSize, _vertexColorMat, transform);
             _dirtyWater.SetMode(CityOverlayMode.PollutedWater);
             _audio = new XCityAudioSystem(transform, _previewOutput != null);

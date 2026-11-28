@@ -15,6 +15,7 @@ namespace XCity
         Happiness,
         LandValue,
         Garbage,
+        Water,
         // Always on, separate instance: tints dirty river and lake water. Not in the overlay cycle.
         PollutedWater
     }
@@ -81,6 +82,7 @@ namespace XCity
                 CityOverlayMode.Environment => CityOverlayMode.Happiness,
                 CityOverlayMode.Happiness => CityOverlayMode.LandValue,
                 CityOverlayMode.LandValue => CityOverlayMode.Garbage,
+                CityOverlayMode.Garbage => CityOverlayMode.Water,
                 _ => CityOverlayMode.None
             };
             SetMode(next);
@@ -95,6 +97,7 @@ namespace XCity
             CityOverlayMode.Happiness => "Hạnh phúc",
             CityOverlayMode.LandValue => UiText.LandValue,
             CityOverlayMode.Garbage => UiText.Garbage,
+            CityOverlayMode.Water => UiText.WaterSupply,
             _ => "Tắt"
         };
 
@@ -160,7 +163,7 @@ namespace XCity
                         !TryPickOverlayColor(x, z, cell, out color)) continue;
 
                     Vector3 center = new Vector3((x + 0.5f) * _cellSize, WorldTerrain.SurfaceY(x, z), (z + 0.5f) * _cellSize);
-                    float y = cell.Height > 0f ? CityChunkRenderer.BuildingBase + cell.Height + 0.14f : OverlayY;
+                    float y = OverlayY; // Always on the ground; the overlay shader draws it over buildings.
                     if (WorldTerrain.IsFreshWater(x, z)) y += BridgeProfile.WaterSurface;
                     _builder.SetFrame(center, 0);
                     _builder.AddQuad(
@@ -180,6 +183,23 @@ namespace XCity
             color = default;
             switch (Mode)
             {
+                case CityOverlayMode.Water:
+                    if (cell.Model == BuildingModel.WaterPump)
+                    {
+                        color = _city.PumpOnPollutedWater(x, z) ? new Color32(214, 150, 52, 255) : new Color32(52, 150, 245, 255);
+                        return true;
+                    }
+                    if (cell.Model == BuildingModel.SewagePlant)
+                    {
+                        color = new Color32(150, 100, 220, 255);
+                        return true;
+                    }
+                    if (cell.Type != CellType.Residential && cell.Type != CellType.Commercial && cell.Type != CellType.Industrial)
+                        return false;
+                    color = !_city.HasWater(x, z) ? new Color32(236, 56, 86, 255) :
+                        _city.HasDirtyWater(x, z) ? new Color32(240, 196, 52, 255) : new Color32(58, 206, 108, 255);
+                    return true;
+
                 case CityOverlayMode.Power:
                     if (cell.Type == CellType.PowerPlant)
                     {

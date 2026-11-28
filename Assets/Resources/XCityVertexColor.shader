@@ -14,6 +14,7 @@ Shader "XCity/VertexColor"
         fixed4 _Color;
         float _XCityTime;
         float _XCityNight;
+        float _XCityInfoView;
 
         struct Input
         {
@@ -120,6 +121,8 @@ Shader "XCity/VertexColor"
             fixed3 albedo = IN.color.rgb * _Color.rgb;
             #if defined(XCITY_ARCHITECTURE)
             albedo = BuildingFinish(IN, albedo);
+            // Info views: pale grey buildings so the overlay colours read clearly.
+            albedo = lerp(albedo, fixed3(0.80, 0.82, 0.85), _XCityInfoView * 0.85);
             #endif
 
             fixed3 emission = fixed3(0, 0, 0);

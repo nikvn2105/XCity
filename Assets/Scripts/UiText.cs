@@ -127,6 +127,7 @@ namespace XCity
         public const string PowerPlant = "Nhà máy điện";
         public const string Power = "Điện";
         public const string Environment = "Môi trường";
+        public const string WaterSupply = "Nước";
         public const string Happiness = "Hạnh phúc";
         public const string WorldMap = "Bản đồ thế giới";
         public const string Close = "Đóng";

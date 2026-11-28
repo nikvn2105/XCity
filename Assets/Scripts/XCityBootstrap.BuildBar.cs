@@ -93,6 +93,7 @@ namespace XCity
                 case CityOverlayMode.Happiness: return UiIcon.Smile;
                 case CityOverlayMode.LandValue: return UiIcon.Map;
                 case CityOverlayMode.Garbage: return UiIcon.Recycling;
+                case CityOverlayMode.Water: return UiIcon.Water;
             }
             switch (option.Tool)
             {
@@ -178,6 +179,7 @@ namespace XCity
                     new BuildOption(UiText.Happiness, BuildTool.Pan, overlay: CityOverlayMode.Happiness),
                     new BuildOption(UiText.LandValue, BuildTool.Pan, overlay: CityOverlayMode.LandValue),
                     new BuildOption(UiText.Garbage, BuildTool.Pan, overlay: CityOverlayMode.Garbage),
+                    new BuildOption(UiText.WaterSupply, BuildTool.Pan, overlay: CityOverlayMode.Water),
                     new BuildOption(UiText.WorldMap, BuildTool.Pan, worldMap: true),
                     new BuildOption(UiText.OverlayOff, BuildTool.Pan)
                 }),
@@ -420,6 +422,7 @@ namespace XCity
             CancelGesture();
             _overlays.SetMode(mode);
             _cityRenderer?.SetInfoView(mode == CityOverlayMode.Happiness);
+            Shader.SetGlobalFloat("_XCityInfoView", mode == CityOverlayMode.None ? 0f : 1f);
             _audio?.PlayBuild();
             RefreshHUD();
         }
