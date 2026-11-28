@@ -1,9 +1,10 @@
 name: Demo release (APK + IPA)
 
-# Push a tag like v0.1.0-demo.3: builds the Android APK and the iOS Xcode project here, has Codemagic
-# compile the unsigned IPA from that exact Xcode project (GitHub's macOS runners never start for this
-# repo), then publishes a pre-release with both files and the two download buttons.
-# Needs repository secrets CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID (see README).
+# Push a tag like v0.1.0-demo.3: builds the Android APK and the iOS Xcode project on GitHub, compiles the
+# unsigned IPA on a GitHub Mac, then publishes a pre-release with both files and the two download buttons.
+# Codemagic is only a fallback: if the Mac job has not started after 20 minutes (macOS queue overloaded)
+# or fails, the ipa-fallback job compiles the same Xcode project there. That path needs the repository
+# secrets CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID (see README).
 
 on:
   push:
@@ -92,24 +93,89 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-  ipa:
-    name: Compile IPA on Codemagic
+  ipa-mac:
+    name: Compile IPA on GitHub Mac
+    needs: ios-project
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: XCity-XcodeProject-${{ github.ref_name }}
+          path: ios-build
+      - run: tar -xf ios-build/XCity-XcodeProject.tar -C ios-build
+      # ProMotion iPhones cap apps at 60 Hz unless Info.plist opts in; the in-game 120 FPS option needs this.
+      - name: Allow 120 Hz on ProMotion iPhones
+        run: |
+          plist=ios-build/XCity/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :CADisableMinimumFrameDurationOnPhone bool true" "$plist" ||
+            /usr/libexec/PlistBuddy -c "Set :CADisableMinimumFrameDurationOnPhone true" "$plist"
+      - name: Build unsigned .app with Xcode 16.4
+        env:
+          DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+        run: |
+          cd ios-build/XCity
+          xcodebuild -project Unity-iPhone.xcodeproj -scheme Unity-iPhone -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' ARCHS=arm64 \
+            -derivedDataPath "$GITHUB_WORKSPACE/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" build
+      - name: Verify and package unsigned IPA
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apps=("$GITHUB_WORKSPACE"/DerivedData/Build/Products/Release-iphoneos/*.app)
+          [ ${#apps[@]} -eq 1 ] || { echo "::error::Expected exactly one Release-iphoneos app"; exit 1; }
+          app="${apps[0]}"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = com.nikstudiovn.xcity
+          lipo "$app/Frameworks/UnityFramework.framework/UnityFramework" -verify_arch arm64
+          mkdir -p ipa-out/Payload
+          ditto "$app" "ipa-out/Payload/$(basename "$app")"
+          ditto -c -k --keepParent ipa-out/Payload "XCity-${GITHUB_REF_NAME}-unsigned.ipa"
+          unzip -tq "XCity-${GITHUB_REF_NAME}-unsigned.ipa"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XCity-ipa-mac
+          path: XCity-${{ github.ref_name }}-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 3
+
+  ipa-fallback:
+    name: IPA fallback (Codemagic when the Mac queue is stuck)
     needs: ios-project
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 120
     permissions:
       contents: read
       actions: write
     steps:
-      - name: Start Codemagic build and wait for it
+      - name: Wait for the GitHub Mac job, start Codemagic if it is stuck or failed
+        id: watch
         env:
+          GH_TOKEN: ${{ github.token }}
           CM_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
           CM_APP: ${{ secrets.CODEMAGIC_APP_ID }}
           ARTIFACT_ID: ${{ needs.ios-project.outputs.artifact-id }}
         run: |
           set -euo pipefail
+          job() { gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name == "Compile IPA on GitHub Mac") | "\(.status) \(.conclusion)"'; }
+          queued_for=0
+          while true; do
+            read -r status conclusion <<<"$(job)"
+            echo "Mac job: $status $conclusion"
+            if [ "$status" = completed ]; then
+              if [ "$conclusion" = success ]; then echo "used=mac" >> "$GITHUB_OUTPUT"; exit 0; fi
+              echo "::warning::GitHub Mac job $conclusion; falling back to Codemagic"; break
+            fi
+            if [ "$status" = queued ] || [ "$status" = waiting ] || [ "$status" = pending ]; then
+              queued_for=$((queued_for + 30))
+              if [ $queued_for -ge 1200 ]; then echo "::warning::GitHub Mac queue stuck for 20 min; falling back to Codemagic"; break; fi
+            fi
+            sleep 30
+          done
+          echo "used=codemagic" >> "$GITHUB_OUTPUT"
           if [ -z "$CM_TOKEN" ] || [ -z "$CM_APP" ]; then
-            echo "::error::Add the CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID repository secrets"; exit 1
+            echo "::error::Fallback needs the CODEMAGIC_API_TOKEN and CODEMAGIC_APP_ID repository secrets"; exit 1
           fi
           body=$(jq -n --arg app "$CM_APP" --arg tag "$GITHUB_REF_NAME" --arg id "$ARTIFACT_ID" \
             '{appId: $app, workflowId: "ios-unsigned-ipa", tag: $tag,
@@ -117,11 +183,12 @@ jobs:
           build=$(curl -fsS -X POST https://api.codemagic.io/builds -H "x-auth-token: $CM_TOKEN" \
             -H 'Content-Type: application/json' -d "$body" | jq -r .buildId)
           echo "Codemagic build: https://codemagic.io/app/$CM_APP/build/$build"
+          status=""
           for i in $(seq 1 140); do
             sleep 30
             json=$(curl -fsS -H "x-auth-token: $CM_TOKEN" "https://api.codemagic.io/builds/$build")
             status=$(jq -r .build.status <<<"$json")
-            echo "status: $status"
+            echo "Codemagic: $status"
             case "$status" in
               finished) break ;;
               failed|canceled|timeout|skipped) echo "::error::Codemagic build $status"; exit 1 ;;
@@ -133,13 +200,14 @@ jobs:
           [ -n "$url" ] || { echo "::error::No IPA in the Codemagic artefacts"; exit 1; }
           curl -fsSL -H "x-auth-token: $CM_TOKEN" -o "XCity-${GITHUB_REF_NAME}-unsigned.ipa" "$url"
           unzip -tq "XCity-${GITHUB_REF_NAME}-unsigned.ipa"
-      - uses: actions/upload-artifact@v4
+      - if: steps.watch.outputs.used == 'codemagic'
+        uses: actions/upload-artifact@v4
         with:
-          name: XCity-ipa
+          name: XCity-ipa-codemagic
           path: XCity-${{ github.ref_name }}-unsigned.ipa
           if-no-files-found: error
           retention-days: 3
-      # The ~200 MB Xcode project only bridges the two machines; drop it once the IPA is safe.
+      # The ~200 MB Xcode project only bridges the build machines; drop it once an IPA is safe.
       - name: Delete the Xcode project artifact
         if: always()
         env:
@@ -149,20 +217,23 @@ jobs:
 
   release:
     name: Publish pre-release
-    needs: [android, ipa]
+    needs: [android, ipa-fallback]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: XCity-apk
           path: out
+      # Whichever machine made the IPA (same file name either way).
       - uses: actions/download-artifact@v4
         with:
-          name: XCity-ipa
+          pattern: XCity-ipa-*
           path: out
+          merge-multiple: true
       - name: Create the pre-release with both files
         env:
           GH_TOKEN: ${{ github.token }}
@@ -178,3 +249,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 .github/scripts/latest-demo-downloads.py
+      # A Mac job still waiting in an overloaded queue would keep this run open for a day: stop it.
+      - name: Cancel a still-queued Mac job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          status=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name == "Compile IPA on GitHub Mac") | .status')
+          if [ "$status" != completed ]; then gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/cancel"; fi
